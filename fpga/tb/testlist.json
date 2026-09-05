@@ -3,7 +3,9 @@
     {
       "name": "tb_smoke",
       "top": "tb_smoke",
-      "sources": ["fpga/tb/tb_smoke.sv"]
+      "sources": [
+        "fpga/tb/tb_smoke.sv"
+      ]
     },
     {
       "name": "tb_la_input_sync",
@@ -27,6 +29,14 @@
       "sources": [
         "fpga/rtl/la_trigger.sv",
         "fpga/tb/tb_la_trigger.sv"
+      ]
+    },
+    {
+      "name": "tb_la_pretrig_ring",
+      "top": "tb_la_pretrig_ring",
+      "sources": [
+        "fpga/rtl/la_pretrig_ring.sv",
+        "fpga/tb/tb_la_pretrig_ring.sv"
       ]
     }
   ]
