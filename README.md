@@ -10,6 +10,13 @@ runner, environment checks, register-map generation, native C ABI tests and
 simulation harness. Hardware gates remain explicit until the required tools,
 boards and wiring are available.
 
+The detailed execution state and next-session handoff are maintained in
+`docs/status.md`. Update that file when a development session changes a phase,
+gate result or blocker.
+
+Tracked changes follow the status, commit and push workflow defined there;
+completed changes are pushed to `origin/main` and verified against the remote.
+
 ## Canonical commands
 
 Run these commands from the project root; `tools/run.py` derives the project

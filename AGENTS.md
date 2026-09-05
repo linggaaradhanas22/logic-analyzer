@@ -19,4 +19,16 @@ described in `docs/plan.md`.
   and simple-transfer calls are not permitted.
 - Hardware, licensed-tool and bench steps that cannot run locally are reported
   as blocked or unverified, never as passing.
+- Treat `docs/status.md` as the required execution ledger. At the start of a
+  session inspect it and `git status --short --branch`; after every atomic phase
+  or tracked source, test, configuration, tooling or documentation change,
+  update it with the date, changed files, verification commands and report
+  paths, blockers and next action.
+- A tracked change is not complete until it is committed and pushed to
+  `origin/main`, or explicitly recorded as WIP in `docs/status.md`. Stage only
+  intended files; never stage `.venv/`, `.deps/`, `.tools/`, `build/`, logs,
+  captures or secrets.
+- Follow the status, commit and push sequence in `docs/status.md`. Verify the
+  remote and a clean worktree after pushing. Never force-push; if `origin` or
+  the push is unavailable, record the exact blocker and do not claim completion.
 - Do not modify the neighboring DDR3 PHY project.
