@@ -61,12 +61,12 @@ commit, and the worktree is clean.
 | Project root | `C:\Users\lingg\Projects\KCCI_technical\Embedded\Logic-Analyzer\Source_Code` |
 | Plan source | `docs/plan.md`, verified identical to `logic-analyzer-implementation-plan-v0.4.md` |
 | Branch | `main` |
-| Last committed change | `d6d85b6 docs: record workflow push` |
+| Last implementation change | `52962c1 P1: complete specifications and native decoders` |
 | Remote | `origin` -> `https://github.com/linggaaradhanas22/logic-analyzer.git` |
-| Remote state | `origin/main` contains `d6d85b6`; local and remote commit hashes were verified equal before P1 work |
-| Current pending work | P1 implementation and verification are complete locally; commit, push and final clean-worktree evidence remain |
+| Remote state | `origin/main` contains `52962c156b15a66bfe91f11c89e4f2b50f24cc46`; local and remote commit hashes are equal |
+| Current pending work | P1 is complete and pushed; begin P2 RTL in plan order |
 | Workflow | Native Windows only; use `python tools/run.py <target>` |
-| Phase | P0 complete; P1 implementation and local gates complete; P2 is next after push |
+| Phase | P0 and P1 complete locally and on `origin/main`; P2 is next |
 
 Generated environments, reports, logs and build outputs are intentionally
 ignored by Git. The reports described below are local evidence and must be
@@ -77,7 +77,7 @@ recreated after a clean checkout.
 | Phase | Status | What exists | Remaining entry work |
 |---|---|---|---|
 | P0 Environment and scaffolding | Complete locally | Native runner, checker, CI scaffold, locks, CMake tests, Questa harness, ESP-IDF smoke build and board query | Hosted CI and physical hardware gates are not evidence of completion |
-| P1 Specifications | In progress | Complete register/protocol/RTOS/decoder/wiring specifications, generated constants, C protocol library, UART/SPI/I2C decoders, independent models and native parity tests | Commit and push the verified change; then begin P2 RTL |
+| P1 Specifications | Complete | Complete register/protocol/RTOS/decoder/wiring specifications, generated constants, C protocol library, UART/SPI/I2C decoders, independent models and native parity tests | Begin P2 RTL |
 | P2 FPGA RTL | Not started | Generated `la_regs_pkg.sv` and the generic Questa smoke harness | Implement each RTL block and its self-checking test, then integrate `la_top` |
 | P3 Vivado integration | Not started | Board files, board query Tcl, build/program Tcl scaffolds | Add `la_top.sv`, constraints, block design, synthesis, timing, bitstream and XSA |
 | P4 Zynq FreeRTOS core | Not started | Linker/configuration scaffolds, host segment-pool test, Vitis CLI smoke | Generate the XSA first, then implement the Vitis platform/application and target tests |
@@ -183,4 +183,5 @@ the implementation is not present.
 |---|---|---|
 | 2026-09-05 | Created the native-Windows Phase 0 scaffold; installed and locked prerequisites; added board files, runner environment import, native/Questa/ESP-IDF checks; fixed ESP-IDF output placement and board-query lock handling; created and pushed baseline commit `6dd22b3`. | Local Phase 0 gates pass; later implementation and hardware gates remain explicitly blocked. |
 | 2026-09-05 | Defined the mandatory status, commit and `origin/main` push workflow in `AGENTS.md`, `README.md` and this document. | Committed as `46f4ac7`, pushed to `origin/main`, and verified against the remote hash. |
-| 2026-09-05 | Implemented P1.1-P1.7: normative register constraints and generated views; typed protocol framing/config helpers; UART/SPI/I2C decoders with discontinuity events; independent Python vectors and ctypes parity tests; RTOS, protocol, decoder, wiring and verification specifications. | Local gates PASS: generator idempotence, native 3/3, release 4/4, ESP32 mocks 1/1, host 1 passed, Questa lint/sim, compileall and `git diff --check`. Reports are under `build/reports`; commit/push remain. Hardware, target RTOS scheduling, DMA coherency and physical wiring remain unverified by design. |
+| 2026-09-05 | Implemented P1.1-P1.7: normative register constraints and generated views; typed protocol framing/config helpers; UART/SPI/I2C decoders with discontinuity events; independent Python vectors and ctypes parity tests; RTOS, protocol, decoder, wiring and verification specifications. | Local gates PASS: generator idempotence, native 3/3, release 4/4, ESP32 mocks 1/1, host 1 passed, Questa lint/sim, compileall and `git diff --check`. Reports are under `build/reports`; hardware, target RTOS scheduling, DMA coherency and physical wiring remain unverified by design. |
+| 2026-09-05 | Pushed implementation commit `52962c1` to `origin/main` and verified `git status --short --branch` is clean, `git log` points at the pushed commit and `git ls-remote origin refs/heads/main` matches `52962c156b15a66bfe91f11c89e4f2b50f24cc46`. | P1 is complete. Next action is P2 RTL; hardware and target-only gates remain explicitly unverified. |
