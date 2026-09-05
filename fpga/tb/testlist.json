@@ -87,6 +87,25 @@
         "fpga/rtl/la_regs.sv",
         "fpga/tb/tb_la_regs.sv"
       ]
+    },
+    {
+      "name": "tb_la_top",
+      "top": "tb_la_top",
+      "sources": [
+        "fpga/rtl/la_regs_pkg.sv",
+        "fpga/rtl/la_input_sync.sv",
+        "fpga/rtl/la_sampler.sv",
+        "fpga/rtl/la_trigger.sv",
+        "fpga/rtl/la_patgen.sv",
+        "fpga/rtl/la_pretrig_ring.sv",
+        "fpga/rtl/la_txn_encoder.sv",
+        "fpga/rtl/la_raw_packer.sv",
+        "fpga/rtl/la_axis_fifo.sv",
+        "fpga/rtl/la_capture_ctrl.sv",
+        "fpga/rtl/la_regs.sv",
+        "fpga/rtl/la_top.sv",
+        "fpga/tb/tb_la_top.sv"
+      ]
     }
   ]
 }

@@ -58,6 +58,11 @@ module la_raw_packer #(
   logic [3:0]  partial_keep;
 
   assign flush_act = flush_wait_q || flush_req;
+  // Samples are accepted while no flush is being processed. Buffering
+  // (n < 3) never needs the beat slot; the sample that completes a word
+  // does, so it waits for the slot to be empty or popped this cycle.
+  assign s_ready = !flush_act
+                 && ((n_q != 2'd3) || !beat_valid_q || m_ready);
 
   function automatic logic [3:0] keep_for(input logic [1:0] n);
     case (n)

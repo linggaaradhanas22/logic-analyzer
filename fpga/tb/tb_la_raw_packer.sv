@@ -119,7 +119,7 @@ module tb_la_raw_packer;
   endtask
 
   // Structural + reconstruction checks for the accumulated scenario.
-  task automatic check_recording(string tag);
+  task automatic check_recording(string tag, input logic allow_tail);
     int i;
     int a;
     int b;
@@ -168,8 +168,12 @@ module tb_la_raw_packer;
         b = b + 1;
       end
     end
-    if (a != acc_n) begin
+    if (a != acc_n && !(allow_tail && acc_n - a <= 3 && acc_n - a >= 0)) begin
       $display("FAIL [%s] emitted %0d bytes, accepted %0d", tag, a, acc_n);
+      errors = errors + 1;
+    end
+    if (acc_n == 0) begin
+      $display("FAIL [%s] no samples were accepted (dead input path)", tag);
       errors = errors + 1;
     end
   endtask
@@ -179,7 +183,7 @@ module tb_la_raw_packer;
       cycle(1'b0, 8'h00, 1'b1, 1'b1);
     end
     drain_packet();
-    check_recording(tag);
+    check_recording(tag, !flush_at_end);
   endtask
 
   initial begin
