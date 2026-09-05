@@ -70,6 +70,14 @@
         "fpga/rtl/la_capture_ctrl.sv",
         "fpga/tb/tb_la_capture_ctrl.sv"
       ]
+    },
+    {
+      "name": "tb_la_patgen",
+      "top": "tb_la_patgen",
+      "sources": [
+        "fpga/rtl/la_patgen.sv",
+        "fpga/tb/tb_la_patgen.sv"
+      ]
     }
   ]
 }
