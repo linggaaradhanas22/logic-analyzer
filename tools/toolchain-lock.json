@@ -1,0 +1,140 @@
+{
+  "board": {
+    "commit": "36f34ab687b7fa9c778b779d027f3bce63b3ace9",
+    "part": "digilentinc.com:zybo-z7-10:part0:1.2",
+    "repository": "https://github.com/Digilent/vivado-boards.git"
+  },
+  "esp_idf_source": {
+    "commit": "30aaf64524299d3bde422ca9a2848090d1bc5d0f",
+    "path": "C:\\Users\\lingg\\Projects\\KCCI_technical\\Embedded\\Logic-Analyzer\\Source_Code\\.deps\\esp-idf",
+    "version": "ESP-IDF v5.5.2"
+  },
+  "generated_at": "2026-09-05T14:36:11.058390+00:00",
+  "missing_prerequisites": [],
+  "platform": {
+    "python": "3.11.15",
+    "release": "10",
+    "system": "Windows"
+  },
+  "project_root": "C:\\Users\\lingg\\Projects\\KCCI_technical\\Embedded\\Logic-Analyzer\\Source_Code",
+  "python_packages": {
+    "PyYAML": "6.0.2",
+    "click": "8.1.8",
+    "matplotlib": "3.10.1",
+    "numpy": "2.2.6",
+    "pyserial": "3.5",
+    "pytest": "8.3.5",
+    "pyvcd": "0.4.0"
+  },
+  "schema": 1,
+  "smoke_tests": {
+    "esp_idf": "pass",
+    "native_cmake": "pass",
+    "questa": "pass",
+    "vitis_application": "blocked",
+    "vitis_cli": "pass",
+    "vivado": "blocked"
+  },
+  "status": "environment-observed",
+  "tools": {
+    "arm-none-eabi-gcc": {
+      "error": null,
+      "path": "C:\\Program Files (x86)\\Arm GNU Toolchain arm-none-eabi\\12.2 mpacbti-rel1\\bin\\arm-none-eabi-gcc.exe",
+      "required_for_p0": true,
+      "status": "found",
+      "version": "arm-none-eabi-gcc.exe (Arm GNU Toolchain 12.2.MPACBTI-Rel1 (Build arm-12-mpacbti.34)) 12.2.1 20230214"
+    },
+    "bootgen": {
+      "error": null,
+      "path": "C:\\AMDDesignTools\\2026.1\\Vivado\\bin\\bootgen.bat",
+      "required_for_p0": true,
+      "status": "found",
+      "version": "****** Bootgen v2026.1"
+    },
+    "cl": {
+      "error": null,
+      "path": "C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe",
+      "required_for_p0": true,
+      "status": "found",
+      "version": "Microsoft (R) C/C++ Optimizing Compiler Version 19.44.35228 for x64"
+    },
+    "cmake": {
+      "error": null,
+      "path": "C:\\Program Files\\CMake\\bin\\cmake.exe",
+      "required_for_p0": true,
+      "status": "found",
+      "version": "cmake version 4.4.3"
+    },
+    "hw_server": {
+      "error": "daemon version deferred to the hardware-manager smoke test",
+      "path": "C:\\AMDDesignTools\\2026.1\\Vivado\\bin\\hw_server.bat",
+      "required_for_p0": true,
+      "status": "found",
+      "version": null
+    },
+    "idf.py": {
+      "error": null,
+      "path": "C:\\Users\\lingg\\Projects\\KCCI_technical\\Embedded\\Logic-Analyzer\\Source_Code\\.deps\\esp-idf\\tools\\idf.py",
+      "required_for_p0": true,
+      "status": "found",
+      "version": "ESP-IDF v5.5.2"
+    },
+    "ninja": {
+      "error": null,
+      "path": "C:\\Users\\lingg\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\ninja.exe",
+      "required_for_p0": true,
+      "status": "found",
+      "version": "1.13.0.git.kitware.jobserver-pipe-1"
+    },
+    "pulseview": {
+      "error": null,
+      "path": "C:\\Users\\lingg\\Projects\\KCCI_technical\\Embedded\\Logic-Analyzer\\Source_Code\\build\\pulseview\\pulseview.exe",
+      "required_for_p0": true,
+      "status": "found",
+      "version": "PulseView 0.4.2"
+    },
+    "python": {
+      "error": null,
+      "path": "C:\\Users\\lingg\\Projects\\KCCI_technical\\Embedded\\Logic-Analyzer\\Source_Code\\.venv\\Scripts\\python.exe",
+      "required_for_p0": true,
+      "status": "found",
+      "version": "Python 3.11.15"
+    },
+    "vitis": {
+      "error": null,
+      "path": "C:\\AMDDesignTools\\2026.1\\Vitis\\bin\\vitis.bat",
+      "required_for_p0": true,
+      "status": "found",
+      "version": "****** Vitis v2026.1 (64-bit)"
+    },
+    "vivado": {
+      "error": null,
+      "path": "C:\\AMDDesignTools\\2026.1\\Vivado\\bin\\vivado.bat",
+      "required_for_p0": true,
+      "status": "found",
+      "version": "vivado v2026.1 (64-bit)"
+    },
+    "vlib": {
+      "error": null,
+      "path": "C:\\altera_lite\\25.1std\\questa_fse\\win64\\vlib.exe",
+      "required_for_p0": true,
+      "status": "found",
+      "version": "Questa Altera Starter FPGA Edition-64 vlog 2025.2 Compiler 2025.05 May 31 2025",
+      "version_source": "vlog probe; vlib has no version switch"
+    },
+    "vlog": {
+      "error": null,
+      "path": "C:\\altera_lite\\25.1std\\questa_fse\\win64\\vlog.exe",
+      "required_for_p0": true,
+      "status": "found",
+      "version": "Questa Altera Starter FPGA Edition-64 vlog 2025.2 Compiler 2025.05 May 31 2025"
+    },
+    "vsim": {
+      "error": null,
+      "path": "C:\\altera_lite\\25.1std\\questa_fse\\win64\\vsim.exe",
+      "required_for_p0": true,
+      "status": "found",
+      "version": "Questa Altera Starter FPGA Edition-64 vsim 2025.2 Simulator 2025.05 May 31 2025"
+    }
+  }
+}

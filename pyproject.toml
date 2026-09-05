@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "la-host"
+version = "0.0.0"
+description = "Native Windows host tools for the RTOS logic analyzer"
+requires-python = ">=3.10"
+dependencies = [
+  "pyserial==3.5",
+  "numpy==2.2.6",
+  "pyvcd==0.4.0",
+  "click==8.1.8",
+  "PyYAML==6.0.2",
+  "pytest==8.3.5",
+  "matplotlib==3.10.1",
+]
+
+[project.scripts]
+la-cli = "host.la_cli:main"
+
+[tool.setuptools]
+packages = ["host", "host.la_cli", "host.la_sigrok_bridge", "tools", "tools.models"]
+
+[tool.pytest.ini_options]
+testpaths = ["host/tests", "tests"]
+addopts = "-ra"

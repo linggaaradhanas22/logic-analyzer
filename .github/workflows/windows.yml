@@ -1,0 +1,57 @@
+name: native-windows
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  portable:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install host package
+        shell: pwsh
+        run: python -m pip install -e .
+      - name: Generate register map
+        shell: pwsh
+        run: python tools/run.py gen
+      - name: Native C and ctypes tests
+        shell: pwsh
+        run: python tools/run.py test-native
+      - name: Host tests
+        shell: pwsh
+        run: python tools/run.py test-host
+      - name: Questa harness self-test
+        shell: pwsh
+        run: python tools/regress.py --self-test
+
+  questa:
+    if: ${{ vars.LA_QUESTA_RUNNER == 'true' }}
+    runs-on: [self-hosted, Windows, Questa]
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: python tools/run.py lint
+      - shell: pwsh
+        run: python tools/run.py sim
+
+  amd:
+    if: ${{ vars.LA_AMD_RUNNER == 'true' }}
+    runs-on: [self-hosted, Windows, AMD]
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: python tools/run.py bit
+      - shell: pwsh
+        run: python tools/run.py fw-zynq
+
+  esp-idf:
+    if: ${{ vars.LA_ESP_IDF_RUNNER == 'true' }}
+    runs-on: [self-hosted, Windows, ESP-IDF]
+    steps:
+      - uses: actions/checkout@v4
+      - shell: pwsh
+        run: python tools/run.py fw-esp32

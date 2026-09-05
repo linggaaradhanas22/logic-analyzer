@@ -1,0 +1,9 @@
+{
+  "tests": [
+    {
+      "name": "tb_smoke",
+      "top": "tb_smoke",
+      "sources": ["fpga/tb/tb_smoke.sv"]
+    }
+  ]
+}

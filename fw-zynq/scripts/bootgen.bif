@@ -1,0 +1,7 @@
+// Generated release inputs are placed below build/release by P4/P10.
+the_ROM_image:
+{
+  [bootloader] fsbl.elf
+  system.bit
+  la_fw.elf
+}

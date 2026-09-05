@@ -1,0 +1,1 @@
+"""Reference-model package scaffold."""

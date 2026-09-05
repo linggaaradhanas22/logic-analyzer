@@ -1,0 +1,46 @@
+# Project-local environments and downloaded toolchains.
+.venv/
+.deps/
+.tools/
+
+# Generated workspaces, captures, reports and release artifacts.
+build/
+
+# Python and native build by-products.
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.egg-info/
+*.pyd
+*.dll
+*.obj
+*.lib
+*.exp
+*.ilk
+*.pdb
+*.dSYM/
+
+# Local credentials and machine-specific configuration.
+.env
+.env.*
+sdkconfig
+sdkconfig.old
+*.local.*
+
+# Editor and OS files.
+.vscode/
+.idea/
+.vs/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini
+
+# Simulator outputs that should stay below build/ even if a tool is run manually.
+transcript
+vsim.wlf
+work/
+/vivado.log
+/vivado.jou
+/vivado_*.log
+/vivado_*.jou

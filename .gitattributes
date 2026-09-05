@@ -1,0 +1,36 @@
+* text=auto
+
+# Source and automation use LF on every platform.
+*.c text eol=lf
+*.h text eol=lf
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.py text eol=lf
+*.ps1 text eol=lf
+*.tcl text eol=lf
+*.sv text eol=lf
+*.v text eol=lf
+*.xdc text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.cmake text eol=lf
+*.txt text eol=lf
+
+# Windows command files intentionally use CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Treat generated and captured binary data as binary.
+*.bin binary
+*.bit binary
+*.elf binary
+*.hex binary
+*.sr binary
+*.vcd binary
+*.wlf binary
+*.png binary
+*.jpg binary
+*.zip binary
+*.whl binary

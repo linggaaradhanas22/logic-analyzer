@@ -1,0 +1,131 @@
+base_address: 0x43C00000
+id_value: 0x4C410002
+registers:
+  - offset: 0x00
+    name: ID
+    access: RO
+    reset: 0x4C410002
+    description: Design identifier and register-map version.
+  - offset: 0x04
+    name: CTRL
+    access: RW
+    reset: 0x00000000
+    description: Acquisition control; ARM is self-clearing.
+    fields:
+      - name: ARM
+        lsb: 0
+        width: 1
+      - name: ABORT
+        lsb: 1
+        width: 1
+      - name: SOFT_RESET
+        lsb: 2
+        width: 1
+      - name: SELFTEST_EN
+        lsb: 3
+        width: 1
+      - name: STREAM
+        lsb: 4
+        width: 1
+  - offset: 0x08
+    name: STATUS
+    access: RO
+    reset: 0x00000001
+    description: Acquisition state and sticky error flags.
+  - offset: 0x0C
+    name: SAMPLE_DIV
+    access: RW
+    reset: 0x00000000
+    description: Sample rate is 100 MHz divided by DIV plus one.
+  - offset: 0x10
+    name: MODE
+    access: RW
+    reset: 0x00000000
+    description: Raw or transition encoding selection.
+    fields:
+      - name: ENCODING
+        lsb: 0
+        width: 1
+      - name: IDDR_EN
+        lsb: 1
+        width: 1
+  - offset: 0x14
+    name: CHAN_EN
+    access: RW
+    reset: 0x000000FF
+    description: Enabled input channels.
+  - offset: 0x18
+    name: TRIG_MASK
+    access: RW
+    reset: 0x00000000
+    description: Level-trigger participation mask.
+  - offset: 0x1C
+    name: TRIG_VALUE
+    access: RW
+    reset: 0x00000000
+    description: Trigger level value.
+  - offset: 0x20
+    name: TRIG_RISE
+    access: RW
+    reset: 0x00000000
+    description: Rising-edge trigger mask.
+  - offset: 0x24
+    name: TRIG_FALL
+    access: RW
+    reset: 0x00000000
+    description: Falling-edge trigger mask.
+  - offset: 0x28
+    name: PRE_SAMPLES
+    access: RW
+    reset: 0x00000000
+    description: Requested pre-trigger samples.
+  - offset: 0x2C
+    name: POST_SAMPLES
+    access: RW
+    reset: 0x00000000
+    description: Requested post-trigger samples; ignored in stream mode.
+  - offset: 0x30
+    name: TRIG_INDEX
+    access: RO
+    reset: 0x00000000
+    description: Sample index at trigger.
+  - offset: 0x34
+    name: WORD_COUNT_LO
+    access: RO
+    reset: 0x00000000
+    description: Low 32 bits of emitted word count.
+  - offset: 0x38
+    name: WORD_COUNT_HI
+    access: RO
+    reset: 0x00000000
+    description: High 32 bits of emitted word count.
+  - offset: 0x3C
+    name: IRQ_EN
+    access: RW
+    reset: 0x00000000
+    description: Interrupt enable bits.
+  - offset: 0x40
+    name: IRQ_STAT
+    access: W1C
+    reset: 0x00000000
+    description: Interrupt status; write one to clear.
+  - offset: 0x44
+    name: PATGEN_CTRL
+    access: RW
+    reset: 0x00000000
+    description: Pattern-generator enable, mode and divider.
+  - offset: 0x48
+    name: TIMEOUT
+    access: RW
+    reset: 0x00000000
+    description: Trigger timeout in sample clocks.
+  - offset: 0x4C
+    name: TXN_MAX_RUN
+    access: RW
+    reset: 0x00FFFFFF
+    description: Maximum transition run length.
+  - offset: 0x50
+    name: LIVE_FLUSH_CYCLES
+    access: RW
+    reset: 0x00030D40
+    description: Live packet flush interval; 200000 is 2 ms at 100 MHz.

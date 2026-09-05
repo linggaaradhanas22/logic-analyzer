@@ -1,0 +1,4 @@
+CONFIG_FREERTOS_HZ=1000
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
+# UART pins and the exact target are selected after the ESP32 module is confirmed.
