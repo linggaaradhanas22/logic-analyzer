@@ -4,6 +4,30 @@
       "name": "tb_smoke",
       "top": "tb_smoke",
       "sources": ["fpga/tb/tb_smoke.sv"]
+    },
+    {
+      "name": "tb_la_input_sync",
+      "top": "tb_la_input_sync",
+      "sources": [
+        "fpga/rtl/la_input_sync.sv",
+        "fpga/tb/tb_la_input_sync.sv"
+      ]
+    },
+    {
+      "name": "tb_la_sampler",
+      "top": "tb_la_sampler",
+      "sources": [
+        "fpga/rtl/la_sampler.sv",
+        "fpga/tb/tb_la_sampler.sv"
+      ]
+    },
+    {
+      "name": "tb_la_trigger",
+      "top": "tb_la_trigger",
+      "sources": [
+        "fpga/rtl/la_trigger.sv",
+        "fpga/tb/tb_la_trigger.sv"
+      ]
     }
   ]
 }

@@ -61,12 +61,12 @@ commit, and the worktree is clean.
 | Project root | `C:\Users\lingg\Projects\KCCI_technical\Embedded\Logic-Analyzer\Source_Code` |
 | Plan source | `docs/plan.md`, verified identical to `logic-analyzer-implementation-plan-v0.4.md` |
 | Branch | `main` |
-| Last implementation change | `52962c1 P1: complete specifications and native decoders` |
+| Last implementation change | `P2.1-P2.3 RTL cluster` (in progress, local) |
 | Remote | `origin` -> `https://github.com/linggaaradhanas22/logic-analyzer.git` |
-| Remote state | `origin/main` contains `52962c156b15a66bfe91f11c89e4f2b50f24cc46`; local and remote commit hashes are equal |
-| Current pending work | P1 is complete and pushed; begin P2 RTL in plan order |
+| Remote state | `origin/main` contains `52962c156b15a66bfe91f11c89e4f2b50f24cc46`; P2 commits pending push |
+| Current pending work | P2 in progress in plan order; P2.1-P2.3 pass Questa, P2.4 pre-trigger ring is next |
 | Workflow | Native Windows only; use `python tools/run.py <target>` |
-| Phase | P0 and P1 complete locally and on `origin/main`; P2 is next |
+| Phase | P0/P1 complete on `origin/main`; P2 RTL in progress |
 
 Generated environments, reports, logs and build outputs are intentionally
 ignored by Git. The reports described below are local evidence and must be
@@ -78,7 +78,7 @@ recreated after a clean checkout.
 |---|---|---|---|
 | P0 Environment and scaffolding | Complete locally | Native runner, checker, CI scaffold, locks, CMake tests, Questa harness, ESP-IDF smoke build and board query | Hosted CI and physical hardware gates are not evidence of completion |
 | P1 Specifications | Complete | Complete register/protocol/RTOS/decoder/wiring specifications, generated constants, C protocol library, UART/SPI/I2C decoders, independent models and native parity tests | Begin P2 RTL |
-| P2 FPGA RTL | Not started | Generated `la_regs_pkg.sv` and the generic Questa smoke harness | Implement each RTL block and its self-checking test, then integrate `la_top` |
+| P2 FPGA RTL | In progress | Generated `la_regs_pkg.sv`; generic Questa smoke harness; per-test PASS markers; `la_input_sync`, `la_sampler`, `la_trigger` RTL and self-checking tests | P2.4 pre-trigger ring, then txn encoder, raw packer, capture control, AXIS FIFO, patgen, register block, `la_top` integration and final gates |
 | P3 Vivado integration | Not started | Board files, board query Tcl, build/program Tcl scaffolds | Add `la_top.sv`, constraints, block design, synthesis, timing, bitstream and XSA |
 | P4 Zynq FreeRTOS core | Not started | Linker/configuration scaffolds, host segment-pool test, Vitis CLI smoke | Generate the XSA first, then implement the Vitis platform/application and target tests |
 | P5 ESP32 bridge | Scaffold only | Native ESP-IDF v5.5.2 hello-world build and MSVC mocks | Implement UART/TCP relay, flow control, tasks, Unity target tests and loopback |
@@ -106,8 +106,8 @@ project `.venv` and are recorded under `build/reports`.
 | `.venv\Scripts\python.exe tools\run.py test-esp32-mocks` | PASS | CTest mock target: 1/1; `build/reports/test-esp32-mocks.json` |
 | `.venv\Scripts\python.exe tools\run.py release` | PASS | Native release precheck: 4/4 CTest tests; `build/reports/release.json` |
 | `.venv\Scripts\python.exe tools\run.py test-host` | PASS | Pytest: 1 passed; `build/reports/test-host.json` |
-| `.venv\Scripts\python.exe tools\run.py lint` | PASS | Questa compile-only regression; `build/reports/lint.json` |
-| `.venv\Scripts\python.exe tools\run.py sim` | PASS | Questa simulation and result-file/PASS checks; `build/reports/sim.json` |
+| `.venv\Scripts\python.exe tools\run.py lint` | PASS | Questa compile-only regression, 4 testcases (tb_smoke, input sync, sampler, trigger); `build/reports/lint.json` |
+| `.venv\Scripts\python.exe tools\run.py sim` | PASS | Questa simulation and result-file/PASS checks, 4/4 testcases; `build/reports/sim.json` |
 | `python tools/regress.py --self-test` | PASS | Failure, timeout and missing-PASS detection |
 | `python tools/run.py fw-esp32` | PASS | Native ESP-IDF v5.5.2 `esp32` build; output under `build/esp32` |
 | `.venv\Scripts\python.exe -m compileall -q tools host tests` | PASS | Python syntax check |
@@ -185,3 +185,4 @@ the implementation is not present.
 | 2026-09-05 | Defined the mandatory status, commit and `origin/main` push workflow in `AGENTS.md`, `README.md` and this document. | Committed as `46f4ac7`, pushed to `origin/main`, and verified against the remote hash. |
 | 2026-09-05 | Implemented P1.1-P1.7: normative register constraints and generated views; typed protocol framing/config helpers; UART/SPI/I2C decoders with discontinuity events; independent Python vectors and ctypes parity tests; RTOS, protocol, decoder, wiring and verification specifications. | Local gates PASS: generator idempotence, native 3/3, release 4/4, ESP32 mocks 1/1, host 1 passed, Questa lint/sim, compileall and `git diff --check`. Reports are under `build/reports`; hardware, target RTOS scheduling, DMA coherency and physical wiring remain unverified by design. |
 | 2026-09-05 | Pushed implementation commit `52962c1` to `origin/main` and verified `git status --short --branch` is clean, `git log` points at the pushed commit and `git ls-remote origin refs/heads/main` matches `52962c156b15a66bfe91f11c89e4f2b50f24cc46`. | P1 is complete. Next action is P2 RTL; hardware and target-only gates remain explicitly unverified. |
+| 2026-09-05 | Extended the Questa regression runner with per-test PASS markers (`PASS: <case name>`) so `testlist.json` can host one self-checking test per RTL block; registered P2.1-P2.3 with their testbenches. Implemented `la_input_sync` (2-flop synchronizer per channel, optional 2-of-3 majority filter; latency 2/3 cycles, glitch rejection tested), `la_sampler` (free-running divider f_s = FCLK/(DIV+1), chan_en masking, aligned sample_valid), `la_trigger` (level on TRIG_MASK/TRIG_VALUE and "empty edge mask = true" rise/fall semantics between valid samples; no spurious edges on the first sample) with procedural self-checking scoreboards in Questa. Named design conventions: single FCLK, synchronous active-high `srst`, sample/`sample_valid` pulse interface, `trig` pulse per qualifying valid sample. | Local gates PASS: `lint` and `sim` (4/4 testcases) run sequentially; reports under `build/reports`. Questa Altera FSE notes: `default_nettype none` with ANSI ports fails compilation (avoided); module-level assigns compile where an equivalent local-declaration always_comb did not (workaround used in TBs); RTL files carry no `timescale` yet (P2.4 TBs will add TB-only timescale as today). |

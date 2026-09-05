@@ -99,15 +99,15 @@ def _failure_markers(output: str) -> list[str]:
     return markers
 
 
-def _simulation_markers(output: str, result_path: Path) -> list[str]:
+def _simulation_markers(output: str, result_path: Path, expected_marker: str) -> list[str]:
     markers = _failure_markers(output)
-    if "PASS:" not in output:
+    if expected_marker not in output:
         markers.append("missing PASS marker")
     if not result_path.is_file():
         markers.append("missing result file")
     else:
         result = result_path.read_text(encoding="utf-8", errors="replace")
-        if "PASS: tb_smoke" not in result:
+        if expected_marker not in result:
             markers.append("result mismatch")
     return markers
 
@@ -128,7 +128,7 @@ def _self_test() -> int:
             print("regress self-test failed: intentional failure was accepted", file=sys.stderr)
             return 1
         if name == "missing-pass":
-            markers = _simulation_markers(output, REPORT_ROOT / "__regress_missing_result__")
+            markers = _simulation_markers(output, REPORT_ROOT / "__regress_missing_result__", "PASS: synthetic")
             if "missing PASS marker" not in markers:
                 print("regress self-test failed: missing PASS was accepted", file=sys.stderr)
                 return 1
@@ -245,8 +245,9 @@ def run_regression(lint: bool, timeout: float) -> int:
         combined = "\n".join(log_parts)
         log_path = work / "transcript.log"
         log_path.write_text(combined, encoding="utf-8", newline="\n")
+        expected_marker = f"PASS: {name}"
         if not lint:
-            markers.extend(_simulation_markers(combined, result_path))
+            markers.extend(_simulation_markers(combined, result_path, expected_marker))
         case_status = "pass" if case_code == 0 and not timed_out and not markers else "fail"
         if case_status != "pass":
             overall = "fail"
