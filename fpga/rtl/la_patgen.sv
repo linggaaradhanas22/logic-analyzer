@@ -317,7 +317,7 @@ module la_patgen #(
       4'd2: ch_mux = lfsr_q;
       4'd3: ch_mux = {7'h00, uart_tx};
       4'd4: ch_mux = {5'h00, spi_cs, spi_mosi, spi_sck};
-      4'd5: ch_mux = {3'h00, i2c_sda, i2c_scl, 3'h000};
+      4'd5: ch_mux = {3'b000, i2c_sda, i2c_scl, 3'b000};
       default: ch_mux = '0;
     endcase
   end
