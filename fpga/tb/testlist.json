@@ -78,6 +78,15 @@
         "fpga/rtl/la_patgen.sv",
         "fpga/tb/tb_la_patgen.sv"
       ]
+    },
+    {
+      "name": "tb_la_regs",
+      "top": "tb_la_regs",
+      "sources": [
+        "fpga/rtl/la_regs_pkg.sv",
+        "fpga/rtl/la_regs.sv",
+        "fpga/tb/tb_la_regs.sv"
+      ]
     }
   ]
 }
