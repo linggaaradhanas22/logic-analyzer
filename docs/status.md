@@ -61,10 +61,10 @@ commit, and the worktree is clean.
 | Project root | `C:\Users\lingg\Projects\KCCI_technical\Embedded\Logic-Analyzer\Source_Code` |
 | Plan source | `docs/plan.md`, verified identical to `logic-analyzer-implementation-plan-v0.4.md` |
 | Branch | `main` |
-| Last committed baseline | `6dd22b3 Add native Windows Phase 0 scaffold` |
+| Last committed change | `46f4ac7 docs: enforce status commit and push workflow` |
 | Remote | `origin` -> `https://github.com/linggaaradhanas22/logic-analyzer.git` |
-| Remote state | `main` and `origin/main` were synchronized at the baseline commit |
-| Current pending work | This workflow update in `AGENTS.md`, `README.md` and `docs/status.md` is in the working tree until committed |
+| Remote state | `origin/main` contains `46f4ac7`; local and remote commit hashes were verified equal |
+| Current pending work | No implementation work is pending; continue with P1/P2 after the next session start checklist |
 | Workflow | Native Windows only; use `python tools/run.py <target>` |
 | Phase | P0 local gates complete; P1/P2 implementation is next |
 
@@ -183,4 +183,4 @@ the implementation is not present.
 | Date | Work completed | Result |
 |---|---|---|
 | 2026-09-05 | Created the native-Windows Phase 0 scaffold; installed and locked prerequisites; added board files, runner environment import, native/Questa/ESP-IDF checks; fixed ESP-IDF output placement and board-query lock handling; created and pushed baseline commit `6dd22b3`. | Local Phase 0 gates pass; later implementation and hardware gates remain explicitly blocked. |
-| 2026-09-05 | Defined the mandatory status, commit and `origin/main` push workflow in `AGENTS.md`, `README.md` and this document. | Workflow documentation is pending its commit and push. |
+| 2026-09-05 | Defined the mandatory status, commit and `origin/main` push workflow in `AGENTS.md`, `README.md` and this document. | Committed as `46f4ac7`, pushed to `origin/main`, and verified against the remote hash. |
