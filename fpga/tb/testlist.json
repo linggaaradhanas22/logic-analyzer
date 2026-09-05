@@ -38,6 +38,22 @@
         "fpga/rtl/la_pretrig_ring.sv",
         "fpga/tb/tb_la_pretrig_ring.sv"
       ]
+    },
+    {
+      "name": "tb_la_txn_encoder",
+      "top": "tb_la_txn_encoder",
+      "sources": [
+        "fpga/rtl/la_txn_encoder.sv",
+        "fpga/tb/tb_la_txn_encoder.sv"
+      ]
+    },
+    {
+      "name": "tb_la_raw_packer",
+      "top": "tb_la_raw_packer",
+      "sources": [
+        "fpga/rtl/la_raw_packer.sv",
+        "fpga/tb/tb_la_raw_packer.sv"
+      ]
     }
   ]
 }
