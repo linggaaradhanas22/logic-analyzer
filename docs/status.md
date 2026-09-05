@@ -61,12 +61,12 @@ commit, and the worktree is clean.
 | Project root | `C:\Users\lingg\Projects\KCCI_technical\Embedded\Logic-Analyzer\Source_Code` |
 | Plan source | `docs/plan.md`, verified identical to `logic-analyzer-implementation-plan-v0.4.md` |
 | Branch | `main` |
-| Last committed change | `46f4ac7 docs: enforce status commit and push workflow` |
+| Last committed change | `d6d85b6 docs: record workflow push` |
 | Remote | `origin` -> `https://github.com/linggaaradhanas22/logic-analyzer.git` |
-| Remote state | `origin/main` contains `46f4ac7`; local and remote commit hashes were verified equal |
-| Current pending work | No implementation work is pending; continue with P1/P2 after the next session start checklist |
+| Remote state | `origin/main` contains `d6d85b6`; local and remote commit hashes were verified equal before P1 work |
+| Current pending work | P1 implementation and verification are complete locally; commit, push and final clean-worktree evidence remain |
 | Workflow | Native Windows only; use `python tools/run.py <target>` |
-| Phase | P0 local gates complete; P1/P2 implementation is next |
+| Phase | P0 complete; P1 implementation and local gates complete; P2 is next after push |
 
 Generated environments, reports, logs and build outputs are intentionally
 ignored by Git. The reports described below are local evidence and must be
@@ -77,7 +77,7 @@ recreated after a clean checkout.
 | Phase | Status | What exists | Remaining entry work |
 |---|---|---|---|
 | P0 Environment and scaffolding | Complete locally | Native runner, checker, CI scaffold, locks, CMake tests, Questa harness, ESP-IDF smoke build and board query | Hosted CI and physical hardware gates are not evidence of completion |
-| P1 Specifications | Partial scaffold | Register map, protocol/RTOS/wiring documents, generated constants, C protocol library and UART smoke decoder | Complete protocol semantics, SPI/I2C decoders, reference models and specification coverage |
+| P1 Specifications | In progress | Complete register/protocol/RTOS/decoder/wiring specifications, generated constants, C protocol library, UART/SPI/I2C decoders, independent models and native parity tests | Commit and push the verified change; then begin P2 RTL |
 | P2 FPGA RTL | Not started | Generated `la_regs_pkg.sv` and the generic Questa smoke harness | Implement each RTL block and its self-checking test, then integrate `la_top` |
 | P3 Vivado integration | Not started | Board files, board query Tcl, build/program Tcl scaffolds | Add `la_top.sv`, constraints, block design, synthesis, timing, bitstream and XSA |
 | P4 Zynq FreeRTOS core | Not started | Linker/configuration scaffolds, host segment-pool test, Vitis CLI smoke | Generate the XSA first, then implement the Vitis platform/application and target tests |
@@ -101,16 +101,16 @@ project `.venv` and are recorded under `build/reports`.
 | `python tools/run.py check-env -- --write-lock` | PASS | `build/reports/env-check.json`; no missing P0 prerequisites |
 | `python tools/run.py query-board` | PASS | `build/reports/query-board.json` and `board-query.json` |
 | `python tools/run.py query-board -- --write-lock` | PASS | Updates `tools/board-lock.json` |
-| `python tools/run.py gen` | PASS | Register outputs are already current |
-| `python tools/run.py test-native` | PASS | Native CTest subset: 2/2, including ctypes ABI |
-| `python tools/run.py test-esp32-mocks` | PASS | CTest mock target: 1/1 |
-| `python tools/run.py release` | PASS | Native release precheck: 3/3 CTest tests |
-| `python tools/run.py test-host` | PASS | Pytest: 1 passed |
-| `python tools/run.py lint` | PASS | Questa compile-only regression |
-| `python tools/run.py sim` | PASS | Questa simulation and result-file/PASS checks |
+| `.venv\Scripts\python.exe tools\run.py gen` (twice) | PASS | Generator then `--check`; `build/reports/gen.json` |
+| `.venv\Scripts\python.exe tools\run.py test-native` | PASS | Native CTest: 3/3, including protocol, UART/SPI/I2C, ctypes ABI and model parity; `build/reports/test-native.json` |
+| `.venv\Scripts\python.exe tools\run.py test-esp32-mocks` | PASS | CTest mock target: 1/1; `build/reports/test-esp32-mocks.json` |
+| `.venv\Scripts\python.exe tools\run.py release` | PASS | Native release precheck: 4/4 CTest tests; `build/reports/release.json` |
+| `.venv\Scripts\python.exe tools\run.py test-host` | PASS | Pytest: 1 passed; `build/reports/test-host.json` |
+| `.venv\Scripts\python.exe tools\run.py lint` | PASS | Questa compile-only regression; `build/reports/lint.json` |
+| `.venv\Scripts\python.exe tools\run.py sim` | PASS | Questa simulation and result-file/PASS checks; `build/reports/sim.json` |
 | `python tools/regress.py --self-test` | PASS | Failure, timeout and missing-PASS detection |
 | `python tools/run.py fw-esp32` | PASS | Native ESP-IDF v5.5.2 `esp32` build; output under `build/esp32` |
-| `python -m compileall -q tools host tests` | PASS | Python syntax check |
+| `.venv\Scripts\python.exe -m compileall -q tools host tests` | PASS | Python syntax check |
 | Absolute runner from outside the root | PASS | `test-host` passed using an absolute runner path |
 
 Run `lint` and `sim` sequentially. They share the ignored
@@ -157,8 +157,7 @@ the implementation is not present.
 2. Confirm the checkout root and run `python tools/run.py check-env -- --write-lock`.
 3. Run `python tools/run.py query-board -- --write-lock` and confirm the board lock still matches the installed board files.
 4. Run `python tools/run.py gen`, `test-native`, `test-esp32-mocks`, `test-host`, `lint` and `sim`; run `lint` and `sim` sequentially.
-5. Start P1 completion where needed: expand protocol semantics, implement SPI/I2C decoder paths and add independent Python reference models.
-6. Start P2 RTL in plan order: `la_input_sync`, `la_sampler`, `la_trigger`, pre-trigger ring, transaction encoder, raw packer, capture control, FIFO, pattern generator, registers and `la_top`.
+5. Confirm the pushed P1 commit and clean worktree, then start P2 RTL in plan order: `la_input_sync`, `la_sampler`, `la_trigger`, pre-trigger ring, transaction encoder, raw packer, capture control, FIFO, pattern generator, registers and `la_top`.
 7. Add one self-checking procedural Questa test for every RTL block and keep all tests in `fpga/tb/testlist.json`.
 8. Do not attempt `bit` until `fpga/rtl/la_top.sv` and real constraints exist. Do not attempt Vitis application integration until an XSA is generated.
 9. Keep ESP-IDF generated configuration at `build/esp32/sdkconfig`; do not commit a source-level `sdkconfig`.
@@ -184,3 +183,4 @@ the implementation is not present.
 |---|---|---|
 | 2026-09-05 | Created the native-Windows Phase 0 scaffold; installed and locked prerequisites; added board files, runner environment import, native/Questa/ESP-IDF checks; fixed ESP-IDF output placement and board-query lock handling; created and pushed baseline commit `6dd22b3`. | Local Phase 0 gates pass; later implementation and hardware gates remain explicitly blocked. |
 | 2026-09-05 | Defined the mandatory status, commit and `origin/main` push workflow in `AGENTS.md`, `README.md` and this document. | Committed as `46f4ac7`, pushed to `origin/main`, and verified against the remote hash. |
+| 2026-09-05 | Implemented P1.1-P1.7: normative register constraints and generated views; typed protocol framing/config helpers; UART/SPI/I2C decoders with discontinuity events; independent Python vectors and ctypes parity tests; RTOS, protocol, decoder, wiring and verification specifications. | Local gates PASS: generator idempotence, native 3/3, release 4/4, ESP32 mocks 1/1, host 1 passed, Questa lint/sim, compileall and `git diff --check`. Reports are under `build/reports`; commit/push remain. Hardware, target RTOS scheduling, DMA coherency and physical wiring remain unverified by design. |

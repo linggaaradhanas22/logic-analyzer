@@ -472,7 +472,8 @@ def _run_target(target: str, forwarded: Sequence[str]) -> int:
         return _run_steps(target, [(command, cwd)])
     if target == "gen":
         command, cwd = _python_script("gen_regmap.py", [])
-        return _run_steps(target, [(command, cwd)])
+        check_command, check_cwd = _python_script("gen_regmap.py", ["--check"])
+        return _run_steps(target, [(command, cwd), (check_command, check_cwd)])
     if target in {"test-native", "test-esp32-mocks"}:
         steps, blocked = _cmake_steps(target)
         if blocked is not None:

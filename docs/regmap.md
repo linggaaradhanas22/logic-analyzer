@@ -15,23 +15,58 @@ ID value: `0x4C410002`
 | | `CTRL.SELFTEST_EN` | field | bits 3:3 | mask `0x00000008` |
 | | `CTRL.STREAM` | field | bits 4:4 | mask `0x00000010` |
 | `0x00000008` | `STATUS` | RO | `0x00000001` | Acquisition state and sticky error flags. |
+| | `STATUS.IDLE` | field | bits 0:0 | mask `0x00000001` |
+| | `STATUS.ARMED` | field | bits 1:1 | mask `0x00000002` |
+| | `STATUS.TRIGGERED` | field | bits 2:2 | mask `0x00000004` |
+| | `STATUS.DONE` | field | bits 3:3 | mask `0x00000008` |
+| | `STATUS.FIFO_OVF` | field | bits 4:4 | mask `0x00000010` |
+| | `STATUS.ABORTED` | field | bits 5:5 | mask `0x00000020` |
+| | `STATUS.STREAMING` | field | bits 6:6 | mask `0x00000040` |
 | `0x0000000C` | `SAMPLE_DIV` | RW | `0x00000000` | Sample rate is 100 MHz divided by DIV plus one. |
+| | `SAMPLE_DIV` | constraint | | min `0x00000000`; max `0xFFFFFFFF` |
 | `0x00000010` | `MODE` | RW | `0x00000000` | Raw or transition encoding selection. |
 | | `MODE.ENCODING` | field | bits 0:0 | mask `0x00000001` |
 | | `MODE.IDDR_EN` | field | bits 1:1 | mask `0x00000002` |
+| | `MODE` | constraint | | allowed_mask `0x00000003` |
 | `0x00000014` | `CHAN_EN` | RW | `0x000000FF` | Enabled input channels. |
+| | `CHAN_EN` | constraint | | allowed_mask `0x000000FF` |
 | `0x00000018` | `TRIG_MASK` | RW | `0x00000000` | Level-trigger participation mask. |
+| | `TRIG_MASK` | constraint | | allowed_mask `0x000000FF` |
 | `0x0000001C` | `TRIG_VALUE` | RW | `0x00000000` | Trigger level value. |
+| | `TRIG_VALUE` | constraint | | allowed_mask `0x000000FF` |
 | `0x00000020` | `TRIG_RISE` | RW | `0x00000000` | Rising-edge trigger mask. |
+| | `TRIG_RISE` | constraint | | allowed_mask `0x000000FF` |
 | `0x00000024` | `TRIG_FALL` | RW | `0x00000000` | Falling-edge trigger mask. |
+| | `TRIG_FALL` | constraint | | allowed_mask `0x000000FF` |
 | `0x00000028` | `PRE_SAMPLES` | RW | `0x00000000` | Requested pre-trigger samples. |
+| | `PRE_SAMPLES` | constraint | | min `0x00000000`; max `0x00008000` |
 | `0x0000002C` | `POST_SAMPLES` | RW | `0x00000000` | Requested post-trigger samples; ignored in stream mode. |
 | `0x00000030` | `TRIG_INDEX` | RO | `0x00000000` | Sample index at trigger. |
 | `0x00000034` | `WORD_COUNT_LO` | RO | `0x00000000` | Low 32 bits of emitted word count. |
 | `0x00000038` | `WORD_COUNT_HI` | RO | `0x00000000` | High 32 bits of emitted word count. |
 | `0x0000003C` | `IRQ_EN` | RW | `0x00000000` | Interrupt enable bits. |
+| | `IRQ_EN.DONE` | field | bits 0:0 | mask `0x00000001` |
+| | `IRQ_EN.TRIGGERED` | field | bits 1:1 | mask `0x00000002` |
+| | `IRQ_EN.OVERFLOW` | field | bits 2:2 | mask `0x00000004` |
+| | `IRQ_EN` | constraint | | allowed_mask `0x00000007` |
 | `0x00000040` | `IRQ_STAT` | W1C | `0x00000000` | Interrupt status; write one to clear. |
+| | `IRQ_STAT.DONE` | field | bits 0:0 | mask `0x00000001` |
+| | `IRQ_STAT.TRIGGERED` | field | bits 1:1 | mask `0x00000002` |
+| | `IRQ_STAT.OVERFLOW` | field | bits 2:2 | mask `0x00000004` |
+| | `IRQ_STAT` | constraint | | allowed_mask `0x00000007` |
 | `0x00000044` | `PATGEN_CTRL` | RW | `0x00000000` | Pattern-generator enable, mode and divider. |
+| | `PATGEN_CTRL.EN` | field | bits 0:0 | mask `0x00000001` |
+| | `PATGEN_CTRL.MODE` | field | bits 4:7 | mask `0x000000F0` |
+| | `PATGEN_CTRL.MODE=0` | enum | COUNTER | |
+| | `PATGEN_CTRL.MODE=1` | enum | WALKING_ONE | |
+| | `PATGEN_CTRL.MODE=2` | enum | PRBS8 | |
+| | `PATGEN_CTRL.MODE=3` | enum | UART_115200 | |
+| | `PATGEN_CTRL.MODE=4` | enum | SPI_1MHZ | |
+| | `PATGEN_CTRL.MODE=5` | enum | I2C_400KHZ | |
+| | `PATGEN_CTRL.DIV` | field | bits 16:31 | mask `0xFFFF0000` |
+| | `PATGEN_CTRL` | constraint | | allowed_mask `0xFFFF00F1` |
 | `0x00000048` | `TIMEOUT` | RW | `0x00000000` | Trigger timeout in sample clocks. |
 | `0x0000004C` | `TXN_MAX_RUN` | RW | `0x00FFFFFF` | Maximum transition run length. |
+| | `TXN_MAX_RUN` | constraint | | min `0x00000001`; max `0x00FFFFFF` |
 | `0x00000050` | `LIVE_FLUSH_CYCLES` | RW | `0x00030D40` | Live packet flush interval; 200000 is 2 ms at 100 MHz. |
+| | `LIVE_FLUSH_CYCLES` | constraint | | min `0x00000000`; max `0xFFFFFFFF`; nonzero_when `CTRL.STREAM` |

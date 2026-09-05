@@ -59,4 +59,7 @@ if(Python3_EXECUTABLE)
   add_test(NAME la_native_ctypes
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/native/test_abi.py
             --library $<TARGET_FILE:la_native>)
+  add_test(NAME la_native_ctypes_models
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/native/test_ctypes_models.py
+            --library $<TARGET_FILE:la_native>)
 endif()

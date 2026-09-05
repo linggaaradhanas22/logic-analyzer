@@ -22,6 +22,7 @@ GENERATED = (
     PROJECT_ROOT / "docs" / "regmap.md",
 )
 NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+CONSTRAINT_KEYS = {"min", "max", "allowed_mask", "nonzero_when"}
 
 
 def _load_source() -> dict[str, Any]:
@@ -51,6 +52,31 @@ def _integer(value: Any, label: str) -> int:
         except ValueError as exc:
             raise ValueError(f"{label} is not an integer: {value!r}") from exc
     raise ValueError(f"{label} must be an integer")
+
+
+def _constraints(raw: Any, label: str) -> dict[str, Any]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"{label}.constraints must be a mapping")
+    unknown = set(raw) - CONSTRAINT_KEYS
+    if unknown:
+        raise ValueError(f"{label}.constraints has unknown keys: {sorted(unknown)}")
+    result: dict[str, Any] = {}
+    for key in ("min", "max", "allowed_mask"):
+        if key in raw:
+            value = _integer(raw[key], f"{label}.constraints.{key}")
+            if value < 0 or value > 0xFFFFFFFF:
+                raise ValueError(f"{label}.constraints.{key} must fit in 32 bits")
+            result[key] = value
+    if "min" in result and "max" in result and result["min"] > result["max"]:
+        raise ValueError(f"{label}.constraints.min exceeds max")
+    if "nonzero_when" in raw:
+        value = raw["nonzero_when"]
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"{label}.constraints.nonzero_when must be a field name")
+        result["nonzero_when"] = value
+    return result
 
 
 def _validate(data: dict[str, Any]) -> tuple[int, int, list[dict[str, Any]]]:
@@ -108,7 +134,28 @@ def _validate(data: dict[str, Any]) -> tuple[int, int, list[dict[str, Any]]]:
                 raise ValueError(f"overlapping field: {name}.{field_name}")
             field_names.add(field_name)
             occupied |= mask
-            clean_fields.append({"name": field_name, "lsb": lsb, "width": width, "mask": mask})
+            raw_values = field.get("values", {})
+            if not isinstance(raw_values, dict):
+                raise ValueError(f"{name}.{field_name}.values must be a mapping")
+            values: dict[int, str] = {}
+            for raw_value, value_name in raw_values.items():
+                enum_value = _integer(raw_value, f"{name}.{field_name}.values key")
+                if enum_value < 0 or enum_value >= (1 << width):
+                    raise ValueError(f"{name}.{field_name} enum value is outside the field")
+                if not isinstance(value_name, str) or not NAME_RE.fullmatch(value_name):
+                    raise ValueError(f"{name}.{field_name} has invalid enum name: {value_name!r}")
+                if enum_value in values or value_name in values.values():
+                    raise ValueError(f"duplicate enum value or name: {name}.{field_name}")
+                values[enum_value] = value_name
+            clean_fields.append(
+                {
+                    "name": field_name,
+                    "lsb": lsb,
+                    "width": width,
+                    "mask": mask,
+                    "values": values,
+                }
+            )
         registers.append(
             {
                 "name": name,
@@ -117,6 +164,7 @@ def _validate(data: dict[str, Any]) -> tuple[int, int, list[dict[str, Any]]]:
                 "access": access,
                 "description": str(raw.get("description", "")),
                 "fields": clean_fields,
+                "constraints": _constraints(raw.get("constraints"), name),
             }
         )
 
@@ -157,6 +205,15 @@ def _c_header(base: int, id_value: int, registers: list[dict[str, Any]]) -> str:
                     f"#define LA_REG_{name}_{field['name']}_MASK UINT32_C({_hex(field['mask'])})",
                 ]
             )
+            for value, value_name in sorted(field["values"].items()):
+                lines.append(
+                    f"#define LA_REG_{name}_{field['name']}_VALUE_{value_name} {value}u"
+                )
+        for key in ("min", "max", "allowed_mask"):
+            if key in register["constraints"]:
+                lines.append(
+                    f"#define LA_REG_{name}_{key.upper()} UINT32_C({_hex(register['constraints'][key])})"
+                )
         lines.append("")
     lines.append("#endif /* LA_REGS_H */")
     return "\n".join(lines) + "\n"
@@ -182,6 +239,15 @@ def _sv_package(base: int, id_value: int, registers: list[dict[str, Any]]) -> st
             lines.append(
                 f"  localparam logic [31:0] LA_REG_{name}_{field['name']}_MASK = 32'h{field['mask']:08X};"
             )
+            for value, value_name in sorted(field["values"].items()):
+                lines.append(
+                    f"  localparam logic [31:0] LA_REG_{name}_{field['name']}_VALUE_{value_name} = 32'd{value};"
+                )
+        for key in ("min", "max", "allowed_mask"):
+            if key in register["constraints"]:
+                lines.append(
+                    f"  localparam logic [31:0] LA_REG_{name}_{key.upper()} = 32'h{register['constraints'][key]:08X};"
+                )
         lines.append("")
     lines.append("endpackage : la_regs_pkg")
     return "\n".join(lines) + "\n"
@@ -197,8 +263,14 @@ def _python_module(base: int, id_value: int, registers: list[dict[str, Any]]) ->
     ]
     for register in registers:
         lines.append(
-            "    %r: {\"offset\": 0x%X, \"reset\": 0x%08X, \"access\": %r},"
-            % (register["name"], register["offset"], register["reset"], register["access"])
+            "    %r: {\"offset\": 0x%X, \"reset\": 0x%08X, \"access\": %r, \"constraints\": %r},"
+            % (
+                register["name"],
+                register["offset"],
+                register["reset"],
+                register["access"],
+                register["constraints"],
+            )
         )
     lines.extend(["}", "", "FIELD_MASKS = {"])
     for register in registers:
@@ -206,6 +278,16 @@ def _python_module(base: int, id_value: int, registers: list[dict[str, Any]]) ->
             lines.append(
                 "    %r: 0x%08X," % (f"{register['name']}_{field['name']}", field["mask"])
             )
+    lines.extend(["}", "", "FIELD_VALUES = {"])
+    for register in registers:
+        for field in register["fields"]:
+            if field["values"]:
+                lines.append(
+                    "    %r: %r," % (
+                        f"{register['name']}_{field['name']}",
+                        {name: value for value, name in field["values"].items()},
+                    )
+                )
     lines.extend(["}", ""])
     return "\n".join(lines)
 
@@ -234,6 +316,20 @@ def _markdown(base: int, id_value: int, registers: list[dict[str, Any]]) -> str:
                 f"bits {field['lsb']}:{field['lsb'] + field['width'] - 1} | "
                 f"mask `{_hex(field['mask'])}` |"
             )
+            for value, value_name in sorted(field["values"].items()):
+                lines.append(
+                    f"| | `{register['name']}.{field['name']}={value}` | enum | {value_name} | |"
+                )
+        constraints = register["constraints"]
+        if constraints:
+            rendered = []
+            for key in ("min", "max", "allowed_mask", "nonzero_when"):
+                if key in constraints:
+                    value = constraints[key]
+                    rendered.append(
+                        f"{key} `{_hex(value) if isinstance(value, int) else value}`"
+                    )
+            lines.append(f"| | `{register['name']}` | constraint | | {'; '.join(rendered)} |")
     return "\n".join(lines) + "\n"
 
 

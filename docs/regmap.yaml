@@ -32,11 +32,36 @@ registers:
     access: RO
     reset: 0x00000001
     description: Acquisition state and sticky error flags.
+    fields:
+      - name: IDLE
+        lsb: 0
+        width: 1
+      - name: ARMED
+        lsb: 1
+        width: 1
+      - name: TRIGGERED
+        lsb: 2
+        width: 1
+      - name: DONE
+        lsb: 3
+        width: 1
+      - name: FIFO_OVF
+        lsb: 4
+        width: 1
+      - name: ABORTED
+        lsb: 5
+        width: 1
+      - name: STREAMING
+        lsb: 6
+        width: 1
   - offset: 0x0C
     name: SAMPLE_DIV
     access: RW
     reset: 0x00000000
     description: Sample rate is 100 MHz divided by DIV plus one.
+    constraints:
+      min: 0
+      max: 0xFFFFFFFF
   - offset: 0x10
     name: MODE
     access: RW
@@ -49,36 +74,51 @@ registers:
       - name: IDDR_EN
         lsb: 1
         width: 1
+    constraints:
+      allowed_mask: 0x00000003
   - offset: 0x14
     name: CHAN_EN
     access: RW
     reset: 0x000000FF
     description: Enabled input channels.
+    constraints:
+      allowed_mask: 0x000000FF
   - offset: 0x18
     name: TRIG_MASK
     access: RW
     reset: 0x00000000
     description: Level-trigger participation mask.
+    constraints:
+      allowed_mask: 0x000000FF
   - offset: 0x1C
     name: TRIG_VALUE
     access: RW
     reset: 0x00000000
     description: Trigger level value.
+    constraints:
+      allowed_mask: 0x000000FF
   - offset: 0x20
     name: TRIG_RISE
     access: RW
     reset: 0x00000000
     description: Rising-edge trigger mask.
+    constraints:
+      allowed_mask: 0x000000FF
   - offset: 0x24
     name: TRIG_FALL
     access: RW
     reset: 0x00000000
     description: Falling-edge trigger mask.
+    constraints:
+      allowed_mask: 0x000000FF
   - offset: 0x28
     name: PRE_SAMPLES
     access: RW
     reset: 0x00000000
     description: Requested pre-trigger samples.
+    constraints:
+      min: 0
+      max: 32768
   - offset: 0x2C
     name: POST_SAMPLES
     access: RW
@@ -104,16 +144,59 @@ registers:
     access: RW
     reset: 0x00000000
     description: Interrupt enable bits.
+    fields:
+      - name: DONE
+        lsb: 0
+        width: 1
+      - name: TRIGGERED
+        lsb: 1
+        width: 1
+      - name: OVERFLOW
+        lsb: 2
+        width: 1
+    constraints:
+      allowed_mask: 0x00000007
   - offset: 0x40
     name: IRQ_STAT
     access: W1C
     reset: 0x00000000
     description: Interrupt status; write one to clear.
+    fields:
+      - name: DONE
+        lsb: 0
+        width: 1
+      - name: TRIGGERED
+        lsb: 1
+        width: 1
+      - name: OVERFLOW
+        lsb: 2
+        width: 1
+    constraints:
+      allowed_mask: 0x00000007
   - offset: 0x44
     name: PATGEN_CTRL
     access: RW
     reset: 0x00000000
     description: Pattern-generator enable, mode and divider.
+    fields:
+      - name: EN
+        lsb: 0
+        width: 1
+      - name: MODE
+        lsb: 4
+        width: 4
+        values:
+          0: COUNTER
+          1: WALKING_ONE
+          2: PRBS8
+          3: UART_115200
+          4: SPI_1MHZ
+          5: I2C_400KHZ
+      - name: DIV
+        lsb: 16
+        width: 16
+    constraints:
+      allowed_mask: 0xFFFF00F1
   - offset: 0x48
     name: TIMEOUT
     access: RW
@@ -124,8 +207,15 @@ registers:
     access: RW
     reset: 0x00FFFFFF
     description: Maximum transition run length.
+    constraints:
+      min: 1
+      max: 0x00FFFFFF
   - offset: 0x50
     name: LIVE_FLUSH_CYCLES
     access: RW
     reset: 0x00030D40
     description: Live packet flush interval; 200000 is 2 ms at 100 MHz.
+    constraints:
+      min: 0
+      max: 0xFFFFFFFF
+      nonzero_when: CTRL.STREAM

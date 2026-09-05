@@ -16,32 +16,49 @@ package la_regs_pkg;
 
   localparam logic [31:0] LA_REG_STATUS_OFFSET = 32'h00000008;
   localparam logic [31:0] LA_REG_STATUS_RESET = 32'h00000001;
+  localparam logic [31:0] LA_REG_STATUS_IDLE_MASK = 32'h00000001;
+  localparam logic [31:0] LA_REG_STATUS_ARMED_MASK = 32'h00000002;
+  localparam logic [31:0] LA_REG_STATUS_TRIGGERED_MASK = 32'h00000004;
+  localparam logic [31:0] LA_REG_STATUS_DONE_MASK = 32'h00000008;
+  localparam logic [31:0] LA_REG_STATUS_FIFO_OVF_MASK = 32'h00000010;
+  localparam logic [31:0] LA_REG_STATUS_ABORTED_MASK = 32'h00000020;
+  localparam logic [31:0] LA_REG_STATUS_STREAMING_MASK = 32'h00000040;
 
   localparam logic [31:0] LA_REG_SAMPLE_DIV_OFFSET = 32'h0000000C;
   localparam logic [31:0] LA_REG_SAMPLE_DIV_RESET = 32'h00000000;
+  localparam logic [31:0] LA_REG_SAMPLE_DIV_MIN = 32'h00000000;
+  localparam logic [31:0] LA_REG_SAMPLE_DIV_MAX = 32'hFFFFFFFF;
 
   localparam logic [31:0] LA_REG_MODE_OFFSET = 32'h00000010;
   localparam logic [31:0] LA_REG_MODE_RESET = 32'h00000000;
   localparam logic [31:0] LA_REG_MODE_ENCODING_MASK = 32'h00000001;
   localparam logic [31:0] LA_REG_MODE_IDDR_EN_MASK = 32'h00000002;
+  localparam logic [31:0] LA_REG_MODE_ALLOWED_MASK = 32'h00000003;
 
   localparam logic [31:0] LA_REG_CHAN_EN_OFFSET = 32'h00000014;
   localparam logic [31:0] LA_REG_CHAN_EN_RESET = 32'h000000FF;
+  localparam logic [31:0] LA_REG_CHAN_EN_ALLOWED_MASK = 32'h000000FF;
 
   localparam logic [31:0] LA_REG_TRIG_MASK_OFFSET = 32'h00000018;
   localparam logic [31:0] LA_REG_TRIG_MASK_RESET = 32'h00000000;
+  localparam logic [31:0] LA_REG_TRIG_MASK_ALLOWED_MASK = 32'h000000FF;
 
   localparam logic [31:0] LA_REG_TRIG_VALUE_OFFSET = 32'h0000001C;
   localparam logic [31:0] LA_REG_TRIG_VALUE_RESET = 32'h00000000;
+  localparam logic [31:0] LA_REG_TRIG_VALUE_ALLOWED_MASK = 32'h000000FF;
 
   localparam logic [31:0] LA_REG_TRIG_RISE_OFFSET = 32'h00000020;
   localparam logic [31:0] LA_REG_TRIG_RISE_RESET = 32'h00000000;
+  localparam logic [31:0] LA_REG_TRIG_RISE_ALLOWED_MASK = 32'h000000FF;
 
   localparam logic [31:0] LA_REG_TRIG_FALL_OFFSET = 32'h00000024;
   localparam logic [31:0] LA_REG_TRIG_FALL_RESET = 32'h00000000;
+  localparam logic [31:0] LA_REG_TRIG_FALL_ALLOWED_MASK = 32'h000000FF;
 
   localparam logic [31:0] LA_REG_PRE_SAMPLES_OFFSET = 32'h00000028;
   localparam logic [31:0] LA_REG_PRE_SAMPLES_RESET = 32'h00000000;
+  localparam logic [31:0] LA_REG_PRE_SAMPLES_MIN = 32'h00000000;
+  localparam logic [31:0] LA_REG_PRE_SAMPLES_MAX = 32'h00008000;
 
   localparam logic [31:0] LA_REG_POST_SAMPLES_OFFSET = 32'h0000002C;
   localparam logic [31:0] LA_REG_POST_SAMPLES_RESET = 32'h00000000;
@@ -57,20 +74,42 @@ package la_regs_pkg;
 
   localparam logic [31:0] LA_REG_IRQ_EN_OFFSET = 32'h0000003C;
   localparam logic [31:0] LA_REG_IRQ_EN_RESET = 32'h00000000;
+  localparam logic [31:0] LA_REG_IRQ_EN_DONE_MASK = 32'h00000001;
+  localparam logic [31:0] LA_REG_IRQ_EN_TRIGGERED_MASK = 32'h00000002;
+  localparam logic [31:0] LA_REG_IRQ_EN_OVERFLOW_MASK = 32'h00000004;
+  localparam logic [31:0] LA_REG_IRQ_EN_ALLOWED_MASK = 32'h00000007;
 
   localparam logic [31:0] LA_REG_IRQ_STAT_OFFSET = 32'h00000040;
   localparam logic [31:0] LA_REG_IRQ_STAT_RESET = 32'h00000000;
+  localparam logic [31:0] LA_REG_IRQ_STAT_DONE_MASK = 32'h00000001;
+  localparam logic [31:0] LA_REG_IRQ_STAT_TRIGGERED_MASK = 32'h00000002;
+  localparam logic [31:0] LA_REG_IRQ_STAT_OVERFLOW_MASK = 32'h00000004;
+  localparam logic [31:0] LA_REG_IRQ_STAT_ALLOWED_MASK = 32'h00000007;
 
   localparam logic [31:0] LA_REG_PATGEN_CTRL_OFFSET = 32'h00000044;
   localparam logic [31:0] LA_REG_PATGEN_CTRL_RESET = 32'h00000000;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_EN_MASK = 32'h00000001;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_MASK = 32'h000000F0;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_COUNTER = 32'd0;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_WALKING_ONE = 32'd1;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_PRBS8 = 32'd2;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_UART_115200 = 32'd3;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_SPI_1MHZ = 32'd4;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_I2C_400KHZ = 32'd5;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_DIV_MASK = 32'hFFFF0000;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_ALLOWED_MASK = 32'hFFFF00F1;
 
   localparam logic [31:0] LA_REG_TIMEOUT_OFFSET = 32'h00000048;
   localparam logic [31:0] LA_REG_TIMEOUT_RESET = 32'h00000000;
 
   localparam logic [31:0] LA_REG_TXN_MAX_RUN_OFFSET = 32'h0000004C;
   localparam logic [31:0] LA_REG_TXN_MAX_RUN_RESET = 32'h00FFFFFF;
+  localparam logic [31:0] LA_REG_TXN_MAX_RUN_MIN = 32'h00000001;
+  localparam logic [31:0] LA_REG_TXN_MAX_RUN_MAX = 32'h00FFFFFF;
 
   localparam logic [31:0] LA_REG_LIVE_FLUSH_CYCLES_OFFSET = 32'h00000050;
   localparam logic [31:0] LA_REG_LIVE_FLUSH_CYCLES_RESET = 32'h00030D40;
+  localparam logic [31:0] LA_REG_LIVE_FLUSH_CYCLES_MIN = 32'h00000000;
+  localparam logic [31:0] LA_REG_LIVE_FLUSH_CYCLES_MAX = 32'hFFFFFFFF;
 
 endpackage : la_regs_pkg
