@@ -51,9 +51,19 @@ add_executable(la_esp32_mocks
 target_link_libraries(la_esp32_mocks PRIVATE la_native)
 target_include_directories(la_esp32_mocks PRIVATE common/la_proto/include)
 
+add_executable(la_native_regs
+  tests/native/regs_host_tests.c
+  fw-zynq/app/src/drivers/la_regs_drv.c
+)
+target_include_directories(la_native_regs PRIVATE
+  common/la_proto/include
+  fw-zynq/app/src/drivers
+)
+
 enable_testing()
 add_test(NAME la_native_tests COMMAND la_native_tests)
 add_test(NAME la_esp32_mocks COMMAND la_esp32_mocks)
+add_test(NAME la_native_regs COMMAND la_native_regs)
 
 if(Python3_EXECUTABLE)
   add_test(NAME la_native_ctypes
