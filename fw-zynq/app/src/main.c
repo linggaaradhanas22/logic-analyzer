@@ -8,13 +8,31 @@
  * vApplicationGetIdleTaskMemory / vApplicationGetTimerTaskMemory feed the
  * idle and timer daemon tasks; the stack-overflow and malloc-failed hooks
  * print and halt so faults are visible instead of silent.
+ *
+ * P4.3 boot contract: before the scheduler starts, the linker geometry is
+ * checked (firmware end below the non-cached DDR window; constants in
+ * fw-zynq/app/src/la_mem_geom.h and fw-zynq/lscript.ld) and every 1 MiB
+ * MMU section of the window is programmed Normal Non-cacheable so the
+ * capture payload and SG descriptors the DMA writes later are coherent
+ * without cache maintenance.
  */
 
 #include "FreeRTOS.h"
+#include "la_mem_geom.h"
 #include "task.h"
+#include "xil_mmu.h"
 #include "xil_printf.h"
 
 #define LA_PRIORITY (tskIDLE_PRIORITY + 1)
+
+extern uint8_t __la_fw_end[];
+extern uint8_t __la_nc_base[];
+
+static void la_program_noncached(void *context, uintptr_t section_base)
+{
+    (void)context;
+    Xil_SetTlbAttributes((INTPTR)section_base, NORM_NONCACHE);
+}
 
 static TaskHandle_t hello_handle;
 static StackType_t  hello_stack[configMINIMAL_STACK_SIZE];
@@ -85,6 +103,12 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 
 int main(void)
 {
+    if (la_mem_geometry_check((uintptr_t)__la_fw_end) != LA_MEM_CHECK_OK) {
+        xil_printf("LA fatal: memory geometry check failed\r\n");
+        for (;;) {
+        }
+    }
+    la_mem_apply_noncached(la_program_noncached, NULL);
     hello_handle = xTaskCreateStatic(la_hello_task, "la_hello",
                                      configMINIMAL_STACK_SIZE, NULL,
                                      LA_PRIORITY, hello_stack, &hello_tcb);

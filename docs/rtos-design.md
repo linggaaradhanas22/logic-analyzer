@@ -115,6 +115,19 @@ If caching is enabled later, descriptor and payload maintenance are separate,
 64-byte aligned and based on actual received lengths, including short tails.
 Barriers are required before publishing a descriptor and after CPU ownership.
 
+Concrete layout (P4.3, single source: `fw-zynq/app/src/la_mem_geom.h` and
+`fw-zynq/lscript.ld`): the Zybo Z7-10 has 1 GiB DDR from `0x0010_0000` to
+`0x4000_0000`; the top 16 MiB (`0x3F00_0000`, sixteen 1 MiB MMU sections) is
+carved out as the Normal Non-cacheable window. The burst capture pool is the
+first 8 MiB of the window and the SG descriptor pool the next 1 MiB; both are
+64-byte aligned with cache-line-rounded capacities. The linker script exports
+`__la_nc_base/size/end` and `__la_fw_end`, asserts at link time that firmware
+never reaches the window, and `main()` re-checks the geometry at boot before
+programming each 1 MiB section Non-cacheable with `Xil_SetTlbAttributes(..,
+NORM_NONCACHE)`. Anything that reads or writes the window from the CPU side
+must still respect the 64-byte allocation alignment for future cached
+operation; today no cache maintenance is needed on the non-cached path.
+
 An acquisition overflow stops or marks a gap; it never silently drops samples.
 If no free live segment exists, AcqTask reports `EVT_OVERRUN(stage=DMA)` and
 stops the stream after quiescing the producer. Decoder sequence gaps reset the

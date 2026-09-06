@@ -281,7 +281,15 @@ def create_app_and_build(client, root: Path, platform) -> None:
         name=APP_NAME, platform=xpfm, domain=DOMAIN_NAME
     )
     src = root / "fw-zynq" / "app" / "src"
-    app.import_files(from_loc=str(src), files=["main.c"])
+    app.import_files(from_loc=str(src), files=["main.c", "la_mem_geom.c", "la_mem_geom.h"])
+    # import_files refuses to overwrite the Vitis-generated src/lscript.ld,
+    # so the P4.3 linker script (NC carve + ASSERTs) replaces it in place.
+    app_dir = workspace_path(root) / APP_NAME
+    lscript = app_dir / "src" / "lscript.ld"
+    if not lscript.is_file():
+        raise SystemExit(f"fw-zynq blocked: generated lscript.ld missing at {lscript}")
+    shutil.copyfile(root / "fw-zynq" / "lscript.ld", lscript)
+    print(f"VITIS P4.3 linker script installed at {lscript}")
     app.build()
     print(f"VITIS app built: {APP_NAME}")
 

@@ -68,11 +68,29 @@ target_include_directories(la_native_txwin PRIVATE
   fw-zynq/app/src/tasks
 )
 
+add_executable(la_native_acq
+  tests/native/acq_fsm_host_tests.c
+  fw-zynq/app/src/tasks/la_acq_fsm.c
+)
+target_include_directories(la_native_acq PRIVATE
+  fw-zynq/app/src/tasks
+)
+
+add_executable(la_native_mem
+  tests/native/mem_geom_host_tests.c
+  fw-zynq/app/src/la_mem_geom.c
+)
+target_include_directories(la_native_mem PRIVATE
+  fw-zynq/app/src
+)
+
 enable_testing()
 add_test(NAME la_native_tests COMMAND la_native_tests)
 add_test(NAME la_esp32_mocks COMMAND la_esp32_mocks)
 add_test(NAME la_native_regs COMMAND la_native_regs)
 add_test(NAME la_native_txwin COMMAND la_native_txwin)
+add_test(NAME la_native_acq COMMAND la_native_acq)
+add_test(NAME la_native_mem COMMAND la_native_mem)
 
 if(Python3_EXECUTABLE)
   add_test(NAME la_native_ctypes
