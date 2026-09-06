@@ -78,6 +78,38 @@ static uint32_t get_u32_le(const uint8_t *input)
            ((uint32_t)input[3] << 24);
 }
 
+static void put_u16_le(uint8_t *output, uint16_t value)
+{
+    output[0] = (uint8_t)(value & 0xFFu);
+    output[1] = (uint8_t)(value >> 8);
+}
+
+static uint16_t get_u16_le(const uint8_t *input)
+{
+    return (uint16_t)((uint16_t)input[0] | ((uint16_t)input[1] << 8));
+}
+
+static void put_u64_le(uint8_t *output, uint64_t value)
+{
+    unsigned index;
+
+    for (index = 0u; index < 8u; ++index) {
+        output[index] = (uint8_t)(value & 0xFFu);
+        value >>= 8;
+    }
+}
+
+static uint64_t get_u64_le(const uint8_t *input)
+{
+    uint64_t value = 0u;
+    unsigned index;
+
+    for (index = 0u; index < 8u; ++index) {
+        value |= (uint64_t)input[index] << (8u * index);
+    }
+    return value;
+}
+
 int la_proto_message_type_valid(uint8_t type)
 {
     switch (type) {
@@ -294,6 +326,206 @@ int la_proto_unpack_decoder_config(la_proto_decoder_config_t *config,
         break;
     }
     return la_proto_validate_decoder_config(config);
+}
+
+size_t la_proto_pack_pong(const la_proto_pong_t *pong,
+                          uint8_t *output,
+                          size_t output_capacity)
+{
+    if (pong == NULL || output == NULL || output_capacity < LA_PROTO_PONG_WIRE_SIZE) {
+        return 0u;
+    }
+    put_u32_le(&output[0], pong->fw_version);
+    put_u32_le(&output[4], pong->pl_id);
+    put_u64_le(&output[8], pong->uptime_ms);
+    return LA_PROTO_PONG_WIRE_SIZE;
+}
+
+int la_proto_unpack_pong(la_proto_pong_t *pong,
+                         const uint8_t *input,
+                         size_t input_length)
+{
+    if (pong == NULL || input == NULL || input_length != LA_PROTO_PONG_WIRE_SIZE) {
+        return -1;
+    }
+    memset(pong, 0, sizeof(*pong));
+    pong->fw_version = get_u32_le(&input[0]);
+    pong->pl_id = get_u32_le(&input[4]);
+    pong->uptime_ms = get_u64_le(&input[8]);
+    return 0;
+}
+
+size_t la_proto_pack_ack(uint8_t acknowledged_type,
+                         uint8_t sequence,
+                         uint8_t *output,
+                         size_t output_capacity)
+{
+    if (output == NULL || output_capacity < LA_PROTO_ACK_WIRE_SIZE) {
+        return 0u;
+    }
+    output[0] = acknowledged_type;
+    output[1] = sequence;
+    return LA_PROTO_ACK_WIRE_SIZE;
+}
+
+int la_proto_unpack_ack(uint8_t *acknowledged_type,
+                        uint8_t *sequence,
+                        const uint8_t *input,
+                        size_t input_length)
+{
+    if (acknowledged_type == NULL || sequence == NULL || input == NULL ||
+        input_length != LA_PROTO_ACK_WIRE_SIZE) {
+        return -1;
+    }
+    *acknowledged_type = input[0];
+    *sequence = input[1];
+    return 0;
+}
+
+size_t la_proto_pack_nak(uint8_t nak_type,
+                         uint8_t sequence,
+                         uint8_t error,
+                         uint8_t *output,
+                         size_t output_capacity)
+{
+    if (output == NULL || output_capacity < LA_PROTO_NAK_WIRE_SIZE) {
+        return 0u;
+    }
+    output[0] = nak_type;
+    output[1] = sequence;
+    output[2] = error;
+    return LA_PROTO_NAK_WIRE_SIZE;
+}
+
+int la_proto_unpack_nak(uint8_t *nak_type,
+                        uint8_t *sequence,
+                        uint8_t *error,
+                        const uint8_t *input,
+                        size_t input_length)
+{
+    if (nak_type == NULL || sequence == NULL || error == NULL || input == NULL ||
+        input_length != LA_PROTO_NAK_WIRE_SIZE) {
+        return -1;
+    }
+    *nak_type = input[0];
+    *sequence = input[1];
+    *error = input[2];
+    return 0;
+}
+
+size_t la_proto_pack_status(const la_proto_status_t *status,
+                            uint8_t *output,
+                            size_t output_capacity)
+{
+    unsigned index;
+
+    if (status == NULL || output == NULL || output_capacity < LA_PROTO_STATUS_WIRE_SIZE) {
+        return 0u;
+    }
+    memset(output, 0, LA_PROTO_STATUS_WIRE_SIZE);
+    output[0] = status->state;
+    put_u32_le(&output[4], status->status_reg);
+    put_u64_le(&output[8], status->word_count);
+    put_u64_le(&output[16], status->trig_index);
+    put_u16_le(&output[24], status->cpu_load_permille);
+    put_u16_le(&output[26], status->min_free_stack);
+    for (index = 0u; index < 3u; ++index) {
+        put_u32_le(&output[28u + 8u * index], status->decoders[index].events);
+        put_u32_le(&output[32u + 8u * index], status->decoders[index].dropped_segments);
+    }
+    return LA_PROTO_STATUS_WIRE_SIZE;
+}
+
+int la_proto_unpack_status(la_proto_status_t *status,
+                           const uint8_t *input,
+                           size_t input_length)
+{
+    unsigned index;
+
+    if (status == NULL || input == NULL || input_length != LA_PROTO_STATUS_WIRE_SIZE) {
+        return -1;
+    }
+    memset(status, 0, sizeof(*status));
+    status->state = input[0];
+    status->status_reg = get_u32_le(&input[4]);
+    status->word_count = get_u64_le(&input[8]);
+    status->trig_index = get_u64_le(&input[16]);
+    status->cpu_load_permille = get_u16_le(&input[24]);
+    status->min_free_stack = get_u16_le(&input[26]);
+    for (index = 0u; index < 3u; ++index) {
+        status->decoders[index].events = get_u32_le(&input[28u + 8u * index]);
+        status->decoders[index].dropped_segments = get_u32_le(&input[32u + 8u * index]);
+    }
+    return 0;
+}
+
+size_t la_proto_pack_data_begin(const la_proto_data_begin_t *begin,
+                                uint8_t *output,
+                                size_t output_capacity)
+{
+    if (begin == NULL || output == NULL || output_capacity < LA_PROTO_DATA_BEGIN_WIRE_SIZE) {
+        return 0u;
+    }
+    put_u64_le(&output[0], begin->total_words);
+    output[8] = begin->encoding;
+    memset(&output[9], 0, 3u);
+    put_u32_le(&output[12], begin->sample_rate_hz);
+    return LA_PROTO_DATA_BEGIN_WIRE_SIZE;
+}
+
+int la_proto_unpack_data_begin(la_proto_data_begin_t *begin,
+                               const uint8_t *input,
+                               size_t input_length)
+{
+    if (begin == NULL || input == NULL || input_length != LA_PROTO_DATA_BEGIN_WIRE_SIZE) {
+        return -1;
+    }
+    memset(begin, 0, sizeof(*begin));
+    begin->total_words = get_u64_le(&input[0]);
+    begin->encoding = input[8];
+    begin->sample_rate_hz = get_u32_le(&input[12]);
+    return 0;
+}
+
+size_t la_proto_pack_data_end(uint32_t crc32,
+                              uint8_t *output,
+                              size_t output_capacity)
+{
+    if (output == NULL || output_capacity < LA_PROTO_DATA_END_WIRE_SIZE) {
+        return 0u;
+    }
+    put_u32_le(output, crc32);
+    return LA_PROTO_DATA_END_WIRE_SIZE;
+}
+
+int la_proto_unpack_data_end(uint32_t *crc32,
+                             const uint8_t *input,
+                             size_t input_length)
+{
+    if (crc32 == NULL || input == NULL || input_length != LA_PROTO_DATA_END_WIRE_SIZE) {
+        return -1;
+    }
+    *crc32 = get_u32_le(input);
+    return 0;
+}
+
+size_t la_proto_pack_data_chunk(uint32_t byte_offset,
+                                const uint8_t *data,
+                                size_t data_length,
+                                uint8_t *output,
+                                size_t output_capacity)
+{
+    if (output == NULL || (data == NULL && data_length != 0u) ||
+        data_length > LA_PROTO_DATA_CHUNK_MAX ||
+        data_length > (size_t)(UINT32_MAX - byte_offset) ||
+        output_capacity < LA_PROTO_DATA_CHUNK_FIELD_SIZE + data_length) {
+        return 0u;
+    }
+    put_u32_le(output, byte_offset);
+    if (data_length != 0u) {
+        memcpy(&output[LA_PROTO_DATA_CHUNK_FIELD_SIZE], data, data_length);
+    }
+    return (size_t)LA_PROTO_DATA_CHUNK_FIELD_SIZE + data_length;
 }
 
 size_t la_proto_encode(uint8_t type,

@@ -106,6 +106,76 @@ its sequence number. The sender-side tracker policy:
 - The tracker is pure logic (no FreeRTOS or UART calls); `TxTask` alone owns
   it, one writer, and holds the retransmit buffer that backs a resend.
 
+## CmdTask command dispatch core (P4.9)
+
+`la_cmd_dispatch.{h,c}` is the pure receive-side router for the burst-path
+command set (PING, CONFIG, ARM, ABORT, GET_STATUS and the inbound ACK/NAK
+responses). CmdTask owns it as the single writer; the framing parser runs
+inside CmdTask, and every frame CmdTask accepts passes through one
+`la_cmd_dispatch_step()` call. Responses are never sent by CmdTask itself:
+ACK/NAK/PONG/STATUS frames are transmitted by TxTask (the single TX
+StreamBuffer writer), and ARM/ABORT are forwarded to AcqTask on `ctrl_q`.
+
+- **Acquisition view mirror.** The core keeps the host-visible lifecycle
+  (IDLE/ARMED/CAPT). ARM is accepted only when IDLE with a valid CONFIG
+  latch and transitions the view to ARMED optimistically; ABORT is accepted
+  from ARMED or CAPT and returns to IDLE optimistically. These optimistic
+  transitions are exact because the dispatch guards are the same ones
+  AcqTask's `la_acq_fsm` enforces on the same configuration, so an accepted
+  command cannot fail downstream. Every AcqTask lifecycle event (ARM
+  accepted, trigger, completion, abort, timeout) is echoed back through
+  `la_cmd_dispatch_acq_notice()` so the view is reconciled even if a
+  divergence ever occurs.
+- **CONFIG latch.** A CONFIG frame is unpacked and validated with
+  `la_proto_unpack_config`; the validated copy is the single source for the
+  next ARM. CONFIG is refused (NAK busy) while the machine is not IDLE and
+  never reaches the register driver during a run. The latch survives the
+  whole capture lifecycle and is replaced only by the next valid CONFIG.
+- **Error mapping.** Bad length -> NAK bad-length; invalid field values ->
+  NAK bad-field; ARM without a CONFIG latch -> NAK bad-state; double
+  ARM/CONFIG while busy -> NAK busy; unknown types, Zynq->host messages
+  received as requests, DECODER_CFG/LIVE_START/LIVE_STOP and STREAM-flagged
+  ARMs -> NAK unsupported (P7.x replaces the last two). ABORT in IDLE is an
+  idempotent ACK without forwarding (an abort of an idle machine is
+  trivially satisfied; the ESP32 relay may send ABORT unconditionally on
+  disconnect).
+- **Inbound ACK/NAK routing.** ACK of a DATA_CHUNK and NAK of a DATA_CHUNK
+  are routed to TxTask (window clear / retransmit pending per the window
+  rules above). A NAK of any other frame type (commands, DATA_BEGIN,
+  DATA_END) is routed as a burst failure: TxTask stops the burst job per
+  protocol.md. Malformed or stale ACK/NAK frames are ignored by the core;
+  the window tracker applies its own stale/duplicate rules.
+
+## TxTask burst transfer packer (P4.9)
+
+`la_tx_pack.{h,c}` is the pure generator for one completed burst job: an
+AcqTask JOB (total 32-bit words plus encoding and sample rate recorded at
+arm) becomes the ordered protocol.md frame payloads DATA_BEGIN,
+DATA_CHUNK*(up to 1016 data bytes each), DATA_END. Chunk bytes are copied
+through a caller read callback, so the packer owns no capture memory and a
+host test can back it with an ordinary buffer. DATA_END carries the
+CRC32/IEEE of the concatenated chunk bytes (streamed on first emission),
+which equals the CRC of the whole capture byte range.
+
+- **Boundaries.** The packer does not assign sequence numbers, does not
+  track the ACK window (`la_tx_win` is separate), and does not frame-encode
+  (`la_proto_encode`). TxTask calls `la_tx_pack_next()` only when the window
+  can accept the produced frame and transmits every produced frame exactly
+  once, in order; a produced-but-undelivered frame would desynchronize the
+  CRC. Chunk boundaries start at multiples of 1016 bytes; 1016 is divisible
+  by 4, so a 32-bit word is never split across chunks.
+- **Retransmission.** A chunk NAK marks the window slot retransmit-pending;
+  TxTask rebuilds that chunk with `la_tx_pack_chunk_at()`, which reproduces
+  the first-emission payload deterministically from the byte offset without
+  touching the CRC or offset state. TxTask maps window slot -> chunk index.
+- **Job and buffer lifetime.** The capture buffer stays owned by the job
+  from JOB receipt until the END frame is on the wire and every outstanding
+  chunk slot is resolved (window drained, or the burst abandoned on a
+  non-chunk NAK / disconnect / overflow). On abandonment nothing is
+  retransmitted further. Empty jobs (zero words) emit DATA_BEGIN followed
+  by DATA_END with the empty-buffer CRC; completion is sticky (`next()`
+  stays -1).
+
 ## Cache, MMU and Buffer Contract
 
 The initial payload pool, burst capture buffer and SG descriptors occupy a

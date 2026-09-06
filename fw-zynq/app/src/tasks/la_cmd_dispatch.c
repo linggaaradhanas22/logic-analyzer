@@ -1,0 +1,334 @@
+#include "la_cmd_dispatch.h"
+
+#include "la_regs.h"
+
+#include <string.h>
+
+static void result_none(la_cmd_result_t *result)
+{
+    memset(result, 0, sizeof(*result));
+    result->outcome = LA_CMD_OUT_NONE;
+}
+
+static void result_nak(la_cmd_result_t *result,
+                       uint8_t type,
+                       uint8_t sequence,
+                       uint8_t error)
+{
+    result_none(result);
+    result->outcome = LA_CMD_OUT_NAK;
+    result->type = type;
+    result->sequence = sequence;
+    result->error = error;
+}
+
+static void result_ack(la_cmd_result_t *result, uint8_t type, uint8_t sequence)
+{
+    result_none(result);
+    result->outcome = LA_CMD_OUT_ACK;
+    result->type = type;
+    result->sequence = sequence;
+}
+
+static void result_pong(la_cmd_result_t *result,
+                        uint32_t fw_version,
+                        uint32_t pl_id,
+                        uint64_t uptime_ms)
+{
+    la_proto_pong_t pong;
+
+    result_none(result);
+    result->outcome = LA_CMD_OUT_PONG;
+    pong.fw_version = fw_version;
+    pong.pl_id = pl_id;
+    pong.uptime_ms = uptime_ms;
+    (void)la_proto_pack_pong(&pong, result->payload, sizeof(result->payload));
+}
+
+static void result_chunk_ack(la_cmd_result_t *result, uint8_t sequence)
+{
+    result_none(result);
+    result->outcome = LA_CMD_OUT_CHUNK_ACK;
+    result->type = LA_PROTO_DATA_CHUNK;
+    result->sequence = sequence;
+}
+
+static void result_chunk_nak(la_cmd_result_t *result,
+                             uint8_t sequence,
+                             uint8_t error)
+{
+    result_none(result);
+    result->outcome = LA_CMD_OUT_CHUNK_NAK;
+    result->type = LA_PROTO_DATA_CHUNK;
+    result->sequence = sequence;
+    result->error = error;
+}
+
+static void result_burst_nak(la_cmd_result_t *result,
+                             uint8_t type,
+                             uint8_t sequence,
+                             uint8_t error)
+{
+    result_none(result);
+    result->outcome = LA_CMD_OUT_BURST_NAK;
+    result->type = type;
+    result->sequence = sequence;
+    result->error = error;
+}
+
+void la_cmd_dispatch_init(la_cmd_dispatch_t *dispatch,
+                          uint32_t fw_version,
+                          uint32_t pl_id)
+{
+    if (dispatch == NULL) {
+        return;
+    }
+    memset(dispatch, 0, sizeof(*dispatch));
+    dispatch->view = LA_CMD_VIEW_IDLE;
+    dispatch->fw_version = fw_version;
+    dispatch->pl_id = pl_id;
+}
+
+static int handle_config(la_cmd_dispatch_t *dispatch,
+                         uint8_t sequence,
+                         const uint8_t *payload,
+                         uint16_t length,
+                         la_cmd_result_t *result)
+{
+    la_proto_config_t config;
+
+    if (length != LA_PROTO_CONFIG_WIRE_SIZE) {
+        result_nak(result, LA_PROTO_CONFIG, sequence, LA_PROTO_ERROR_BAD_LENGTH);
+        return 0;
+    }
+    if (dispatch->view != LA_CMD_VIEW_IDLE) {
+        result_nak(result, LA_PROTO_CONFIG, sequence, LA_PROTO_ERROR_BUSY);
+        return 0;
+    }
+    if (la_proto_unpack_config(&config, payload, length) != 0) {
+        result_nak(result, LA_PROTO_CONFIG, sequence, LA_PROTO_ERROR_BAD_FIELD);
+        return 0;
+    }
+    dispatch->config = config;
+    dispatch->config_valid = 1u;
+    result_ack(result, LA_PROTO_CONFIG, sequence);
+    return 0;
+}
+
+static int handle_arm(la_cmd_dispatch_t *dispatch,
+                      uint8_t sequence,
+                      const uint8_t *payload,
+                      uint16_t length,
+                      la_cmd_result_t *result)
+{
+    (void)payload;
+    if (length != 0u) {
+        result_nak(result, LA_PROTO_ARM, sequence, LA_PROTO_ERROR_BAD_LENGTH);
+        return 0;
+    }
+    if (dispatch->view != LA_CMD_VIEW_IDLE) {
+        result_nak(result, LA_PROTO_ARM, sequence, LA_PROTO_ERROR_BUSY);
+        return 0;
+    }
+    if (dispatch->config_valid == 0u) {
+        result_nak(result, LA_PROTO_ARM, sequence, LA_PROTO_ERROR_BAD_STATE);
+        return 0;
+    }
+    if ((dispatch->config.ctrl_flags & LA_REG_CTRL_STREAM_MASK) != 0u) {
+        result_nak(result, LA_PROTO_ARM, sequence, LA_PROTO_ERROR_UNSUPPORTED);
+        return 0;
+    }
+    result_ack(result, LA_PROTO_ARM, sequence);
+    result->outcome = LA_CMD_OUT_ARM;
+    dispatch->view = LA_CMD_VIEW_ARMED;
+    return 0;
+}
+
+static int handle_abort(la_cmd_dispatch_t *dispatch,
+                        uint8_t sequence,
+                        const uint8_t *payload,
+                        uint16_t length,
+                        la_cmd_result_t *result)
+{
+    (void)payload;
+    if (length != 0u) {
+        result_nak(result, LA_PROTO_ABORT, sequence, LA_PROTO_ERROR_BAD_LENGTH);
+        return 0;
+    }
+    if (dispatch->view == LA_CMD_VIEW_IDLE) {
+        /* Idempotent: an abort of an idle machine is trivially satisfied and
+         * is acknowledged without forwarding. */
+        result_ack(result, LA_PROTO_ABORT, sequence);
+        return 0;
+    }
+    result_ack(result, LA_PROTO_ABORT, sequence);
+    result->outcome = LA_CMD_OUT_ABORT;
+    dispatch->view = LA_CMD_VIEW_IDLE;
+    return 0;
+}
+
+static int handle_ack(uint8_t sequence,
+                      const uint8_t *payload,
+                      uint16_t length,
+                      la_cmd_result_t *result)
+{
+    uint8_t acknowledged_type;
+    uint8_t acknowledged_sequence;
+
+    if (length != LA_PROTO_ACK_WIRE_SIZE ||
+        la_proto_unpack_ack(&acknowledged_type, &acknowledged_sequence, payload, length) != 0) {
+        result_none(result);
+        return 0;
+    }
+    if (acknowledged_type != LA_PROTO_DATA_CHUNK) {
+        result_none(result);
+        return 0;
+    }
+    result_chunk_ack(result, acknowledged_sequence);
+    (void)sequence;
+    return 0;
+}
+
+static int handle_nak(uint8_t sequence,
+                      const uint8_t *payload,
+                      uint16_t length,
+                      la_cmd_result_t *result)
+{
+    uint8_t nak_type;
+    uint8_t nak_sequence;
+    uint8_t error;
+
+    if (length != LA_PROTO_NAK_WIRE_SIZE ||
+        la_proto_unpack_nak(&nak_type, &nak_sequence, &error, payload, length) != 0) {
+        result_none(result);
+        return 0;
+    }
+    if (nak_type == LA_PROTO_DATA_CHUNK) {
+        result_chunk_nak(result, nak_sequence, error);
+    } else {
+        result_burst_nak(result, nak_type, nak_sequence, error);
+    }
+    (void)sequence;
+    return 0;
+}
+
+int la_cmd_dispatch_step(la_cmd_dispatch_t *dispatch,
+                         uint8_t type,
+                         uint8_t sequence,
+                         const uint8_t *payload,
+                         uint16_t length,
+                         uint64_t uptime_ms,
+                         la_cmd_result_t *result)
+{
+    if (dispatch == NULL || result == NULL || (payload == NULL && length != 0u)) {
+        return -1;
+    }
+    result_none(result);
+    switch (type) {
+    case LA_PROTO_PING:
+        if (length != 0u) {
+            result_nak(result, type, sequence, LA_PROTO_ERROR_BAD_LENGTH);
+        } else {
+            result_pong(result, dispatch->fw_version, dispatch->pl_id, uptime_ms);
+        }
+        return 0;
+
+    case LA_PROTO_CONFIG:
+        return handle_config(dispatch, sequence, payload, length, result);
+
+    case LA_PROTO_ARM:
+        return handle_arm(dispatch, sequence, payload, length, result);
+
+    case LA_PROTO_ABORT:
+        return handle_abort(dispatch, sequence, payload, length, result);
+
+    case LA_PROTO_GET_STATUS:
+        if (length != 0u) {
+            result_nak(result, type, sequence, LA_PROTO_ERROR_BAD_LENGTH);
+        } else {
+            result_none(result);
+            result->outcome = LA_CMD_OUT_REQUEST_STATUS;
+            result->type = type;
+            result->sequence = sequence;
+        }
+        return 0;
+
+    case LA_PROTO_ACK:
+        return handle_ack(sequence, payload, length, result);
+
+    case LA_PROTO_NAK:
+        return handle_nak(sequence, payload, length, result);
+
+    case LA_PROTO_DECODER_CFG:
+    case LA_PROTO_LIVE_START:
+    case LA_PROTO_LIVE_STOP:
+        /* P7.4 extends the dispatch table to decoder configuration and the
+         * live stream; the burst-path firmware rejects them up front. */
+        result_nak(result, type, sequence, LA_PROTO_ERROR_UNSUPPORTED);
+        return 0;
+
+    case LA_PROTO_PONG:
+    case LA_PROTO_STATUS:
+    case LA_PROTO_EVT_TRIGGERED:
+    case LA_PROTO_EVT_DECODED:
+    case LA_PROTO_EVT_OVERRUN:
+    case LA_PROTO_DATA_BEGIN:
+    case LA_PROTO_DATA_CHUNK:
+    case LA_PROTO_DATA_END:
+    case LA_PROTO_LOG:
+        /* Zynq -> host messages are not requests; a peer sending them here
+         * is out of contract. */
+        result_nak(result, type, sequence, LA_PROTO_ERROR_UNSUPPORTED);
+        return 0;
+
+    default:
+        result_nak(result, type, sequence, LA_PROTO_ERROR_UNSUPPORTED);
+        return 0;
+    }
+}
+
+void la_cmd_dispatch_acq_notice(la_cmd_dispatch_t *dispatch,
+                                la_cmd_acq_notice_t notice)
+{
+    if (dispatch == NULL) {
+        return;
+    }
+    switch (notice) {
+    case LA_CMD_ACQ_ARMED:
+        dispatch->view = LA_CMD_VIEW_ARMED;
+        break;
+    case LA_CMD_ACQ_TRIGGERED:
+        dispatch->view = LA_CMD_VIEW_CAPT;
+        break;
+    case LA_CMD_ACQ_DONE:
+    case LA_CMD_ACQ_ABORTED:
+        dispatch->view = LA_CMD_VIEW_IDLE;
+        break;
+    default:
+        break;
+    }
+}
+
+la_cmd_acq_view_t la_cmd_dispatch_view(const la_cmd_dispatch_t *dispatch)
+{
+    if (dispatch == NULL) {
+        return LA_CMD_VIEW_IDLE;
+    }
+    return dispatch->view;
+}
+
+int la_cmd_dispatch_config_valid(const la_cmd_dispatch_t *dispatch)
+{
+    if (dispatch == NULL) {
+        return 0;
+    }
+    return dispatch->config_valid != 0u ? 1 : 0;
+}
+
+const la_proto_config_t *la_cmd_dispatch_config(const la_cmd_dispatch_t *dispatch)
+{
+    if (dispatch == NULL) {
+        return NULL;
+    }
+    return &dispatch->config;
+}

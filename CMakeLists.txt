@@ -84,6 +84,26 @@ target_include_directories(la_native_mem PRIVATE
   fw-zynq/app/src
 )
 
+add_executable(la_native_cmd
+  tests/native/cmd_dispatch_host_tests.c
+  fw-zynq/app/src/tasks/la_cmd_dispatch.c
+)
+target_link_libraries(la_native_cmd PRIVATE la_native)
+target_include_directories(la_native_cmd PRIVATE
+  common/la_proto/include
+  fw-zynq/app/src/tasks
+)
+
+add_executable(la_native_txpack
+  tests/native/tx_pack_host_tests.c
+  fw-zynq/app/src/tasks/la_tx_pack.c
+)
+target_link_libraries(la_native_txpack PRIVATE la_native)
+target_include_directories(la_native_txpack PRIVATE
+  common/la_proto/include
+  fw-zynq/app/src/tasks
+)
+
 enable_testing()
 add_test(NAME la_native_tests COMMAND la_native_tests)
 add_test(NAME la_esp32_mocks COMMAND la_esp32_mocks)
@@ -91,6 +111,8 @@ add_test(NAME la_native_regs COMMAND la_native_regs)
 add_test(NAME la_native_txwin COMMAND la_native_txwin)
 add_test(NAME la_native_acq COMMAND la_native_acq)
 add_test(NAME la_native_mem COMMAND la_native_mem)
+add_test(NAME la_native_cmd COMMAND la_native_cmd)
+add_test(NAME la_native_txpack COMMAND la_native_txpack)
 
 if(Python3_EXECUTABLE)
   add_test(NAME la_native_ctypes

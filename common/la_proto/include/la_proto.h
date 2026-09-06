@@ -16,6 +16,13 @@
 #define LA_PROTO_DATA_CHUNK_MAX ((uint16_t)1016u)
 #define LA_PROTO_CONFIG_WIRE_SIZE ((uint16_t)37u)
 #define LA_PROTO_DECODER_CONFIG_WIRE_SIZE ((uint16_t)20u)
+#define LA_PROTO_PONG_WIRE_SIZE ((uint16_t)16u)
+#define LA_PROTO_ACK_WIRE_SIZE ((uint16_t)2u)
+#define LA_PROTO_NAK_WIRE_SIZE ((uint16_t)3u)
+#define LA_PROTO_STATUS_WIRE_SIZE ((uint16_t)52u)
+#define LA_PROTO_DATA_BEGIN_WIRE_SIZE ((uint16_t)16u)
+#define LA_PROTO_DATA_END_WIRE_SIZE ((uint16_t)4u)
+#define LA_PROTO_DATA_CHUNK_FIELD_SIZE ((uint16_t)4u)
 
 typedef enum la_proto_message_type {
     LA_PROTO_PING = 0x01,
@@ -110,6 +117,40 @@ typedef struct la_proto_decoder_config {
     } params;
 } la_proto_decoder_config_t;
 
+/* PONG payload (protocol.md): fw_version, pl_id and uptime in milliseconds. */
+typedef struct la_proto_pong {
+    uint32_t fw_version;
+    uint32_t pl_id;
+    uint64_t uptime_ms;
+} la_proto_pong_t;
+
+/* Per-decoder counters inside STATUS, in UART, SPI, I2C order. */
+typedef struct la_proto_decoder_stats {
+    uint32_t events;
+    uint32_t dropped_segments;
+} la_proto_decoder_stats_t;
+
+/* STATUS payload (protocol.md v1, 52 bytes). state is the host-visible
+ * lifecycle state reported by the firmware; status_reg is the raw la_top
+ * STATUS register snapshot. */
+typedef struct la_proto_status {
+    uint8_t state;
+    uint32_t status_reg;
+    uint64_t word_count;
+    uint64_t trig_index;
+    uint16_t cpu_load_permille;
+    uint16_t min_free_stack;
+    la_proto_decoder_stats_t decoders[3];
+} la_proto_status_t;
+
+/* DATA_BEGIN payload (protocol.md): burst metadata. encoding is 0 for raw
+ * packed words and 1 for transition words. */
+typedef struct la_proto_data_begin {
+    uint64_t total_words;
+    uint8_t encoding;
+    uint32_t sample_rate_hz;
+} la_proto_data_begin_t;
+
 typedef void (*la_proto_frame_callback)(void *context,
                                         uint8_t type,
                                         uint8_t sequence,
@@ -172,6 +213,67 @@ LA_PROTO_API size_t la_proto_pack_decoder_config(const la_proto_decoder_config_t
 LA_PROTO_API int la_proto_unpack_decoder_config(la_proto_decoder_config_t *config,
                                                 const uint8_t *input,
                                                 size_t input_length);
+
+/* Fixed payload helpers for the P4.9 Zynq sender and its host peers. All
+ * packs return the wire size or zero on invalid arguments/insufficient
+ * capacity; all unpacks return 0 or -1. Reserved bytes are transmitted as
+ * zero and ignored on unpack. */
+LA_PROTO_API size_t la_proto_pack_pong(const la_proto_pong_t *pong,
+                                       uint8_t *output,
+                                       size_t output_capacity);
+LA_PROTO_API int la_proto_unpack_pong(la_proto_pong_t *pong,
+                                      const uint8_t *input,
+                                      size_t input_length);
+
+LA_PROTO_API size_t la_proto_pack_ack(uint8_t acknowledged_type,
+                                      uint8_t sequence,
+                                      uint8_t *output,
+                                      size_t output_capacity);
+LA_PROTO_API int la_proto_unpack_ack(uint8_t *acknowledged_type,
+                                     uint8_t *sequence,
+                                     const uint8_t *input,
+                                     size_t input_length);
+
+LA_PROTO_API size_t la_proto_pack_nak(uint8_t nak_type,
+                                      uint8_t sequence,
+                                      uint8_t error,
+                                      uint8_t *output,
+                                      size_t output_capacity);
+LA_PROTO_API int la_proto_unpack_nak(uint8_t *nak_type,
+                                     uint8_t *sequence,
+                                     uint8_t *error,
+                                     const uint8_t *input,
+                                     size_t input_length);
+
+LA_PROTO_API size_t la_proto_pack_status(const la_proto_status_t *status,
+                                         uint8_t *output,
+                                         size_t output_capacity);
+LA_PROTO_API int la_proto_unpack_status(la_proto_status_t *status,
+                                        const uint8_t *input,
+                                        size_t input_length);
+
+LA_PROTO_API size_t la_proto_pack_data_begin(const la_proto_data_begin_t *begin,
+                                             uint8_t *output,
+                                             size_t output_capacity);
+LA_PROTO_API int la_proto_unpack_data_begin(la_proto_data_begin_t *begin,
+                                            const uint8_t *input,
+                                            size_t input_length);
+
+/* DATA_END payload: the CRC32/IEEE of the concatenated DATA_CHUNK bytes. */
+LA_PROTO_API size_t la_proto_pack_data_end(uint32_t crc32,
+                                           uint8_t *output,
+                                           size_t output_capacity);
+LA_PROTO_API int la_proto_unpack_data_end(uint32_t *crc32,
+                                          const uint8_t *input,
+                                          size_t input_length);
+
+/* DATA_CHUNK payload: u32 little-endian byte offset followed by up to
+ * LA_PROTO_DATA_CHUNK_MAX data bytes. Returns 4 + data_length. */
+LA_PROTO_API size_t la_proto_pack_data_chunk(uint32_t byte_offset,
+                                             const uint8_t *data,
+                                             size_t data_length,
+                                             uint8_t *output,
+                                             size_t output_capacity);
 
 /* Returns the encoded frame size, or zero if output capacity/arguments fail. */
 LA_PROTO_API size_t la_proto_encode(uint8_t type,

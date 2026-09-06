@@ -179,6 +179,143 @@ static int test_protocol(void)
     return 0;
 }
 
+static int test_typed_protocol_payloads(void)
+{
+    static const uint8_t expected_pong[LA_PROTO_PONG_WIRE_SIZE] = {
+        0x04u, 0x03u, 0x02u, 0x01u, 0x02u, 0x00u, 0x41u, 0x4Cu,
+        0x01u, 0x02u, 0x03u, 0x04u, 0x05u, 0x06u, 0x07u, 0x08u};
+    static const uint8_t expected_begin[LA_PROTO_DATA_BEGIN_WIRE_SIZE] = {
+        0x88u, 0x77u, 0x66u, 0x55u, 0x44u, 0x33u, 0x22u, 0x11u,
+        0x01u, 0x00u, 0x00u, 0x00u, 0x00u, 0xE1u, 0xF5u, 0x05u};
+    static const uint8_t chunk_data[] = {0xAAu, 0xBBu, 0xCCu};
+    uint8_t payload[LA_PROTO_MAX_PAYLOAD];
+    la_proto_pong_t pong;
+    la_proto_pong_t unpacked_pong;
+    la_proto_status_t status;
+    la_proto_status_t unpacked_status;
+    la_proto_data_begin_t begin;
+    la_proto_data_begin_t unpacked_begin;
+    uint8_t acknowledged_type;
+    uint8_t acknowledged_sequence;
+    uint8_t nak_type;
+    uint8_t nak_sequence;
+    uint8_t nak_error;
+    uint32_t crc32;
+    size_t packed;
+
+    pong.fw_version = 0x01020304u;
+    pong.pl_id = 0x4C410002u;
+    pong.uptime_ms = UINT64_C(0x0807060504030201);
+    packed = la_proto_pack_pong(&pong, payload, sizeof(payload));
+    CHECK(packed == LA_PROTO_PONG_WIRE_SIZE, "PONG payload pack size");
+    CHECK(memcmp(payload, expected_pong, sizeof(expected_pong)) == 0,
+          "PONG payload little-endian byte vector");
+    CHECK(la_proto_unpack_pong(&unpacked_pong, payload, packed) == 0 &&
+              unpacked_pong.fw_version == pong.fw_version &&
+              unpacked_pong.pl_id == pong.pl_id &&
+              unpacked_pong.uptime_ms == pong.uptime_ms,
+          "PONG payload round trip");
+    CHECK(la_proto_pack_pong(NULL, payload, sizeof(payload)) == 0u &&
+              la_proto_pack_pong(&pong, payload, LA_PROTO_PONG_WIRE_SIZE - 1u) == 0u,
+          "PONG pack argument guards");
+    CHECK(la_proto_unpack_pong(&unpacked_pong, payload, packed - 1u) == -1,
+          "PONG unpack rejects wrong length");
+
+    packed = la_proto_pack_ack(LA_PROTO_DATA_CHUNK, 0x12u, payload, sizeof(payload));
+    CHECK(packed == LA_PROTO_ACK_WIRE_SIZE && payload[0] == LA_PROTO_DATA_CHUNK &&
+              payload[1] == 0x12u,
+          "ACK payload pack");
+    CHECK(la_proto_unpack_ack(&acknowledged_type, &acknowledged_sequence, payload, packed) == 0 &&
+              acknowledged_type == LA_PROTO_DATA_CHUNK && acknowledged_sequence == 0x12u,
+          "ACK payload round trip");
+    CHECK(la_proto_unpack_ack(&acknowledged_type, &acknowledged_sequence, payload, 3u) == -1,
+          "ACK unpack rejects wrong length");
+
+    packed = la_proto_pack_nak(LA_PROTO_DATA_CHUNK, 0x12u, LA_PROTO_ERROR_BAD_FIELD, payload,
+                               sizeof(payload));
+    CHECK(packed == LA_PROTO_NAK_WIRE_SIZE && payload[0] == LA_PROTO_DATA_CHUNK &&
+              payload[1] == 0x12u && payload[2] == LA_PROTO_ERROR_BAD_FIELD,
+          "NAK payload pack");
+    CHECK(la_proto_unpack_nak(&nak_type, &nak_sequence, &nak_error, payload, packed) == 0 &&
+              nak_type == LA_PROTO_DATA_CHUNK && nak_sequence == 0x12u &&
+              nak_error == LA_PROTO_ERROR_BAD_FIELD,
+          "NAK payload round trip");
+
+    memset(&status, 0, sizeof(status));
+    status.state = 3u;
+    status.status_reg = 0x00000018u;
+    status.word_count = UINT64_C(0x1020304050607080);
+    status.trig_index = UINT64_C(9);
+    status.cpu_load_permille = 0xABCDu;
+    status.min_free_stack = 0x1234u;
+    status.decoders[0].events = 0x11223344u;
+    status.decoders[0].dropped_segments = 0x55667788u;
+    status.decoders[1].events = 1u;
+    status.decoders[2].dropped_segments = 7u;
+    packed = la_proto_pack_status(&status, payload, sizeof(payload));
+    CHECK(packed == LA_PROTO_STATUS_WIRE_SIZE, "STATUS payload pack size");
+    CHECK(payload[24] == 0xCDu && payload[25] == 0xABu && payload[3] == 0u &&
+              payload[28] == 0x44u && payload[48] == 7u,
+          "STATUS payload field offsets");
+    CHECK(la_proto_unpack_status(&unpacked_status, payload, packed) == 0 &&
+              unpacked_status.state == status.state &&
+              unpacked_status.status_reg == status.status_reg &&
+              unpacked_status.word_count == status.word_count &&
+              unpacked_status.trig_index == status.trig_index &&
+              unpacked_status.cpu_load_permille == 0xABCDu &&
+              unpacked_status.min_free_stack == 0x1234u &&
+              unpacked_status.decoders[0].events == 0x11223344u &&
+              unpacked_status.decoders[0].dropped_segments == 0x55667788u &&
+              unpacked_status.decoders[1].events == 1u &&
+              unpacked_status.decoders[2].dropped_segments == 7u,
+          "STATUS payload round trip");
+
+    begin.total_words = UINT64_C(0x1122334455667788);
+    begin.encoding = 1u;
+    begin.sample_rate_hz = 100000000u;
+    packed = la_proto_pack_data_begin(&begin, payload, sizeof(payload));
+    CHECK(packed == LA_PROTO_DATA_BEGIN_WIRE_SIZE, "DATA_BEGIN payload pack size");
+    CHECK(memcmp(payload, expected_begin, sizeof(expected_begin)) == 0,
+          "DATA_BEGIN payload little-endian byte vector");
+    CHECK(la_proto_unpack_data_begin(&unpacked_begin, payload, packed) == 0 &&
+              unpacked_begin.total_words == begin.total_words &&
+              unpacked_begin.encoding == 1u && unpacked_begin.sample_rate_hz == 100000000u,
+          "DATA_BEGIN payload round trip");
+
+    packed = la_proto_pack_data_end(0xCBF43926u, payload, sizeof(payload));
+    CHECK(packed == LA_PROTO_DATA_END_WIRE_SIZE && payload[0] == 0x26u && payload[1] == 0x39u &&
+              payload[2] == 0xF4u && payload[3] == 0xCBu,
+          "DATA_END payload little-endian vector");
+    CHECK(la_proto_unpack_data_end(&crc32, payload, packed) == 0 && crc32 == 0xCBF43926u,
+          "DATA_END payload round trip");
+    CHECK(la_proto_unpack_data_end(&crc32, payload, packed - 1u) == -1,
+          "DATA_END unpack rejects wrong length");
+
+    packed = la_proto_pack_data_chunk(0x12345678u, chunk_data, sizeof(chunk_data), payload,
+                                      sizeof(payload));
+    CHECK(packed == sizeof(chunk_data) + LA_PROTO_DATA_CHUNK_FIELD_SIZE &&
+              payload[0] == 0x78u && payload[1] == 0x56u && payload[2] == 0x34u &&
+              payload[3] == 0x12u && memcmp(&payload[4], chunk_data, sizeof(chunk_data)) == 0,
+          "DATA_CHUNK payload offset header and data");
+    CHECK(la_proto_pack_data_chunk(0u, chunk_data, LA_PROTO_DATA_CHUNK_MAX, payload,
+                                   sizeof(payload)) ==
+              LA_PROTO_DATA_CHUNK_MAX + LA_PROTO_DATA_CHUNK_FIELD_SIZE,
+          "DATA_CHUNK maximum data length");
+    CHECK(la_proto_pack_data_chunk(0u, chunk_data, LA_PROTO_DATA_CHUNK_MAX + 1u, payload,
+                                   sizeof(payload)) == 0u,
+          "DATA_CHUNK rejects oversized data");
+    CHECK(la_proto_pack_data_chunk(UINT32_MAX - 2u, chunk_data, 2u, payload,
+                                   sizeof(payload)) == 6u &&
+              la_proto_pack_data_chunk(UINT32_MAX - 2u, chunk_data, 3u, payload,
+                                       sizeof(payload)) == 0u,
+          "DATA_CHUNK rejects offset overflow");
+    CHECK(la_proto_pack_data_chunk(0u, NULL, 0u, payload, sizeof(payload)) ==
+              LA_PROTO_DATA_CHUNK_FIELD_SIZE &&
+              la_proto_pack_data_chunk(0u, NULL, 1u, payload, sizeof(payload)) == 0u,
+          "DATA_CHUNK data argument guards");
+    return 0;
+}
+
 typedef struct decode_observer {
     unsigned count;
     unsigned byte_count;
@@ -548,8 +685,9 @@ static int test_streaming_crc32(void)
 
 int main(void)
 {
-    if (test_protocol() != 0 || test_uart_decoder() != 0 || test_spi_decoder() != 0 ||
-        test_i2c_decoder() != 0 || test_segment_pool() != 0 || test_streaming_crc32() != 0) {
+    if (test_protocol() != 0 || test_typed_protocol_payloads() != 0 ||
+        test_uart_decoder() != 0 || test_spi_decoder() != 0 || test_i2c_decoder() != 0 ||
+        test_segment_pool() != 0 || test_streaming_crc32() != 0) {
         return 1;
     }
     puts("PASS: la_native_tests");
