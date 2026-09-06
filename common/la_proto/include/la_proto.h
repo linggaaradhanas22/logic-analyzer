@@ -145,6 +145,18 @@ typedef struct la_proto_parser {
 LA_PROTO_API uint16_t la_crc16_ccitt(const uint8_t *data, size_t length);
 LA_PROTO_API uint32_t la_crc32_ieee(const uint8_t *data, size_t length);
 
+/* Streaming CRC-32/IEEE for payloads delivered in chunks (protocol.md:
+ * DATA_END carries the CRC32/IEEE of the concatenated data bytes, initial
+ * 0xFFFFFFFF, reflected). Start the running value at LA_CRC32_IEEE_INIT,
+ * feed every chunk with la_crc32_ieee_update and call
+ * la_crc32_ieee_finish on the last state; the result equals
+ * la_crc32_ieee(whole buffer) for any chunk split. */
+#define LA_CRC32_IEEE_INIT UINT32_C(0xFFFFFFFF)
+LA_PROTO_API uint32_t la_crc32_ieee_update(uint32_t crc,
+                                           const uint8_t *data,
+                                           size_t length);
+LA_PROTO_API uint32_t la_crc32_ieee_finish(uint32_t crc);
+
 LA_PROTO_API int la_proto_message_type_valid(uint8_t type);
 LA_PROTO_API int la_proto_validate_config(const la_proto_config_t *config);
 LA_PROTO_API size_t la_proto_pack_config(const la_proto_config_t *config,

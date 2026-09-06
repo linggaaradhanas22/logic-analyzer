@@ -32,14 +32,13 @@ uint16_t la_crc16_ccitt(const uint8_t *data, size_t length)
     return crc;
 }
 
-uint32_t la_crc32_ieee(const uint8_t *data, size_t length)
+uint32_t la_crc32_ieee_update(uint32_t crc, const uint8_t *data, size_t length)
 {
-    uint32_t crc = 0xFFFFFFFFu;
     size_t index;
     unsigned bit;
 
     if (data == NULL && length != 0u) {
-        return 0u;
+        return crc;
     }
     for (index = 0; index < length; ++index) {
         crc ^= data[index];
@@ -47,7 +46,20 @@ uint32_t la_crc32_ieee(const uint8_t *data, size_t length)
             crc = (crc & 1u) != 0u ? (crc >> 1) ^ 0xEDB88320u : crc >> 1;
         }
     }
+    return crc;
+}
+
+uint32_t la_crc32_ieee_finish(uint32_t crc)
+{
     return crc ^ 0xFFFFFFFFu;
+}
+
+uint32_t la_crc32_ieee(const uint8_t *data, size_t length)
+{
+    if (data == NULL && length != 0u) {
+        return 0u;
+    }
+    return la_crc32_ieee_finish(la_crc32_ieee_update(LA_CRC32_IEEE_INIT, data, length));
 }
 
 static void put_u32_le(uint8_t *output, uint32_t value)

@@ -487,10 +487,69 @@ static int test_segment_pool(void)
     return 0;
 }
 
+static int test_streaming_crc32(void)
+{
+    static const size_t splits[] = {0u, 1u, 2u, 3u, 7u, 31u, 101u, 1024u};
+    static const size_t split_count = sizeof(splits) / sizeof(splits[0]);
+    uint8_t data[3000u];
+    uint32_t expected;
+    size_t chunk;
+    size_t index;
+
+    /* Deterministic payload: 0x00..0xFF twice then a fixed tail. */
+    for (index = 0u; index < sizeof(data); ++index) {
+        data[index] = (uint8_t)(index % 256u);
+    }
+
+    /* Reference: one-shot CRC equals the standard IEEE vector and the
+     * empty-buffer case. */
+    CHECK(la_crc32_ieee((const uint8_t *)"123456789", 9u) == 0xCBF43926u,
+          "streaming reference vector");
+    CHECK(la_crc32_ieee(data, 0u) == 0u, "empty one-shot crc");
+    expected = la_crc32_ieee(data, sizeof(data));
+
+    /* Any chunk split must produce the same final CRC (protocol.md DATA_END
+     * semantics: CRC32/IEEE of the concatenated bytes). */
+    for (chunk = 0u; chunk < split_count; ++chunk) {
+        size_t split = splits[chunk];
+        size_t offset = 0u;
+        uint32_t crc = LA_CRC32_IEEE_INIT;
+
+        while (offset < sizeof(data)) {
+            size_t part = sizeof(data) - offset;
+            if (split != 0u && part > split) {
+                part = split;
+            }
+            crc = la_crc32_ieee_update(crc, &data[offset], part);
+            offset += part;
+        }
+        CHECK(la_crc32_ieee_finish(crc) == expected, "chunked stream equals one-shot");
+    }
+
+    /* Byte-at-a-time streaming. */
+    {
+        uint32_t crc = LA_CRC32_IEEE_INIT;
+        for (index = 0u; index < sizeof(data); ++index) {
+            crc = la_crc32_ieee_update(crc, &data[index], 1u);
+        }
+        CHECK(la_crc32_ieee_finish(crc) == expected, "byte-at-a-time stream equals one-shot");
+    }
+
+    /* Explicit chunk boundary cases: leading and trailing zero-length
+     * updates must be no-ops. */
+    {
+        uint32_t crc = la_crc32_ieee_update(LA_CRC32_IEEE_INIT, NULL, 0u);
+        crc = la_crc32_ieee_update(crc, data, sizeof(data));
+        crc = la_crc32_ieee_update(crc, data, 0u);
+        CHECK(la_crc32_ieee_finish(crc) == expected, "zero-length updates are no-ops");
+    }
+    return 0;
+}
+
 int main(void)
 {
     if (test_protocol() != 0 || test_uart_decoder() != 0 || test_spi_decoder() != 0 ||
-        test_i2c_decoder() != 0 || test_segment_pool() != 0) {
+        test_i2c_decoder() != 0 || test_segment_pool() != 0 || test_streaming_crc32() != 0) {
         return 1;
     }
     puts("PASS: la_native_tests");
