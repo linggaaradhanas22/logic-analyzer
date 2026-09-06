@@ -32,6 +32,8 @@ module la_top (
   input  logic        clk,
   input  logic        srst,
   input  logic [7:0]  ch_in,
+  // JE pattern-generator channels (external self-test loopback to ch_in)
+  output logic [7:0]  patgen_o,
   // AXIS word stream out (to the AXI DMA S2MM path)
   output logic        m_axis_tvalid,
   input  logic        m_axis_tready,
@@ -173,8 +175,11 @@ module la_top (
   );
 
   // ------------------------------------------------------------------
-  // Pattern generator (JE outputs; wired to the selftest mux).
+  // Pattern generator (drives the JE header pads through patgen_o and
+  // the internal selftest mux).
   // ------------------------------------------------------------------
+  assign patgen_o = patgen_ch;
+
   la_patgen u_patgen (
     .clk(clk), .srst(int_rst),
     .en_i(patgen_ctrl_q[$clog2(LA_REG_PATGEN_CTRL_EN_MASK)]),

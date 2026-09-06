@@ -30,6 +30,7 @@ module tb_la_top;
   logic clk = 1'b0;
   logic srst = 1'b1;
   logic [7:0] ch_in = 8'h00;
+  logic [7:0] patgen_o;
   logic m_axis_tvalid;
   logic m_axis_tready = 1'b1;
   logic [31:0] m_axis_tdata;
@@ -59,6 +60,7 @@ module tb_la_top;
 
   la_top dut (
     .clk(clk), .srst(srst), .ch_in(ch_in),
+    .patgen_o(patgen_o),
     .m_axis_tvalid(m_axis_tvalid), .m_axis_tready(m_axis_tready),
     .m_axis_tdata(m_axis_tdata), .m_axis_tkeep(m_axis_tkeep),
     .m_axis_tlast(m_axis_tlast),
@@ -265,6 +267,9 @@ module tb_la_top;
 
     axi_read(LA_REG_ID_OFFSET, v);
     fail_check("ID readback", v == LA_REG_ID_VALUE);
+    // JE output is quiet while the patgen is disabled (la_patgen holds
+    // ch_o at zero when not running).
+    fail_check("idle patgen_o zero", patgen_o == 8'h00);
 
     // ================================================================
     // Scenario A: txn-mode UART selftest burst.
@@ -323,7 +328,22 @@ module tb_la_top;
       axi_write(LA_REG_TIMEOUT_OFFSET, 32'h0002_0000, 4'hF);
       // Re-enable in counter mode, let it run a while, then arm.
       axi_write(LA_REG_PATGEN_CTRL_OFFSET, 32'h00000001, 4'hF); // EN|counter
-      repeat (200) @(posedge clk);
+      // Wait out the same 200-cycle pre-arm phase as the original scenario,
+      // but sample the JE output every cycle at negedge (after the posedge
+      // update) and require exactly +1 steps while the counter runs (DIV=0).
+      // This proves the JE pad driver tracks the self-test source without
+      // shifting the trigger phase the level trigger depends on.
+      begin
+        int h;
+        logic [7:0] prev;
+        for (h = 0; h < 167; h++) @(negedge clk);
+        prev = patgen_o;
+        for (h = 0; h < 32; h++) begin
+          @(negedge clk);
+          fail_check("B: patgen_o counter step", patgen_o == (prev + 8'd1));
+          prev = patgen_o;
+        end
+      end
       axi_write(LA_REG_CTRL_OFFSET, 32'h00000009, 4'hF);        // SELFTEST|ARM
       wait_status_bit(3, 300);   // DONE
       axi_read(LA_REG_STATUS_OFFSET, v);

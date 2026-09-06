@@ -10,6 +10,9 @@
 // Timing conventions are documented for the P3 constraint step: only ch_in is
 // asynchronous; every other port is synchronous to clk and timing-closed
 // internally. ch_sync is the first CDC-safe level for downstream logic.
+//
+// The first two pipeline stages carry (* async_reg *) so Vivado keeps them in
+// adjacent CLB flip-flops (reduced CDC MTBF; P3.2 placement review point).
 
 
 module la_input_sync #(
@@ -22,8 +25,8 @@ module la_input_sync #(
   output logic [CHANNELS-1:0]  ch_sync
 );
 
-  logic [CHANNELS-1:0] stage1;
-  logic [CHANNELS-1:0] stage2;
+  (* async_reg = "true" *) logic [CHANNELS-1:0] stage1;
+  (* async_reg = "true" *) logic [CHANNELS-1:0] stage2;
   logic [CHANNELS-1:0] tap1;
   logic [CHANNELS-1:0] tap2;
 
