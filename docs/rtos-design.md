@@ -176,6 +176,40 @@ which equals the CRC of the whole capture byte range.
   by DATA_END with the empty-buffer CRC; completion is sticky (`next()`
   stays -1).
 
+## ESP32 link relay core (P5.2)
+
+`la_relay.{h,c}` (in the `la_link` IDF component, include/link API; pure C,
+compiled by MSVC for `test-esp32-mocks` and by the ESP-IDF toolchain for
+`fw-esp32`) is the routing policy for one directed relay leg. The tasks own
+the UART/TCP drivers and the byte rings (`link_to_net` 32 KiB NOSPLIT,
+`net_to_link`, the P10 live ring); the core owns classification, decisions
+and counters.
+
+- **Type tables are caller-supplied.** The Zynq -> host leg (LinkRxTask)
+  installs `EVT_DECODED` as its only best-effort and mirror type; the
+  host -> Zynq leg (LinkTxTask) installs empty tables, making every frame
+  control traffic. Unknown parseable types are not in any best-effort
+  table, so they relay verbatim and can never be dropped by policy (a
+  newer peer is proxied).
+- **Congestion policy.** Best-effort frames are drop-newest when the
+  destination ring cannot take the frame (counted in
+  `best_effort_dropped`, never silent). Control frames are preserved: no
+  room yields a PRESSURE decision and one `control_pressure_events`
+  increment; the caller blocks on its ring put or retries - control and
+  status traffic cannot be starved by the decoded event stream. A
+  FORWARD decision is only counted after the caller reports its real
+  outcome (`frames_forwarded` / `frames_forward_failed`), because the
+  NOSPLIT ring can still refuse a put when free space is fragmented even
+  though the capacity callback said yes.
+- **Live-view mirror.** After a successful forward of a mirror type,
+  LinkRxTask also mirrors the frame into the P10 live ring and reports the
+  outcome (`frames_mirrored` / `mirror_dropped`). A net-leg drop skips the
+  mirror entirely, so the live view never shows events the net link lost.
+- **Counters** are frame-based and are surfaced by UiTask (P5.4) and,
+  later, in the web view; `la_relay_reset_counters()` clears them without
+  touching the configuration. None of this validates UART RTS/CTS, ring
+  scheduling or Wi-Fi timing - those remain P5.5/P8 target gates.
+
 ## Cache, MMU and Buffer Contract
 
 The initial payload pool, burst capture buffer and SG descriptors occupy a

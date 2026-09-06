@@ -458,7 +458,7 @@ def _cmake_steps(target: str) -> tuple[list[tuple[Sequence[str], Path]], int | N
     if target == "test-native":
         test_arguments.extend(["-R", "^la_native"])
     elif target == "test-esp32-mocks":
-        test_arguments.extend(["-R", "^la_esp32_mocks$"])
+        test_arguments.extend(["-R", "^la_esp32_mocks"])
     test_command = _command(_tool("ctest") or cmake.parent / "ctest.exe", test_arguments)
     return [(configure, PROJECT_ROOT), (build_command, PROJECT_ROOT), (test_command, PROJECT_ROOT)], None
 
