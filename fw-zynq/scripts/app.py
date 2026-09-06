@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import platform as platform_mod  # noqa: E402  (project module in same dir)
+import la_platform as platform_mod  # noqa: E402  (project module in same dir)
 
 
 def main() -> int:

@@ -13,12 +13,20 @@
 
 #define configTICK_RATE_HZ                 (1000U)
 #define configSUPPORT_STATIC_ALLOCATION    1
-#define configSUPPORT_DYNAMIC_ALLOCATION   0
+/* Dynamic allocation stays enabled because the BSP kernel source set
+ * compiles heap_4.c unconditionally and FreeRTOS.h #errors when
+ * configSUPPORT_DYNAMIC_ALLOCATION is 0; the la tasks are all created
+ * statically and idle/timer tasks use the static memory hooks, so the
+ * heap remains unused by policy. */
+#define configSUPPORT_DYNAMIC_ALLOCATION   1
 #define configUSE_TIMERS                   1
 #define configTIMER_TASK_STACK_DEPTH       (configMINIMAL_STACK_SIZE * 2)
 #define configUSE_TRACE_FACILITY           1
-/* Run-time statistics need a validated A9 timer counter scheme; enable at
- * the P8 measurement phase, not before the first hello build is verified. */
+/* configUSE_STATS_FORMATTING_FUNCTIONS is off until the P8 statistics
+ * phase reintroduces vTaskList-style reporting; run-time statistics need a
+ * validated A9 timer counter scheme. Enable both at P8, not before the
+ * first hello build is verified. */
+#define configUSE_STATS_FORMATTING_FUNCTIONS 0
 #define configGENERATE_RUN_TIME_STATS      0
 #define configCHECK_FOR_STACK_OVERFLOW     2
 #define configUSE_MALLOC_FAILED_HOOK       1

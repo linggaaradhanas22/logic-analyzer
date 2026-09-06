@@ -118,7 +118,12 @@ proc try_intf {src dst} {
 create_bd_design system
 
 # -- processing_system7: apply the Zybo board preset from the pinned board
-# -- files (single source of truth), then P3.1 overrides.
+# -- files (single source of truth), then P3.1 overrides. PCW_EN_TTC0 is
+# -- forced on (board preset disables both TTCs) because the Vitis
+# -- freertos BSP validation requires a ttcps hardware instance as the
+# -- FreeRTOS tick source. QSPI is disabled: the Vitis FSBL build fails
+# -- on the SDT-flow xqspips parameter set (missing QSPI_BUS_WIDTH) and
+# -- this design boots from SD/JTAG, not the QSPI flash.
 set ps7 [bd_cell processing_system7 ps7]
 set preset_file [file join $board_root zybo-z7-10 A.0 preset.xml]
 set preset_fd [open $preset_file r]
@@ -148,6 +153,10 @@ set_property -dict [list \
   CONFIG.PCW_EN_CLK0_PORT {1} \
   CONFIG.PCW_USE_FABRIC_INTERRUPT {1} \
   CONFIG.PCW_IRQ_F2P_INTR {1} \
+  CONFIG.PCW_EN_TTC0 {1} \
+  CONFIG.PCW_TTC0_PERIPHERAL_ENABLE {1} \
+  CONFIG.PCW_EN_QSPI {0} \
+  CONFIG.PCW_QSPI_PERIPHERAL_ENABLE {0} \
 ] $ps7
 
 # -- la_top as RTL module reference (acquisition datapath).
@@ -339,7 +348,7 @@ if {[llength $failing] > 0} {
 }
 puts "TIMING OK: zero failing endpoints"
 
-write_hw_platform -fixed -include_bit -file [file join $release_dir logic_analyzer.xsa]
+write_hw_platform -force -fixed -include_bit -file [file join $release_dir logic_analyzer.xsa]
 catch {close_design}
 set bit_file [file join $proj_dir la.runs impl_1 system_wrapper.bit]
 if {[file exists $bit_file]} {

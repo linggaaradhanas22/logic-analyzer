@@ -1,0 +1,334 @@
+"""P4.1 Vitis 2026.1 platform script (unverified WIP - see docs/status.md).
+
+Creates the embedded platform for the logic analyzer hardware design and
+applies the FreeRTOS policy overrides to the generated BSP.
+
+The Vitis Python API shape is taken from the official examples shipped with
+this install (C:/AMDDesignTools/2026.1/Vitis/cli/examples/embedded/):
+  create_platform_component -> add_domain -> platform.build().
+As of 2026-09-06 the platform-creation service fails on this machine for
+every XSA and every built-in preset (unmodified AMD examples included), so
+this code is prepared against the documented API but is NOT yet verified by
+a successful run; the blocker and its evidence are recorded in
+docs/status.md and docs/test-plan.md.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+PLATFORM_NAME = "lap"
+DOMAIN_NAME = "fr"
+CPU = "ps7_cortexa9_0"
+OS_NAME = "freertos"
+APP_NAME = "la_app"
+
+
+def workspace_path(root: Path) -> Path:
+    return (root / "build" / "vitis" / "ws").resolve()
+
+
+def ensure_clean_workspace(client, root: Path) -> None:
+    """Fresh, short workspace under build/vitis for reproducible builds."""
+    ws = workspace_path(root)
+    if ws.exists():
+        _make_tree_writable(ws)
+        shutil.rmtree(ws)
+    ws.mkdir(parents=True, exist_ok=True)
+    client.set_workspace(path=str(ws))
+    print(f"VITIS workspace: {ws}")
+    return ws
+
+
+def _make_tree_writable(root: Path) -> None:
+    """Clear read-only attributes; Vitis SDT/FSBL outputs are written
+    read-only and Python >=3.12 rmtree no longer clears them itself."""
+    import stat
+
+    for entry in root.rglob("*"):
+        try:
+            entry.chmod(entry.stat().st_mode | stat.S_IWRITE)
+        except OSError:
+            pass
+
+
+def set_os_param_if_supported(domain, wanted: dict[str, str]) -> None:
+    """Set BSP OS parameters by their supported names where they exist.
+
+    The exact config keys are tool-version dependent (standalone_stdout for
+    standalone-style domains, STDOUT/STDIN for the freertos OS .mss); the
+    candidate list is tried and the actual accepted keys are printed.
+    """
+    try:
+        params = domain.list_params("os") or []
+    except Exception as exc:  # pragma: no cover - API surface differs per version
+        print(f"VITIS list_params(os) unavailable: {exc}")
+        params = []
+    print(f"VITIS OS params offered: {params}")
+    for key in wanted:
+        if not params or any(str(p).lower() == key.lower() for p in params):
+            try:
+                domain.set_config("os", key, wanted[key])
+                print(f"VITIS os config {key} = {wanted[key]}")
+                return
+            except Exception as exc:
+                print(f"VITIS os config {key} not settable: {exc}")
+
+
+FRAGMENT_MARKER = "LA_FREERTOS_CONFIG_H"
+
+
+def domain_bsp_header(ws: Path) -> Path:
+    """Deterministic path of the BSP-owned generated FreeRTOSConfig.h."""
+    return (
+        ws / PLATFORM_NAME / CPU / DOMAIN_NAME / "bsp" / "include" / "FreeRTOSConfig.h"
+    )
+
+
+def domain_bsp_gen_header(ws: Path) -> Path:
+    """Generated-header copy under the ninja tree (libsrc builds include this
+    copy first via -I; the platform template refresh rewrites it on every
+    platform.build(), so it must be patched again after each build)."""
+    return domain_bsp_build_dir(ws) / "include" / "FreeRTOSConfig.h"
+
+
+def domain_bsp_build_dir(ws: Path) -> Path:
+    """Deterministic path of the domain BSP ninja build directory."""
+    return (
+        ws
+        / PLATFORM_NAME
+        / CPU
+        / DOMAIN_NAME
+        / "bsp"
+        / "libsrc"
+        / "build_configs"
+        / "gen_bsp"
+    )
+
+
+def domain_export_include(ws: Path) -> Path:
+    """Deterministic path of the platform export include copy of the header
+    (the directory application components actually compile against)."""
+    return (
+        ws
+        / PLATFORM_NAME
+        / "export"
+        / PLATFORM_NAME
+        / "sw"
+        / DOMAIN_NAME
+        / "include"
+        / "FreeRTOSConfig.h"
+    )
+
+
+def rebuild_domain_bsp(ws: Path) -> None:
+    """Rebuild the BSP libs after the policy header patch.
+
+    platform.build() regenerates FreeRTOSConfig.h from its template on every
+    call, so the override cannot survive a second platform.build(); and the
+    ninja tree carries no header depfiles, so a plain incremental build does
+    not recompile the kernel either. The freertos kernel object set is
+    therefore deleted and rebuilt in place, then the refreshed archives
+    (per-lib and the merged libxil.a) are copied over the platform export
+    copies the application links against.
+    """
+    build_dir = domain_bsp_build_dir(ws)
+    kernel_obj_dir = (
+        build_dir
+        / "libsrc"
+        / "freertos10_xilinx"
+        / "src"
+        / "CMakeFiles"
+        / "freertos.dir"
+    )
+    if kernel_obj_dir.exists():
+        shutil.rmtree(kernel_obj_dir)
+    ninja = Path(os.environ.get("XILINX_VITIS", "")) / "bin" / "ninja.exe"
+    if not ninja.is_file():
+        ninja = Path("ninja")
+    proc = subprocess.run(
+        [str(ninja)],
+        cwd=str(build_dir),
+        capture_output=True,
+        text=True,
+        errors="replace",
+    )
+    tail = (proc.stdout + proc.stderr).strip().splitlines()[-12:]
+    print("NINJA BSP rebuild output tail:")
+    for line in tail:
+        print(f"  {line}")
+    if proc.returncode != 0:
+        raise SystemExit(
+            f"fw-zynq blocked: ninja BSP rebuild failed (rc={proc.returncode}) "
+            f"in {build_dir}"
+        )
+    export_lib = (
+        ws
+        / PLATFORM_NAME
+        / "export"
+        / PLATFORM_NAME
+        / "sw"
+        / DOMAIN_NAME
+        / "lib"
+    )
+    archives = [build_dir / "libxil.a"]
+    archives += sorted((build_dir / "libsrc").glob("*/*/lib*.a"))
+    for archive in archives:
+        if archive.is_file():
+            shutil.copyfile(archive, export_lib / archive.name)
+    print(f"VITIS BSP libs rebuilt in {build_dir} and exported to {export_lib}")
+
+
+def _append_fragment_once(target: Path, fragment_text: str) -> bool:
+    """Append the fragment to one header copy unless already present."""
+    text = target.read_text(encoding="utf-8")
+    if FRAGMENT_MARKER in text:
+        print(f"VITIS FreeRTOS policy already applied to {target}")
+        return False
+    backup = target.with_name("FreeRTOSConfig.h.bsp-orig")
+    if not backup.exists():
+        shutil.copyfile(target, backup)
+    with target.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write("\n")
+        handle.write(fragment_text)
+    print(f"VITIS FreeRTOS policy appended to {target} (orig kept at {backup})")
+    return True
+
+
+def apply_freertos_policy_override(root: Path, ws: Path) -> Path:
+    """Append the repo FreeRTOS policy fragment to every generated header copy.
+
+    The BSP owns every other value (configCPU_CLOCK_HZ comes from
+    xparameters); only the policy knobs in the fragment are overridden by
+    appending after the generated body. Two copies exist after a
+    platform.build(): bsp/include (library include root) and
+    bsp/libsrc/build_configs/gen_bsp/include (the copy libsrc builds see
+    first via -I). Both must carry the override; the originals are kept as
+    FreeRTOSConfig.h.bsp-orig for diff evidence. Idempotent per file.
+    """
+    fragment = root / "fw-zynq" / "FreeRTOSConfig.h"
+    if not fragment.is_file():
+        raise SystemExit(f"fw-zynq blocked: policy fragment missing: {fragment}")
+    targets = [
+        h
+        for h in (domain_bsp_header(ws), domain_bsp_gen_header(ws))
+        if h.is_file()
+    ]
+    if not targets:
+        raise SystemExit(
+            f"fw-zynq blocked: no generated FreeRTOSConfig.h under the domain "
+            f"BSP; platform.build() must run after add_domain first"
+        )
+    fragment_text = fragment.read_text(encoding="utf-8")
+    for target in targets:
+        _append_fragment_once(target, fragment_text)
+    return targets[0]
+
+
+def create_platform_and_domain(client, root: Path, xsa: Path):
+    """Create the platform component, add the FreeRTOS domain and build.
+
+    Ordering matters: add_domain generates the BSP header; the first
+    platform.build() compiles the BSP libs, the FSBL app and fills the
+    platform export tree; the FreeRTOS policy override must be appended
+    BEFORE the build that compiles the kernel (the freertos library is
+    built with configSUPPORT_STATIC_ALLOCATION off otherwise and the app
+    consumes the export copy of the header), so the override is applied
+    and then platform.build() runs a second, incremental time to rebuild
+    the kernel and refresh the export include copy.
+    """
+    platform = client.create_platform_component(
+        name=PLATFORM_NAME,
+        hw_design=str(xsa),
+        desc="logic analyzer Zynq platform (P4.1)",
+        generate_dtb=False,
+    )
+    platform.report()
+    domain = platform.add_domain(
+        name=DOMAIN_NAME, cpu=CPU, os=OS_NAME, display_name="freertos_ps7_cortexa9_0"
+    )
+    domain.report()
+    set_os_param_if_supported(
+        domain,
+        {
+            "stdout": "ps7_uart_1",
+            "stdin": "ps7_uart_1",
+            "standalone_stdout": "ps7_uart_1",
+            "STDOUT": "ps7_uart_1",
+            "STDIN": "ps7_uart_1",
+        },
+    )
+    ws = workspace_path(root)
+    platform.build()
+    print(f"VITIS platform built: {PLATFORM_NAME} domain {DOMAIN_NAME}")
+    target = apply_freertos_policy_override(root, ws)
+    rebuild_domain_bsp(ws)
+    export_hdr = domain_export_include(ws)
+    if export_hdr.is_file() and FRAGMENT_MARKER not in export_hdr.read_text(encoding="utf-8"):
+        shutil.copyfile(target, export_hdr)
+        print(f"VITIS policy header copied to export include {export_hdr}")
+    return platform
+
+
+def create_app_and_build(client, root: Path, platform) -> None:
+    """Create the la_app application component from the repo sources."""
+    xpfm = client.find_platform_in_repos(PLATFORM_NAME)
+    app = client.create_app_component(
+        name=APP_NAME, platform=xpfm, domain=DOMAIN_NAME
+    )
+    src = root / "fw-zynq" / "app" / "src"
+    app.import_files(from_loc=str(src), files=["main.c"])
+    app.build()
+    print(f"VITIS app built: {APP_NAME}")
+
+
+def verify_elf_and_report(root: Path) -> Path:
+    ws = workspace_path(root)
+    elves = list(ws.rglob(f"{APP_NAME}.elf"))
+    if not elves:
+        raise SystemExit(
+            f"fw-zynq blocked: {APP_NAME}.elf not found under {ws}; "
+            "inspect the build log for compiler/linker errors"
+        )
+    elf = elves[0]
+    print(f"FW-ZYNQ ELF: {elf}")
+    return elf
+
+
+def make_client():
+    try:
+        import vitis  # type: ignore
+    except Exception as exc:
+        raise SystemExit(f"fw-zynq blocked: vitis python module missing: {exc}")
+    return vitis.create_client()
+
+
+def usage(argv) -> tuple[Path, Path]:
+    if len(argv) < 3:
+        raise SystemExit("usage: vitis -s <script>.py -- PROJECT_ROOT XSA")
+    root = Path(argv[-2]).resolve()
+    xsa = Path(argv[-1]).resolve()
+    if not xsa.is_file():
+        raise SystemExit(f"fw-zynq blocked: XSA is missing: {xsa}")
+    return root, xsa
+
+
+if __name__ == "__main__":  # pragma: no cover - standalone platform-only run
+    root, xsa = usage(sys.argv)
+    client = make_client()
+    try:
+        ensure_clean_workspace(client, root)
+        platform = create_platform_and_domain(client, root, xsa)
+        platform.report()
+    finally:
+        try:
+            import vitis
+
+            vitis.dispose()
+        except Exception:
+            pass
+    print("platform.py complete")
