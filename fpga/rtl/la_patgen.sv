@@ -126,7 +126,16 @@ module la_patgen #(
   endfunction
 
   logic [31:0] uart_period_m1;
-  assign uart_period_m1 = scale * UART_BIT[31:0] - 32'd1;
+  // P3 timing closure: the bit-period product is computed from div_i and
+  // latched at the enable edge instead of being derived from div_q through
+  // a DSP multiplier on the per-cycle compare path.
+  always_ff @(posedge clk) begin
+    if (srst) begin
+      uart_period_m1 <= UART_BIT[31:0] - 32'd1;
+    end else if (en_rise) begin
+      uart_period_m1 <= ({16'd0, div_i} + 32'd1) * UART_BIT[31:0] - 32'd1;
+    end
+  end
 
   always_ff @(posedge clk) begin
     if (srst) begin
@@ -192,7 +201,14 @@ module la_patgen #(
   endfunction
 
   logic [31:0] spi_half_m1;
-  assign spi_half_m1 = scale * SPI_HALF[31:0] - 32'd1;
+  // P3 timing closure: same enable-edge latch scheme as the UART period.
+  always_ff @(posedge clk) begin
+    if (srst) begin
+      spi_half_m1 <= SPI_HALF[31:0] - 32'd1;
+    end else if (en_rise) begin
+      spi_half_m1 <= ({16'd0, div_i} + 32'd1) * SPI_HALF[31:0] - 32'd1;
+    end
+  end
 
   always_ff @(posedge clk) begin
     if (srst) begin
@@ -259,7 +275,14 @@ module la_patgen #(
   endfunction
 
   logic [31:0] i2c_half_m1;
-  assign i2c_half_m1 = scale * I2C_HALF[31:0] - 32'd1;
+  // P3 timing closure: same enable-edge latch scheme as the UART period.
+  always_ff @(posedge clk) begin
+    if (srst) begin
+      i2c_half_m1 <= I2C_HALF[31:0] - 32'd1;
+    end else if (en_rise) begin
+      i2c_half_m1 <= ({16'd0, div_i} + 32'd1) * I2C_HALF[31:0] - 32'd1;
+    end
+  end
 
   always_ff @(posedge clk) begin
     if (srst) begin

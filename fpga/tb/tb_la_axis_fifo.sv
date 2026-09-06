@@ -134,17 +134,30 @@ module tb_la_axis_fifo;
     end
   endtask
 
-  // Compare the read log against the first `n` accepted writes.
+  // Compare the read log against the first `n` accepted writes. Data bytes
+  // are compared only under their tkeep mask: the block-RAM write-enable
+  // storage (P3) only guarantees bytes selected by tkeep, and the memory is
+  // zero-initialized so unkept lanes read back as zeros on the first pass.
+  function automatic logic [31:0] keep_mask(input logic [3:0] k);
+    keep_mask = 32'h0;
+    if (k[0]) keep_mask |= 32'h000000FF;
+    if (k[1]) keep_mask |= 32'h0000FF00;
+    if (k[2]) keep_mask |= 32'h00FF0000;
+    if (k[3]) keep_mask |= 32'hFF000000;
+  endfunction
+
   task automatic check_order(string tag, int n);
     int i;
+    logic [31:0] mask;
     if (rlog_n != n) begin
       $display("FAIL [%s] read %0d beats, expected %0d", tag, rlog_n, n);
       errors = errors + 1;
     end
     for (i = 0; i < n && i < rlog_n; i++) begin
-      if (rlog[i] !== wlog[i]) begin
-        $display("FAIL [%s] beat %0d data %08h expected %08h", tag, i,
-                 rlog[i], wlog[i]);
+      mask = keep_mask(wkeep[i]);
+      if ((rlog[i] & mask) !== (wlog[i] & mask)) begin
+        $display("FAIL [%s] beat %0d data %08h expected %08h (mask %08h)",
+                 tag, i, rlog[i], wlog[i], mask);
         errors = errors + 1;
       end
       if (rkeep[i] !== wkeep[i] || rlast[i] !== wlast[i]) begin
@@ -255,9 +268,11 @@ module tb_la_axis_fifo;
       fail_check("count is 5", count == 5);
       drain();
       for (i = 0; i < 5; i++) begin
-        if (rlog[40 + i] !== wlog[40 + i]) begin
-          $display("FAIL tail beat %0d data %08h expected %08h", i,
-                   rlog[40 + i], wlog[40 + i]);
+        logic [31:0] mask;
+        mask = keep_mask(wkeep[40 + i]);
+        if ((rlog[40 + i] & mask) !== (wlog[40 + i] & mask)) begin
+          $display("FAIL tail beat %0d data %08h expected %08h (mask %08h)", i,
+                   rlog[40 + i], wlog[40 + i], mask);
           errors = errors + 1;
         end
       end

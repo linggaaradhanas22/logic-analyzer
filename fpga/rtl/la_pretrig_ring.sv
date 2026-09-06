@@ -68,6 +68,16 @@
 //   Single FCLK; synchronous active-high srst. out_valid is asserted while a
 //   sample is available; the pair (out_valid, out_ready) transfers one
 //   sample per cycle at full rate. in_valid/out stream rates need not match.
+//
+// P3 implementation note: the history RAM is a synchronous-read block RAM.
+// Samples leave the memory through a one-beat output register (load
+// condition below), which is why emissions start two cycles after the run
+// edge / trigger latch instead of one and why the stream-mode latency is
+// two cycles; the emitted sample sequence, seam, back-pressure and overflow
+// semantics are unchanged. The RAM is a true dual-role circular buffer: the
+// write port stores arriving samples and the read port serves the window
+// replay, so a same-cycle store into the slot drained by a load returns the
+// pre-write data (simple dual-port read-during-write behavior).
 
 module la_pretrig_ring #(
   parameter int DEPTH  = 65536,        // history depth; must be 2**LOG2D
@@ -102,7 +112,7 @@ module la_pretrig_ring #(
 
   localparam int DEPTHM1 = DEPTH - 1;
 
-  logic [7:0] mem [DEPTH];
+  (* ram_style = "block" *) logic [7:0] mem [DEPTH];
 
   logic        run_d;
   logic        run_rise;
@@ -116,84 +126,106 @@ module la_pretrig_ring #(
   logic [15:0] pre_len_q;
   logic [31:0] trig_index_q;
   logic        overflow_q;
+  logic        o_has;            // output register holds the emitted sample
+  logic [7:0]  o_sample;
+
+  // Emission-side pipeline: o_has/o_sample present the current sample;
+  // `load` moves the next sample from the memory into the register when the
+  // presented slot is (or is about to become) free and samples remain.
+  // Occupancy for admission is the total of memory beats plus the presented
+  // register (capacity DEPTH), exactly the stored-but-unemitted budget the
+  // overflow specification promises.
+  logic pop;
+  logic load;
+  logic store;
+  logic [LOG2D:0] total_pend;
+  assign pop       = o_has && out_ready;
+  assign load      = run && (stream_mode || latched) && (pending != '0)
+                     && (!o_has || pop);
+  assign total_pend = pending + (o_has ? {{LOG2D{1'b0}}, 1'b1} : '0);
+  assign store     = in_valid && (stream_mode || latched)
+                     && ((total_pend < DEPTH[LOG2D:0]) || pop);
 
   assign run_rise = run && !run_d;
 
   always_ff @(posedge clk) begin
-    run_d <= run;
-    if (srst) begin
-      run_d        <= 1'b0;
-      pre_req_q    <= '0;
-      stream_mode  <= 1'b0;
-      latched      <= 1'b0;
-      count        <= '0;
-      wptr         <= '0;
-      rptr         <= '0;
-      pending      <= '0;
-      pre_len_q    <= '0;
-      trig_index_q <= '0;
-      overflow_q   <= 1'b0;
-    end else if (run_rise) begin
-      pre_req_q    <= pre_req;
-      stream_mode  <= (pre_req == 16'd0);
-      latched      <= 1'b0;
-      count        <= '0;
-      wptr         <= '0;
-      rptr         <= '0;
-      pending      <= '0;
-      pre_len_q    <= '0;
-      trig_index_q <= '0;
-      overflow_q   <= 1'b0;
-    end else if (run) begin
-      // Latch the window cut on the trigger sample. The clamp to DEPTH-1
-      // guarantees a request of DEPTH can never destroy its own window head;
-      // capture_ctrl validates pre_req against the P1.1 maximum (0x8000).
-      // A second trigger after the latch only refreshes the status fields.
-      if (trig && in_valid) begin
-        trig_index_q <= count;
-        if (!stream_mode && !latched) begin
-          rptr      <= wptr - min16(pre_req_q, count, DEPTHM1);
-          pending   <= {1'b0, min16(pre_req_q, count, DEPTHM1)} + 17'd1;
-          pre_len_q <= min16(pre_req_q, count, DEPTHM1);
-          latched   <= 1'b1;
-        end
-      end
-      // Store path and emission path with a single pending update.
-      // store_ok: guarded-store admitted (free slot, or the slot freed by an
-      // emission in this same cycle); rolling history stores are not
-      // pending-tracked and admitted unconditionally.
-      if (in_valid) begin
-        if (stream_mode || latched) begin
-          if ((pending < DEPTH[LOG2D:0]) || (out_valid && out_ready)) begin
-            mem[wptr]  <= in_sample;
-            wptr       <= wptr + 1'b1;
-          end else begin
-            overflow_q <= 1'b1;   // drop: stream gap, never silent
+      run_d <= run;
+      if (srst) begin
+        run_d        <= 1'b0;
+        pre_req_q    <= '0;
+        stream_mode  <= 1'b0;
+        latched      <= 1'b0;
+        count        <= '0;
+        wptr         <= '0;
+        rptr         <= '0;
+        pending      <= '0;
+        pre_len_q    <= '0;
+        trig_index_q <= '0;
+        overflow_q   <= 1'b0;
+        o_has        <= 1'b0;
+        o_sample     <= '0;
+      end else if (run_rise) begin
+        pre_req_q    <= pre_req;
+        stream_mode  <= (pre_req == 16'd0);
+        latched      <= 1'b0;
+        count        <= '0;
+        wptr         <= '0;
+        rptr         <= '0;
+        pending      <= '0;
+        pre_len_q    <= '0;
+        trig_index_q <= '0;
+        overflow_q   <= 1'b0;
+        o_has        <= 1'b0;
+        o_sample     <= '0;
+      end else if (run) begin
+        // Latch the window cut on the trigger sample. The clamp to DEPTH-1
+        // guarantees a request of DEPTH can never destroy its own window head;
+        // capture_ctrl validates pre_req against the P1.1 maximum (0x8000).
+        // A second trigger after the latch only refreshes the status fields.
+        if (trig && in_valid) begin
+          trig_index_q <= count;
+          if (!stream_mode && !latched) begin
+            rptr      <= wptr - min16(pre_req_q, count, DEPTHM1);
+            pending   <= {1'b0, min16(pre_req_q, count, DEPTHM1)} + 17'd1;
+            pre_len_q <= min16(pre_req_q, count, DEPTHM1);
+            latched   <= 1'b1;
           end
-        end else begin
-          mem[wptr]  <= in_sample;   // rolling history
-          wptr       <= wptr + 1'b1;
         end
-        count <= count + 32'd1;
-      end
-      if (out_valid && out_ready) begin
-        rptr <= rptr + 1'b1;
-      end
-      if (in_valid && (stream_mode || latched)
-          && ((pending < DEPTH[LOG2D:0]) || (out_valid && out_ready))
-          && !(out_valid && out_ready)) begin
-        pending <= pending + 17'd1;
-      end else if (!(in_valid && (stream_mode || latched)
-                     && ((pending < DEPTH[LOG2D:0])
-                         || (out_valid && out_ready)))
-                   && (out_valid && out_ready)) begin
-        pending <= pending - 17'd1;
+        // Store path (guarded admission; a load in the same cycle frees the
+        // drained slot when pending == DEPTH), emission register load, and
+        // a single pending update. Rolling-history stores are not
+        // pending-tracked and admitted unconditionally.
+        if (in_valid) begin
+          if (stream_mode || latched) begin
+            if (store) begin
+              mem[wptr]  <= in_sample;
+              wptr       <= wptr + 1'b1;
+            end else begin
+              overflow_q <= 1'b1;   // drop: stream gap, never silent
+            end
+          end else begin
+            mem[wptr]  <= in_sample;   // rolling history
+            wptr       <= wptr + 1'b1;
+          end
+          count <= count + 32'd1;
+        end
+        if (load) begin
+          o_sample <= mem[rptr];
+          rptr     <= rptr + 1'b1;
+          o_has    <= 1'b1;
+        end else if (pop) begin
+          o_has    <= 1'b0;
+        end
+        if (store && !load) begin
+          pending <= pending + 17'd1;
+        end else if (load && !store) begin
+          pending <= pending - 17'd1;
+        end
       end
     end
-  end
 
-  assign out_valid  = run && (stream_mode || latched) && (pending != '0);
-  assign out_sample = mem[rptr];
+  assign out_valid  = o_has && run && (stream_mode || latched);
+  assign out_sample = o_sample;
   assign pre_len    = pre_len_q;
   assign trig_index = trig_index_q;
   assign overflow   = overflow_q;
