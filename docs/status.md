@@ -61,9 +61,9 @@ commit, and the worktree is clean.
 | Project root | `C:\Users\lingg\Projects\KCCI_technical\Embedded\Logic-Analyzer\Source_Code` |
 | Plan source | `docs/plan.md`, verified identical to `logic-analyzer-implementation-plan-v0.4.md` |
 | Branch | `main` |
-| Last implementation change | P6.1 host tool + P7.5 live host side + boot packaging (pushed in this batch) |
+| Last implementation change | `051cce5 P7.5: la-cli live command with mock live stream; boot target for P10.4 BOOT.BIN packaging` (pushed) |
 | Remote | `origin` -> `https://github.com/linggaaradhanas22/logic-analyzer.git` |
-| Remote state | `origin/main` at `f99af57` (P6.1 host tool); P7.5/boot batch pending push |
+| Remote state | `origin/main` at `051cce5`; worktree clean, remote hash verified |
 | Current pending work | Hardware-independent items complete through P6.1, P7.5 host side, the P7.1 audit and the P10.4 boot tooling. Next: commit/push this ledger, then the first [HUMAN] bench session (P3.3 program bitstream + P4.2 console hello + blink) for the P4 on-target gates, then the P5/P6/P7 on-target phases in plan order |
 | Workflow | Native Windows only; use `python tools/run.py <target>` |
 | Phase | P0/P1 complete; P2 complete locally (12/12 Questa gates); P3.1/P3.2 complete locally (bitstream + XSA + clean timing); P3.3 programming is a [HUMAN] bench gate; P4.1 complete locally (first FreeRTOS ELF), P4.2+ open |
