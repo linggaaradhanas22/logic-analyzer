@@ -170,6 +170,57 @@ def pack_nak(nak_type: int, sequence: int, error: int) -> bytes:
     return struct.pack("<BBB", nak_type, sequence & 0xFF, error)
 
 
+# Decoder configuration (protocol.md DECODER_CFG, 20 bytes).
+DECODER_OFF, DECODER_UART, DECODER_SPI, DECODER_I2C = 0, 1, 2, 3
+
+# EVT_DECODED event kinds (docs/decoders.md numbering).
+EVENT_NAMES = {
+    1: "BYTE", 2: "FRAME_ERR", 3: "PARITY_ERR", 4: "START", 5: "STOP",
+    6: "DISCONTINUITY", 7: "ADDRESS", 8: "ACK", 9: "NACK",
+    10: "CS_ASSERT", 11: "CS_RELEASE",
+}
+
+
+def pack_decoder_cfg_uart(slot: int, rx_channel: int, baud_hz: int,
+                          sample_rate_hz: int, data_bits: int = 8,
+                          parity: int = 0, stop_bits: int = 1,
+                          inverted: int = 0) -> bytes:
+    if not 0 <= slot <= 2:
+        raise ValueError("decoder slot must be 0..2")
+    if not 0 <= rx_channel <= 7:
+        raise ValueError("UART rx channel must be 0..7")
+    if not 5 <= data_bits <= 9 or parity not in (0, 1, 2) or stop_bits not in (1, 2):
+        raise ValueError("invalid UART decoder parameters")
+    payload = bytearray(DECODER_CFG_SIZE)
+    payload[0] = slot
+    payload[1] = DECODER_UART
+    payload[4] = rx_channel
+    payload[5] = data_bits
+    payload[6] = parity
+    payload[7] = stop_bits
+    payload[8] = inverted
+    struct.pack_into("<I", payload, 12, baud_hz)
+    struct.pack_into("<I", payload, 16, sample_rate_hz)
+    return bytes(payload)
+
+
+def iter_decoded_events(payload: bytes):
+    """Parses an EVT_DECODED batch into (slot, kind, t_sample, data)."""
+    offset = 0
+    while offset < len(payload):
+        if offset + 11 > len(payload):
+            raise FrameError("truncated EVT_DECODED record header")
+        slot = payload[offset]
+        kind = payload[offset + 1]
+        t_sample = struct.unpack_from("<Q", payload, offset + 2)[0]
+        length = payload[offset + 10]
+        offset += 11
+        if offset + length > len(payload):
+            raise FrameError("truncated EVT_DECODED record data")
+        yield slot, kind, t_sample, payload[offset:offset + length]
+        offset += length
+
+
 class FrameParser:
     """Incremental frame parser with the same state machine as la_proto.
 

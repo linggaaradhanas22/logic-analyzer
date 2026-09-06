@@ -35,6 +35,7 @@ TARGETS = (
     "bit",
     "fw-zynq",
     "fw-esp32",
+    "boot",
     "program",
     "flash-esp",
     "test-host",
@@ -534,6 +535,10 @@ def _run_target(target: str, forwarded: Sequence[str]) -> int:
             python_executable=_idf_python(),
         )
         return _run_steps(target, [(command, PROJECT_ROOT / "fw-esp32")])
+    if target == "boot":
+        script = PROJECT_ROOT / "fw-zynq" / "scripts" / "make_bootbin.py"
+        command = [sys.executable, str(script), str(PROJECT_ROOT)]
+        return _run_steps(target, [(command, PROJECT_ROOT)])
     if target == "program":
         return _blocked(
             target,

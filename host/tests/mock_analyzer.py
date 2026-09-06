@@ -145,6 +145,16 @@ class MockAnalyzer:
                 elif self.scenario == "chunk_bad_crc":
                     self._stream_capture(connection, corrupt_chunk=2)
                     capture_state["ack_wanted"] = 0
+            elif message_type == p.DECODER_CFG:
+                if self.scenario == "live":
+                    self._send(connection, p.ACK, p.pack_ack(p.DECODER_CFG, sequence))
+            elif message_type == p.LIVE_START:
+                if self.scenario == "live":
+                    self._send(connection, p.ACK, p.pack_ack(p.LIVE_START, sequence))
+                    self._stream_live(connection)
+            elif message_type == p.LIVE_STOP:
+                if self.scenario == "live":
+                    self._send(connection, p.ACK, p.pack_ack(p.LIVE_STOP, sequence))
             # Other frame types (NAK, unknown): ignored by the mock.
 
         def poll_once() -> bool:
@@ -217,3 +227,20 @@ class MockAnalyzer:
         sequence = self._sequence
         self._sequence = (self._sequence + 1) & 0xFF
         return sequence
+
+    def _stream_live(self, connection: socket.socket) -> None:
+        """Streams three EVT_DECODED batches of decoded 'LA-TEST\\n' bytes."""
+        text = b"LA-TEST\n"
+        base = 10_000
+        for batch in range(3):
+            payload = bytearray()
+            for index, byte in enumerate(text):
+                t_sample = base + batch * 10_000 + index * 100
+                payload += bytes([0])  # slot 0
+                payload += bytes([1])  # kind BYTE
+                payload += struct.pack("<Q", t_sample)
+                payload += bytes([1])  # data length
+                payload += bytes([byte])
+            self._send(connection, p.EVT_DECODED, bytes(payload))
+        self._send(connection, p.EVT_OVERRUN,
+                   struct.pack("<I", 3) + bytes([1]) + b"\x00\x00\x00")

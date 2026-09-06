@@ -252,6 +252,73 @@ class AnalyzerClient:
         self._pump(deadline, on_data)
         return CaptureData(meta, bytes(collected), chunks, self._parser_stats())
 
+    def live(self, decoder_config: bytes, count: int | None = None,
+             timeout_s: float | None = None) -> list[dict]:
+        """Configures a decoder slot, starts the live stream and collects
+        decoded events (P7.5 host side; the P4 burst firmware rejects
+        DECODER_CFG/LIVE_START as unsupported until the P7 live path
+        exists). Stops after `count` events, after an EVT_OVERRUN, or on the
+        deadline; a caller interrupt leaves LIVE_STOP to the command."""
+        if timeout_s is None:
+            deadline = float("inf")
+        else:
+            deadline = time.monotonic() + timeout_s
+        self._send(p.DECODER_CFG, decoder_config)
+        self._expect_ack(p.DECODER_CFG, "DECODER_CFG", deadline)
+        self._send(p.LIVE_START)
+        collected: list[dict] = []
+        stop_requested = False
+        start_acknowledged = False
+
+        def on_live(message_type, sequence, payload):
+            nonlocal stop_requested, start_acknowledged
+            if message_type == p.ACK:
+                acked_type, _acked_sequence = payload[0], payload[1]
+                if acked_type == p.LIVE_START:
+                    start_acknowledged = True
+                return False
+            if message_type == p.EVT_DECODED:
+                for slot, kind, t_sample, data in p.iter_decoded_events(payload):
+                    collected.append(
+                        {"slot": slot, "kind": kind, "t_sample": t_sample, "data": data}
+                    )
+                    if count is not None and len(collected) >= count:
+                        stop_requested = True
+                        break
+                if stop_requested and count is not None:
+                    del collected[count:]  # a batch may overshoot the count
+                return stop_requested
+            if message_type == p.EVT_OVERRUN:
+                if count is not None and stop_requested:
+                    return True
+                dropped = int.from_bytes(payload[:4], "little")
+                stage = payload[4]
+                collected.append({"overrun": True, "dropped": dropped, "stage": stage})
+                return True
+            if message_type == p.NAK:
+                nak_type, _seq, error = payload[0], payload[1], payload[2]
+                raise AnalyzerError(
+                    f"live stream failed: NAK on 0x{nak_type:02X} ({nak_text(error)})", error
+                )
+            if message_type == p.LOG:
+                self._log_lines.append(payload.decode("utf-8", errors="replace"))
+            return False
+
+        self._pump(deadline, on_live)
+        try:
+            self._send(p.LIVE_STOP)
+            self._expect_ack(p.LIVE_STOP, "LIVE_STOP", deadline)
+        except TransportError:
+            pass  # the device may already have torn the stream down
+        return collected
+
+    def stop_live(self) -> None:
+        """Fire-and-forget LIVE_STOP for interrupt paths."""
+        try:
+            self._send(p.LIVE_STOP)
+        except TransportError:
+            pass
+
     @staticmethod
     def _finish_capture(meta: dict, collected: bytearray, chunks: int, end_crc: int) -> None:
         if not meta:

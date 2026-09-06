@@ -210,6 +210,65 @@ def abort(target: str, timeout_s: float) -> None:
     click.echo("aborted")
 
 
+@cli.command(help="Decoded live events: --decoder uart:rx=0,baud=115200 (P7.5; the "
+                  "burst-phase firmware NAKs this until the live path exists).")
+@click.option("--target", "-t", required=True, help="analyzer link target URI")
+@click.option("--decoder", "decoder_spec", default="uart:rx=0,baud=115200", show_default=True,
+              help="decoder configuration, currently uart:rx=CH,baud=BAUD")
+@click.option("--rate", default="100M", show_default=True,
+              help="sample rate used to derive samples/bit for the decoder")
+@click.option("--count", default=None, type=int, help="stop after N events")
+@click.option("--csv", is_flag=True, help="emit CSV rows instead of text")
+@click.option("--timeout", "timeout_s", default=None, type=float,
+              help="overall deadline in seconds (default: until --count or Ctrl+C)")
+def live(target: str, decoder_spec: str, rate: str, count: int | None, csv: bool,
+         timeout_s: float | None) -> None:
+    match = re.fullmatch(r"uart:rx=(\d+),baud=(\d+)", decoder_spec.strip())
+    if not match:
+        raise click.BadParameter("decoder must be uart:rx=CH,baud=BAUD in this phase")
+    rx_channel = int(match.group(1))
+    baud = int(match.group(2))
+    if not 0 <= rx_channel < CHANNELS or baud <= 0:
+        raise click.BadParameter("invalid UART decoder parameters")
+    rate_hz = _parse_size(rate)
+    sample_div = _sample_div(rate_hz)
+    actual_rate = FS_HZ // (sample_div + 1)
+    decoder_cfg = p.pack_decoder_cfg_uart(0, rx_channel, baud, actual_rate)
+
+    client = _make_client(target)
+    try:
+        try:
+            events = client.live(decoder_cfg, count=count, timeout_s=timeout_s)
+        except KeyboardInterrupt:
+            client.stop_live()
+            click.echo("live stopped")
+            return
+    except (AnalyzerError, TransportError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    finally:
+        client.close()
+    overruns = [event for event in events if event.get("overrun")]
+    decoded = [event for event in events if not event.get("overrun")]
+    if csv:
+        click.echo("kind,slot,t_sample,data_hex")
+        for event in decoded:
+            click.echo(
+                f"{p.EVENT_NAMES.get(event['kind'], event['kind'])},{event['slot']},"
+                f"{event['t_sample']},{event['data'].hex()}"
+            )
+    else:
+        for event in decoded:
+            name = p.EVENT_NAMES.get(event["kind"], f"kind{event['kind']}")
+            printable = event["data"].decode("ascii", errors="replace")
+            click.echo(f"t={event['t_sample']} slot={event['slot']} {name} "
+                       f"0x{event['data'].hex()} {printable!r}")
+    for event in overruns:
+        click.echo(
+            f"overrun: {event['dropped']} events dropped at stage {event['stage']}"
+        )
+    click.echo(f"live: {len(decoded)} decoded events, {len(overruns)} overruns")
+
+
 def main() -> int:
     try:
         return cli.main(prog_name="la-cli", standalone_mode=True)
