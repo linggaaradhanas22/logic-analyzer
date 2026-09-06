@@ -1,0 +1,269 @@
+"""Synchronous analyzer client: ping, status and burst capture flows.
+
+Implements the host side of protocol.md: per-command request/response with
+ACK/NAK correlation, the burst DATA_BEGIN/DATA_CHUNK/DATA_END transfer with
+batch ACKs every 16 chunks (plus a drain at the end) and end-to-end CRC
+verification. All transfers run inside one connection and stop on a
+deadline; parser CRC/format counters are reported with every result.
+"""
+
+from __future__ import annotations
+
+import time
+
+from . import protocol as p
+from .transport import Transport, TransportError
+
+ACK_BATCH = 16
+
+
+class AnalyzerError(RuntimeError):
+    """Protocol-level failure (NAK or an inconsistent transfer)."""
+
+    def __init__(self, message: str, error_code: int | None = None) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+
+
+class CaptureData:
+    def __init__(self, meta: dict, data: bytes, chunks: int, parser_stats: dict) -> None:
+        self.meta = meta
+        self.data = data
+        self.chunks = chunks
+        self.parser_stats = parser_stats
+
+    @property
+    def encoding(self) -> int:
+        return self.meta["encoding"]
+
+    @property
+    def sample_rate_hz(self) -> int:
+        return self.meta["sample_rate_hz"]
+
+
+_NAK_TEXT = {
+    p.ERROR_NONE: "none",
+    p.ERROR_BAD_LENGTH: "bad length",
+    p.ERROR_BAD_FIELD: "bad field",
+    p.ERROR_BAD_STATE: "bad state",
+    p.ERROR_UNSUPPORTED: "unsupported",
+    p.ERROR_BUSY: "busy",
+    p.ERROR_OVERFLOW: "overflow",
+    p.ERROR_CRC: "CRC",
+}
+
+
+def nak_text(error_code: int) -> str:
+    return _NAK_TEXT.get(error_code, f"code {error_code}")
+
+
+class AnalyzerClient:
+    def __init__(self, transport: Transport) -> None:
+        self._transport = transport
+        self._sequence = 0
+        self._parser = p.FrameParser()
+        self._log_lines: list[str] = []
+
+    @property
+    def description(self) -> str:
+        return self._transport.description
+
+    @property
+    def log_lines(self) -> list[str]:
+        return list(self._log_lines)
+
+    @property
+    def parser(self) -> p.FrameParser:
+        return self._parser
+
+    def close(self) -> None:
+        self._transport.close()
+
+    def _next_sequence(self) -> int:
+        sequence = self._sequence
+        self._sequence = (self._sequence + 1) & 0xFF
+        return sequence
+
+    def _send(self, message_type: int, payload: bytes = b"") -> int:
+        sequence = self._next_sequence()
+        self._transport.send(p.encode(message_type, sequence, payload))
+        return sequence
+
+    def _parser_stats(self) -> dict:
+        return {
+            "frames": self._parser.frames,
+            "crc_errors": self._parser.crc_errors,
+            "format_errors": self._parser.format_errors,
+            "dropped_bytes": self._parser.dropped_bytes,
+        }
+
+    def _pump(self, deadline: float, handler) -> None:
+        """Feeds the parser until handler() returns True, the deadline passes
+        or the transport fails. handler receives (type, sequence, payload)."""
+        stopped = False
+
+        def on_frame(message_type, sequence, payload) -> None:
+            nonlocal stopped
+            if handler(message_type, sequence, payload):
+                stopped = True
+
+        while not stopped:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TransportError(f"timeout waiting for the analyzer on {self.description}")
+            data = self._transport.recv(4096, min(remaining, 0.5))
+            if not data:
+                if self._transport.eof:
+                    raise TransportError(
+                        f"connection closed by the analyzer on {self.description}"
+                    )
+                continue
+            self._parser.feed(data, on_frame)
+
+    def ping(self, timeout_s: float = 5.0) -> dict:
+        deadline = time.monotonic() + timeout_s
+        result: dict = {}
+
+        def on_pong(message_type, sequence, payload):
+            if message_type == p.PONG:
+                result["pong"] = p.unpack_pong(payload)
+                return True
+            if message_type == p.NAK:
+                _nak_type, _seq, error = payload[0], payload[1], payload[2]
+                raise AnalyzerError(f"PING rejected: {nak_text(error)}", error)
+            if message_type == p.LOG:
+                self._log_lines.append(payload.decode("utf-8", errors="replace"))
+            return False
+
+        self._send(p.PING)
+        self._pump(deadline, on_pong)
+        return result["pong"]
+
+    def status(self, timeout_s: float = 5.0) -> dict:
+        deadline = time.monotonic() + timeout_s
+        result: dict = {}
+
+        def on_status(message_type, sequence, payload):
+            if message_type == p.STATUS:
+                result["status"] = p.unpack_status(payload)
+                return True
+            if message_type == p.NAK:
+                _nak_type, _seq, error = payload[0], payload[1], payload[2]
+                raise AnalyzerError(f"GET_STATUS rejected: {nak_text(error)}", error)
+            if message_type == p.LOG:
+                self._log_lines.append(payload.decode("utf-8", errors="replace"))
+            return False
+
+        self._send(p.GET_STATUS)
+        self._pump(deadline, on_status)
+        return result["status"]
+
+    def _expect_ack(self, requested_type: int, what: str, deadline: float) -> None:
+        def on_ack(message_type, sequence, payload):
+            if message_type == p.ACK:
+                acked_type, acked_sequence = payload[0], payload[1]
+                if acked_type == requested_type:
+                    return True
+                return False  # stale ACK for an older request; ignore
+            if message_type == p.NAK:
+                nak_type, _seq, error = payload[0], payload[1], payload[2]
+                raise AnalyzerError(
+                    f"{what} rejected ({nak_text(error)}) for type 0x{requested_type:02X}",
+                    error,
+                )
+            if message_type == p.LOG:
+                self._log_lines.append(payload.decode("utf-8", errors="replace"))
+            return False
+
+        self._pump(deadline, on_ack)
+
+    def abort(self, timeout_s: float = 5.0) -> None:
+        """Sends ABORT; an idempotent ACK is expected from an idle machine."""
+        deadline = time.monotonic() + timeout_s
+        self._send(p.ABORT)
+        self._expect_ack(p.ABORT, "ABORT", deadline)
+
+    def capture(self, config: bytes, timeout_s: float = 30.0) -> CaptureData:
+        """Arms a burst capture with a wire CONFIG payload and collects the
+        DATA_BEGIN/CHUNK*/END transfer, ACKing in batches of 16."""
+        deadline = time.monotonic() + timeout_s
+        if len(config) != p.CONFIG_SIZE:
+            raise ValueError(f"CONFIG payload must be {p.CONFIG_SIZE} bytes")
+        self._send(p.CONFIG, config)
+        self._expect_ack(p.CONFIG, "CONFIG", deadline)
+        self._send(p.ARM)
+
+        meta: dict = {}
+        chunks = 0
+        expected_offset = 0
+        pending_acks: list[int] = []
+        collected = bytearray()
+        arm_acknowledged = False
+
+        def send_ack_batch() -> None:
+            nonlocal pending_acks
+            for seq in pending_acks:
+                self._transport.send(p.encode(p.ACK, self._next_sequence(), p.pack_ack(p.DATA_CHUNK, seq)))
+            pending_acks = []
+
+        def on_data(message_type, sequence, payload):
+            nonlocal chunks, expected_offset, meta, arm_acknowledged
+            if message_type == p.ACK:
+                acked_type, _acked_sequence = payload[0], payload[1]
+                if acked_type == p.ARM:
+                    arm_acknowledged = True
+                return False
+            if message_type == p.DATA_BEGIN:
+                meta = p.unpack_data_begin(payload)
+                return False
+            if message_type == p.DATA_CHUNK:
+                offset = int.from_bytes(payload[:4], "little")
+                data = payload[4:]
+                if offset != expected_offset:
+                    raise AnalyzerError(
+                        f"chunk gap: expected byte offset {expected_offset}, got {offset} "
+                        f"(parser: {self._parser_stats()})"
+                    )
+                collected.extend(data)
+                chunks += 1
+                expected_offset += len(data)
+                pending_acks.append(sequence)
+                if len(pending_acks) >= ACK_BATCH:
+                    send_ack_batch()
+                return False
+            if message_type == p.DATA_END:
+                if not arm_acknowledged:
+                    raise AnalyzerError("DATA_END without an ARM acknowledgement")
+                end_crc = p.unpack_data_end(payload)
+                send_ack_batch()
+                self._finish_capture(meta, collected, chunks, end_crc)
+                return True
+            if message_type == p.EVT_TRIGGERED:
+                return False
+            if message_type == p.NAK:
+                nak_type, _seq, error = payload[0], payload[1], payload[2]
+                raise AnalyzerError(
+                    f"burst failed: NAK on 0x{nak_type:02X} ({nak_text(error)})", error
+                )
+            if message_type == p.LOG:
+                self._log_lines.append(payload.decode("utf-8", errors="replace"))
+            return False
+
+        self._pump(deadline, on_data)
+        return CaptureData(meta, bytes(collected), chunks, self._parser_stats())
+
+    @staticmethod
+    def _finish_capture(meta: dict, collected: bytearray, chunks: int, end_crc: int) -> None:
+        if not meta:
+            raise AnalyzerError("DATA_END without DATA_BEGIN")
+        expected_bytes = meta["total_words"] * 4
+        if len(collected) != expected_bytes:
+            raise AnalyzerError(
+                f"capture size mismatch: {len(collected)} bytes for "
+                f"{meta['total_words']} words ({chunks} chunks)"
+            )
+        actual_crc = p.crc32_ieee(bytes(collected))
+        if actual_crc != end_crc:
+            raise AnalyzerError(
+                f"DATA_END CRC mismatch: frame 0x{end_crc:08X}, computed 0x{actual_crc:08X}"
+            )
