@@ -84,6 +84,28 @@ ordinary scatter-gather descriptors; cyclic mode and simple-transfer APIs are
 not permitted. A descriptor is republished only after DMA has stopped using it
 and every successful consumer reference has been released.
 
+## UART burst TX window (P4.9)
+
+The wire rules come from `docs/protocol.md` (burst transfer): the host ACKs
+every 16 `DATA_CHUNK` frames or sooner when its receive window is full, the
+sender may have at most 16 unacknowledged chunks, and a retransmission retains
+its sequence number. The sender-side tracker policy:
+
+- `TxTask` keeps one window slot per in-flight chunk; a chunk is pushed only
+  when the window is not full. Sequence numbers never duplicate inside the
+  window: a NAK does not add a slot, it flags the existing slot as
+  retransmit-pending and the resend reuses the same sequence, so an ACK for
+  that sequence can clear at most one slot.
+- An `ACK(type, seq)` clears the outstanding chunk slot with that sequence.
+  ACKs for sequences that are not outstanding are stale and ignored; the
+  sender treats duplicate ACKs the same way.
+- A `NAK(type, seq, error)` on a chunk keeps the slot outstanding, marks it
+  for retransmission and leaves the window count unchanged. NAKs on commands
+  or on a completed burst stop that burst per protocol.md, which is
+  CmdTask/AcqTask policy, not the window tracker's.
+- The tracker is pure logic (no FreeRTOS or UART calls); `TxTask` alone owns
+  it, one writer, and holds the retransmit buffer that backs a resend.
+
 ## Cache, MMU and Buffer Contract
 
 The initial payload pool, burst capture buffer and SG descriptors occupy a

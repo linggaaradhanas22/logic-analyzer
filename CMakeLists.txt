@@ -60,10 +60,19 @@ target_include_directories(la_native_regs PRIVATE
   fw-zynq/app/src/drivers
 )
 
+add_executable(la_native_txwin
+  tests/native/txwin_host_tests.c
+  fw-zynq/app/src/tasks/la_tx_win.c
+)
+target_include_directories(la_native_txwin PRIVATE
+  fw-zynq/app/src/tasks
+)
+
 enable_testing()
 add_test(NAME la_native_tests COMMAND la_native_tests)
 add_test(NAME la_esp32_mocks COMMAND la_esp32_mocks)
 add_test(NAME la_native_regs COMMAND la_native_regs)
+add_test(NAME la_native_txwin COMMAND la_native_txwin)
 
 if(Python3_EXECUTABLE)
   add_test(NAME la_native_ctypes
