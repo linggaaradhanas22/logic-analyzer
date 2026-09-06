@@ -61,9 +61,9 @@ commit, and the worktree is clean.
 | Project root | `C:\Users\lingg\Projects\KCCI_technical\Embedded\Logic-Analyzer\Source_Code` |
 | Plan source | `docs/plan.md`, verified identical to `logic-analyzer-implementation-plan-v0.4.md` |
 | Branch | `main` |
-| Last implementation change | P4.9 dispatch + TxTask packer cores, typed burst wire payloads in la_proto, native gates (in this commit) |
+| Last implementation change | `9a47f64 P4.9 core: CmdTask command router + TxTask burst packer with typed wire payloads` (pushed) |
 | Remote | `origin` -> `https://github.com/linggaaradhanas22/logic-analyzer.git` |
-| Remote state | `origin/main` at `8f5d377` (P4.7+P4.3 cores); this P4.9 core set pending push |
+| Remote state | `origin/main` at `9a47f64` (P4.9 dispatch/packer cores); worktree clean, remote hash verified |
 | Current pending work | P4.9 cores (dispatch + packer) complete locally. Next: commit/push this ledger, then the first [HUMAN] bench session (P3.3 program bitstream + P4.2 console hello + blink), then P4.3 on-target, P4.5/P4.6/P4.7/P4.8 and P4.9 task wiring in plan order |
 | Workflow | Native Windows only; use `python tools/run.py <target>` |
 | Phase | P0/P1 complete; P2 complete locally (12/12 Questa gates); P3.1/P3.2 complete locally (bitstream + XSA + clean timing); P3.3 programming is a [HUMAN] bench gate; P4.1 complete locally (first FreeRTOS ELF), P4.2+ open |
