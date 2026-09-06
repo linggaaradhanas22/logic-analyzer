@@ -210,6 +210,38 @@ and counters.
   touching the configuration. None of this validates UART RTS/CTS, ring
   scheduling or Wi-Fi timing - those remain P5.5/P8 target gates.
 
+## ESP32 network session policy core (P5.3)
+
+`la_net_policy.{h,c}` (in the `la_net` IDF component; pure C, compiled by
+MSVC for `test-esp32-mocks` and by the ESP-IDF toolchain for `fw-esp32`) is
+the session lifecycle policy the `la_net` tasks implement: Wi-Fi station
+association with exponential backoff, single-client TCP on :5555, and the
+protocol rule that a lost client answers the Zynq link with ABORT then
+LIVE_STOP (protocol.md). One policy instance is owned by the session task
+(NetServerTask); WifiMgr forwards Wi-Fi events into it. No ESP-IDF, socket,
+timer or FreeRTOS calls happen in the core - adapters feed events plus a
+monotonic millisecond clock and execute the returned actions in order.
+
+- **States** IDLE -> CONNECTING -> (BACKOFF) -> CONNECTED ->
+  CLIENT_ACTIVE. START from IDLE emits WIFI_CONNECT immediately and is the
+  only legal start; double starts are ignored and STOP is required first.
+  STOP from any running state emits the matching stop actions (LISTEN_STOP
+  only when listening or active) and returns to IDLE.
+- **Backoff** starts after the first failure: the wait doubles per
+  consecutive failure up to the cap and resets on a successful
+  association. BACKOFF_TICK events with a clock before the deadline are
+  ignored; at or after it a new WIFI_CONNECT is emitted. Wi-Fi loss while a
+  client is active also emits LINK_ABORT + LINK_LIVE_STOP (the Zynq session
+  would otherwise run unseen) plus LISTEN_STOP.
+- **Single-client rule**: CLIENT_CONNECTED is accepted only in CONNECTED
+  (silent state change); otherwise CLIENT_REJECT is emitted and counted, so
+  a second connection never displaces the relayed client.
+- **Actions are executed in order**: a client disconnect produces exactly
+  `[LINK_ABORT, LINK_LIVE_STOP]` so the Zynq sees the abort before the live
+  stop. Counters (attempts/successes, accepted/rejected clients,
+  disconnects) feed UiTask; nothing here validates real Wi-Fi association
+  timing, lwIP behavior or mDNS - P5.5/P8 target gates.
+
 ## Cache, MMU and Buffer Contract
 
 The initial payload pool, burst capture buffer and SG descriptors occupy a

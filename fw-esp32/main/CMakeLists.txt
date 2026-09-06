@@ -1,1 +1,1 @@
-idf_component_register(SRCS "main.c" INCLUDE_DIRS "." REQUIRES la_link)
+idf_component_register(SRCS "main.c" INCLUDE_DIRS "." REQUIRES la_link la_net)

@@ -61,6 +61,15 @@ target_include_directories(la_esp32_mocks_relay PRIVATE
   fw-esp32/components/la_link/include
 )
 
+add_executable(la_esp32_mocks_net
+  tests/native/esp32_net_host_tests.c
+  fw-esp32/components/la_net/src/la_net_policy.c
+)
+target_link_libraries(la_esp32_mocks_net PRIVATE la_native)
+target_include_directories(la_esp32_mocks_net PRIVATE
+  fw-esp32/components/la_net/include
+)
+
 add_executable(la_native_regs
   tests/native/regs_host_tests.c
   fw-zynq/app/src/drivers/la_regs_drv.c
@@ -118,6 +127,7 @@ enable_testing()
 add_test(NAME la_native_tests COMMAND la_native_tests)
 add_test(NAME la_esp32_mocks COMMAND la_esp32_mocks)
 add_test(NAME la_esp32_mocks_relay COMMAND la_esp32_mocks_relay)
+add_test(NAME la_esp32_mocks_net COMMAND la_esp32_mocks_net)
 add_test(NAME la_native_regs COMMAND la_native_regs)
 add_test(NAME la_native_txwin COMMAND la_native_txwin)
 add_test(NAME la_native_acq COMMAND la_native_acq)
