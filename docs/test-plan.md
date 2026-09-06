@@ -69,14 +69,55 @@ bench checks must remain explicitly marked `[HUMAN]` until observed.
   is a follow-up that rides on the P4.10 host/HIL path instead.
 - The `la_top` raw-burst drain can carry up to one pipeline-boundary word
   beyond the K+POST target; the integration test asserts bounded counts plus
-  exact stream properties. The drain-boundary accounting should be closed
-  with a focused wave-level check before P3 bitstream bring-up.
+  exact stream properties. The drain-boundary accounting remains open and is
+  to be closed with a wave-level check at the P4.10 host/HIL bring-up, where
+  the DMA byte count can be compared against the reconstruction.
 - Questa Altera FSE quirks worked around: `default_nettype none` with ANSI
   ports fails to compile; task/function default arguments are unsupported;
   local declarations inside `always_comb` can break parsing. Follow the
   patterns used in the passing sources.
 - Simulation is not timing closure: P3 synthesis, DRC and timing still gate
   implementation.
+
+## P3 Acceptance Matrix
+
+| Requirement | Check | Evidence |
+|---|---|---|
+| Block design builds on the pinned board part | `python tools/run.py bit` | `build/reports/bit.json` PASS; `validate_bd_design` clean; PS7 board preset applied from `fpga/board_files/zybo-z7-10/A.0/preset.xml` (DDR, console UART1 on MIO) + UART0 EMIO full RTS/CTS on JD, FCLK_CLK0 100 MHz, IRQ_F2P, 64-bit S_AXI_HP0; `la_top` RTL module reference; `axi_dma` S2MM-only with SG and 26-bit buffer length |
+| Address map and fabric wiring | validated BD + address prints in the bit log | la_top regs 0x4000_0000/64K, DMA regs 0x4040_0000/64K (GP0); DMA S2MM and SG both map the full DDR low 1G range through S_AXI_HP0 |
+| Bitstream and XSA artifacts | `python tools/run.py bit` | `build/release/logic_analyzer.bit` and `build/release/logic_analyzer.xsa` (`write_hw_platform -fixed -include_bit`) |
+| P3.2 constraints | XDC review | JC CH0-7, JE PATGEN0-7 and JD UART0 EMIO pads pinned per `part0_pins.xml` (LVCMOS33); async `ch_in` exception to the `la_input_sync` stage documented with `set_false_path` + `async_reg` review |
+| Timing closure | `build/release/timing_summary.rpt` | Zero failing endpoints; "All user specified timing constraints are met"; WNS +0.278 ns at 100 MHz |
+| Utilization recorded | `build/release/utilization.rpt` | 33.5 % LUT, 24.2 % FF, 60.0 % BRAM tiles; table in `docs/architecture.md` |
+| Implementation DRC | `build/release/drc.rpt` | No errors; stock REQP-181 advisory inside the Xilinx AXI DMA IP only |
+| P2 regression after the BRAM fabricability rework | `lint` then `sim` sequentially | 12/12 testcases PASS with the synchronous-read ring/FIFO and the enable-latched patgen periods |
+
+### P3 Caveats (recorded, not silent)
+
+- This Vivado 2026.1 install serves no `axi_interconnect` IP definition
+  (catalog probe; the on-disk `axi_interconnect_v2_1` files are excluded
+  from the served catalog). The plan's interconnect requirement is met with
+  two SmartConnect fabrics; endpoint data widths are explicit (GP0 32-bit
+  AXI4-Lite fan-out, S2MM 64-bit, SG 32-bit, HP0 64-bit). The remaining
+  SmartConnect auto-configuration warnings (BD 41-3281) were reviewed and
+  are expected in this topology.
+- The ps7 EMIO UART0 pins are grouped by the PS7 core into an inferred
+  `UART_0` interface; `build.tcl` connects the scalar pads and the BD
+  override warnings (BD 41-1306) are expected: `build.tcl` is the source of
+  truth and the BD is never regenerated from `writ_bd_tcl`.
+- The board preset carries negative DDR DQS-to-CLK skew values, which Vivado
+  2026.1 flags as CRITICAL WARNING PSU-1..4. The values come from the pinned
+  Digilent preset unchanged; DDR behavior still requires a PS boot check on
+  hardware (P4/P10), so the warnings are recorded, not silenced.
+- `la_top.srst` is the active-high inversion of the synchronized
+  `proc_sys_reset` peripheral reset (release synchronized, assert coincides
+  with the PS reset).
+- `IRQ_F2P` is a single fabric input fed by both `la_top.irq_o` and
+  `axi_dma.s2mm_introut` (xlconcat); P4 software must distinguish the
+  sources by status reads, and the DMA interrupt alone cannot be masked in
+  the GIC.
+- Simulation is not silicon: DDR training, EMIO UART behavior, DMA coherency
+  and pad electricals still gate on hardware runs ([HUMAN] P3.3/P4/P10).
 
 Native tests are functional agreement checks. They do not establish target
 FreeRTOS task timing, A9 decoder throughput, DMA descriptor coherency, UART
