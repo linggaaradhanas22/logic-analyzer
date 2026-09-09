@@ -19,7 +19,20 @@ set devices [get_hw_devices -quiet]
 if {[llength $devices] == 0} {
   error "program blocked: no hardware device found"
 }
-set device [lindex $devices 0]
+# Zynq chains expose the ARM DAP (arm_dap_0) before the PL part; it is not
+# programmable, so select the first device whose part looks like the FPGA.
+set device ""
+foreach d $devices {
+  set part [get_property PART $d]
+  if {[string match {xc7*} $part]} {
+    set device $d
+    puts "Selected programmable device $d ($part)"
+    break
+  }
+}
+if {$device eq ""} {
+  error "program blocked: no programmable (xc7*) device in [join $devices {, }]"
+}
 set_property PROGRAM.FILE $bitstream $device
 program_hw_devices $device
 puts "Programming completed; verify the board LED and console with the human operator."
