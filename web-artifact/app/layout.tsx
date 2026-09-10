@@ -6,8 +6,8 @@ const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Inside the RTOS Logic Analyzer',
-  description: 'Follow a digital signal through the FPGA, FreeRTOS, ESP32 and host tools of an eight-channel logic analyzer.',
+  title: 'Capture digital signals | RTOS Logic Analyzer',
+  description: 'Understand how a Zybo Z7-10, ESP32 gateway and Python host tool capture digital signals, with bench evidence and open limits clearly marked.',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
