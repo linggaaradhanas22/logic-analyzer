@@ -43,10 +43,10 @@
 #define LA_ACK_Q_DEPTH 32u
 #define LA_TX_FRAME_PAYLOAD 64u
 
-#define LA_STACK_ACQ 512u
-#define LA_STACK_CMD 512u
-#define LA_STACK_TX 512u
-#define LA_STACK_STATUS 256u
+#define LA_STACK_ACQ 1024u
+#define LA_STACK_CMD 1024u
+#define LA_STACK_TX 1024u
+#define LA_STACK_STATUS 512u
 
 #define LA_PRIO_ACQ 6u
 #define LA_PRIO_CMD 5u

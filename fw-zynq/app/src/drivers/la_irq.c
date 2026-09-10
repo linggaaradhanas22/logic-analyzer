@@ -57,6 +57,29 @@ static void la_dma_irq_handler(void *reference)
     portYIELD_FROM_ISR(woken);
 }
 
+int la_irq_connect(uint32_t encoded_id, void (*handler)(void *), void *reference,
+                   uintptr_t controller, uint8_t priority)
+{
+    static int controller_ready = 0;
+
+    if (!controller_ready) {
+        /* Sets the wrapper's ScuGicInitialized flag, which is what actually
+         * lets XConnectToInterruptCntrl() connect handlers in the SDT BSP. */
+        if (XSetupInterruptSystem(reference, (void *)handler, encoded_id,
+                                  controller, (u16)priority) != XST_SUCCESS) {
+            return -1;
+        }
+        controller_ready = 1;
+        return 0;
+    }
+    if (xPortInstallInterruptHandler((uint16_t)encoded_id,
+                                     (XInterruptHandler)handler,
+                                     reference) != pdPASS) {
+        return -1;
+    }
+    return 0;
+}
+
 int la_irq_init(la_irq_t *irq, const la_regs_dev_t *regs, la_dma_t *dma,
                 TaskHandle_t acq_task)
 {
@@ -85,10 +108,14 @@ int la_irq_init(la_irq_t *irq, const la_regs_dev_t *regs, la_dma_t *dma,
     la_irq_stats_init(&irq->wake_stats,
                       (uint32_t)(COUNTS_PER_SECOND / 1000000u));
 
-    if (xPortInstallInterruptHandler(LA_PL_INTR_ID, la_pl_isr, irq) != pdPASS) {
+    if (la_irq_connect(LA_PL_INTR_ID, la_pl_isr, irq,
+                       (uintptr_t)config->IntrParent,
+                       XINTERRUPT_DEFAULT_PRIORITY) != 0) {
         return -1;
     }
-    if (xPortInstallInterruptHandler(dma_intr_id, la_dma_irq_handler, irq) != pdPASS) {
+    if (la_irq_connect(dma_intr_id, la_dma_irq_handler, irq,
+                       (uintptr_t)config->IntrParent,
+                       XINTERRUPT_DEFAULT_PRIORITY) != 0) {
         return -1;
     }
     /* The port installs handlers without touching the GIC priority; the

@@ -11,17 +11,31 @@ The Zynq application runs FreeRTOS 10.x on CPU0 with a 1 kHz tick and static
 allocation. Priorities are relative, with a larger number meaning more urgent.
 
 | Task | Priority | Stack | Waits on | Owned work |
-|---|---:|---:|---|---|
-| `AcqTask` | 6 | 2 KiB | DMA/PL notifications, `ctrl_q` | Sole owner of ordinary SG descriptors, DMA state, finite burst chains and live segment publication/recycling |
+|---|---|---:|---|---|
+| `AcqTask` | 6 | 4 KiB | DMA/PL notifications, `ctrl_q` | Sole owner of ordinary SG descriptors, DMA state, finite burst chains and live segment publication/recycling |
 | `DecodeUartTask` | 5 | 3 KiB | `seg_q[UART]` | Decode referenced segments, allocate static event blocks, publish events and release its segment reference |
 | `DecodeSpiTask` | 5 | 3 KiB | `seg_q[SPI]` | Same ownership contract for SPI |
 | `DecodeI2cTask` | 5 | 3 KiB | `seg_q[I2C]` | Same ownership contract for I2C |
-| `CmdTask` | 5 | 2 KiB | 8 KiB RX StreamBuffer | Parse, validate and dispatch commands; never touches DMA payloads |
-| `TxTask` | 4 | 2 KiB | `ev_q`, `tx_q`, control notifications | Pack event/status/data frames, flush at 2 ms, release event blocks and write the single-producer TX StreamBuffer |
-| `StatusTask` | 1 | 1 KiB | `vTaskDelay(500 ms)` | Stack watermarks, runtime statistics, counters, watchdog and heartbeat LED |
+| `CmdTask` | 5 | 4 KiB | 8 KiB RX StreamBuffer | Parse, validate and dispatch commands; never touches DMA payloads |
+| `TxTask` | 4 | 4 KiB | `ev_q`, `tx_q`, control notifications | Pack event/status/data frames, flush at 2 ms, release event blocks and write the single-producer TX StreamBuffer |
+| `StatusTask` | 1 | 2 KiB | `vTaskDelay(500 ms)` | Stack watermarks, runtime statistics, counters, watchdog and heartbeat LED |
 
 `Idle` maintains the idle counter. Stack overflow and assertion hooks record a
-LOG event and halt rather than continuing with corrupted ownership.
+LOG event and halt rather than continuing with corrupted ownership. The ARM_CA9
+port has no dedicated ISR stack: every handler runs on the interrupted task's
+stack, so the idle (2 KiB) and timer (2 KiB) tasks are also sized for the
+UART/DMA handler worst case. The P4/P5 bench raised the original 2/2/2/1 KiB
+sizes after a capture-time overflow.
+
+**Interrupt dispatch (SDT BSP).** The 2026.1 SDT BSP's
+`XConnectToInterruptCntrl()` silently skips every handler connection until
+`XSetupInterruptSystem()` sets its internal `ScuGicInitialized` flag. The
+FreeRTOS CA9 port initialises the GIC with `XConfigInterruptCntrl()` and never
+sets that flag, so `xPortInstallInterruptHandler()` returns success while every
+vector stays `StubHandler`. The first connection in `la_irq_connect()` therefore
+goes through `XSetupInterruptSystem()` (which sets the flag); later connections
+use the port API. Without this workaround the first asserted level interrupt
+(UART TXEMPTY) never clears and the CPU is starved inside `FreeRTOS_IRQ_Handler`.
 
 ## ESP32 Tasks
 
@@ -320,6 +334,18 @@ and counters.
   touching the configuration. None of this validates UART RTS/CTS, ring
   scheduling or Wi-Fi timing - those remain P5.5/P8 target gates.
 
+The P5.2 adapter layer (`la_link_uart.c`, `la_link_tasks.c`, `la_link.h`)
+implements this on the confirmed classic-ESP32 board: UART2 at 921600 8N1 with
+hardware RTS/CTS, a 16 KiB RX driver buffer, ~64-byte RX FIFO threshold and a
+20-entry event queue; LinkRxTask (core 1, prio 20) parses with `la_proto` and
+re-encodes accepted frames verbatim into a static 32 KiB NOSPLIT `link_to_net`
+ring, mirroring `EVT_DECODED` into an 8 KiB live ring (the P10 consumer is
+still open, so a full ring is counted in `mirror_dropped`); LinkTxTask (core 1,
+prio 18) drains a static 16 KiB NOSPLIT `net_to_link` ring to the UART with a
+bounded, watchdog-safe wait for TX room. NetServerTask is the only producer of
+`net_to_link`, so the single-producer rule holds. The adapters are compiled by
+the IDF build only; the policy core stays host-tested.
+
 ## ESP32 network session policy core (P5.3)
 
 `la_net_policy.{h,c}` (in the `la_net` IDF component; pure C, compiled by
@@ -351,6 +377,20 @@ monotonic millisecond clock and execute the returned actions in order.
   stop. Counters (attempts/successes, accepted/rejected clients,
   disconnects) feed UiTask; nothing here validates real Wi-Fi association
   timing, lwIP behavior or mDNS - P5.5/P8 target gates.
+
+The P5.3 adapter layer (`net_wifi.c`, `net_server.c`, `net_mdns.c`) drives the
+policy from the Wi-Fi event task (WIFI_UP on `IP_EVENT_STA_GOT_IP`, WIFI_LOST
+on `WIFI_EVENT_STA_DISCONNECTED`) through a static event queue into
+NetServerTask (core 0, prio 12), which owns the policy, a 100 ms `select()`
+loop, the single non-blocking client socket and the host-stream `la_proto`
+parser. LISTEN_STOP closes the listener and any client; a lost client or Wi-Fi
+loss executes the ordered LINK_ABORT/LINK_LIVE_STOP actions by encoding control
+frames into the link TX ring. Host frames are re-encoded verbatim into the link
+ring with TCP backpressure (the socket is not read while the ring is blocked).
+The Zynq->host ring is drained and counted while no client is attached so a
+later session never inherits stale frames. mDNS (`la-esp32.local`,
+`_la-analyzer._tcp` on :5555) comes from the pinned `espressif/mdns` managed
+component (1.12.0 in `fw-esp32/dependencies.lock`).
 
 ## Cache, MMU and Buffer Contract
 

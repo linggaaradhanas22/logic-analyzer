@@ -114,9 +114,9 @@ int la_link_uart_init(la_link_uart_t *link, uintptr_t base, uint32_t baud,
     XUartPs_WriteReg(config->BaseAddress, XUARTPS_MODEMCR_OFFSET,
                      XUARTPS_MODEMCR_FCM);
 
-    if (xPortInstallInterruptHandler(
-            config->IntrId, (XInterruptHandler)XUartPs_InterruptHandler,
-            &link->uart) != pdPASS) {
+    if (la_irq_connect(config->IntrId, (void (*)(void *))XUartPs_InterruptHandler,
+                       &link->uart, config->IntrParent,
+                       XINTERRUPT_DEFAULT_PRIORITY) != 0) {
         return -5;
     }
     XSetPriorityTriggerType(config->IntrId, XINTERRUPT_DEFAULT_PRIORITY,

@@ -1,0 +1,17 @@
+menu "Logic analyzer gateway"
+
+    config LA_WIFI_SSID
+        string "Wi-Fi SSID"
+        default ""
+        help
+            Station SSID the gateway associates with. Leave empty only for a
+            link-only bring-up run. The value is stored in the generated,
+            git-ignored build/esp32/sdkconfig, never in tracked sources.
+
+    config LA_WIFI_PASSWORD
+        string "Wi-Fi password"
+        default ""
+        help
+            Station password. Empty selects an open network.
+
+endmenu

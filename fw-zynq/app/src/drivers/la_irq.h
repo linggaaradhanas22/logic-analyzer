@@ -60,6 +60,19 @@ typedef struct la_irq {
 int la_irq_init(la_irq_t *irq, const la_regs_dev_t *regs, la_dma_t *dma,
                 TaskHandle_t acq_task);
 
+/* Connects one GIC handler through the FreeRTOS port. The SDT BSP's
+ * XConnectToInterruptCntrl() silently skips every connection until
+ * XSetupInterruptSystem() has set its internal ScuGicInitialized flag, and the
+ * port's own initialisation path (XConfigInterruptCntrl) never does. Without
+ * this workaround every handler stays StubHandler, the first asserted level
+ * interrupt (e.g. UART TXEMPTY) never clears and the CPU is starved in the IRQ
+ * vector. The first call in the image therefore goes through
+ * XSetupInterruptSystem() (which also sets the priority/trigger); later calls
+ * use xPortInstallInterruptHandler(). Both leave the line disabled, so
+ * vPortEnableInterrupt() must follow. Returns 0 or -1. */
+int la_irq_connect(uint32_t encoded_id, void (*handler)(void *), void *reference,
+                   uintptr_t controller, uint8_t priority);
+
 /* Records the ISR-exit-to-task wake latency for the notification that woke
  * AcqTask. Call once per AcqTask wake. */
 void la_irq_note_task_wake(la_irq_t *irq);

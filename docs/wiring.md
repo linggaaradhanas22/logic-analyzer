@@ -33,22 +33,28 @@ connect JC or JE to a 5 V source without an appropriate level shifter.
 ## Zynq to ESP32 UART
 
 The MVP link is PS UART0 through EMIO on JD at 921600 baud initially, with
-RTS/CTS enabled. Direction is named from the ESP32 perspective:
+RTS/CTS enabled. Direction is named from the ESP32 perspective. The confirmed
+gateway module is a classic ESP32 (DOIT ESP32 DevKit V1, ESP32-WROOM-32,
+CP2102 USB-UART, 4 MB flash, no PSRAM); the approved pin map keeps the JD
+ribbon and breadboard wiring on the right-hand header row:
 
 | JD signal | Zynq UART0 EMIO | ESP32 connection | Meaning |
 |---|---|---|---|
-| JD-1 | TX | RX | Zynq data to ESP32 |
-| JD-2 | RX | TX | ESP32 data to Zynq |
-| JD-3 | RTS | CTS | Zynq may send when ESP32 permits |
-| JD-4 | CTS | RTS | Zynq receive permission |
-| JD ground | signal ground | ESP32 ground | common reference |
+| JD-1 | TX | GPIO16 RX | Zynq data to ESP32 |
+| JD-2 | RX | GPIO17 TX | ESP32 data to Zynq |
+| JD-3 | RTS | GPIO21 CTS | Zynq may send when ESP32 permits |
+| JD-4 | CTS | GPIO22 RTS | Zynq receive permission |
+| JD-5/11 ground | signal ground | ESP32 GND | common reference |
 
-The provisional classic-ESP32 example is GPIO16=RX, GPIO17=TX, GPIO14=CTS and
-GPIO15=RTS. These numbers are not approved pin assignments: the exact module,
-PSRAM use, boot strapping, USB-UART wiring and schematic must be confirmed
-before firmware or a cable is connected. JD-7 through JD-10 are reserved for
-the future SPI link and a separate verified data-ready signal is required for
-P9.
+GPIO16/17 are the UART2 default pins; GPIO21/22 replace the UART2 default
+RTS/CTS (8/7) to stay on one side. The earlier GPIO14/15 example is not used:
+GPIO15 is a boot-strapping pin. `fw-esp32/components/la_board/include/la_board.h`
+is the single source for this mapping and the ESP-IDF build compiles it.
+
+The ESP32 is powered from its own USB; do not connect the JD power pins. The
+ESP32 USB console (UART0 through the CP2102, `COMx`) is for logs only. JD-7
+through JD-10 remain reserved for the P9 SPI link and a separate verified
+data-ready signal is required for P9.
 
 The Zybo FTDI console UART1 is for logs and is not the analyzer data endpoint.
 Use a separate Windows USB-UART adapter for direct UART0 bring-up, with its
@@ -62,5 +68,4 @@ one USB serial device is present.
 - Keep acquisition leads short; inspect idle levels before enabling a patgen output.
 - JP5 is JTAG for development and SD for release. Power-cycle after changing it.
 - `[HUMAN]` Confirm the board revision, header pin numbering and ground pin from the Zybo schematic.
-- `[HUMAN]` Confirm the exact ESP32 module and safe GPIO matrix before selecting an ESP-IDF target.
 - `[HUMAN]` Verify continuity, common ground, RTS/CTS direction, 3.3 V levels and no 5 V exposure before `program`, `flash-esp` or HIL.

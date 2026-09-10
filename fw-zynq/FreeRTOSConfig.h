@@ -20,7 +20,14 @@
  * heap remains unused by policy. */
 #define configSUPPORT_DYNAMIC_ALLOCATION   1
 #define configUSE_TIMERS                   1
-#define configTIMER_TASK_STACK_DEPTH       (configMINIMAL_STACK_SIZE * 2)
+/* The ARM_CA9 port runs every ISR on the interrupted task's stack (there is
+ * no dedicated ISR stack), so the idle and timer tasks must also cover the
+ * UART/DMA handler worst case. Raised after a capture-time overflow in the
+ * P4/P5 bench session. */
+#undef configMINIMAL_STACK_SIZE
+#define configMINIMAL_STACK_SIZE           (512U)
+#undef configTIMER_TASK_STACK_DEPTH
+#define configTIMER_TASK_STACK_DEPTH       (512U)
 #define configUSE_TRACE_FACILITY           1
 /* configUSE_STATS_FORMATTING_FUNCTIONS is off until the P8 statistics
  * phase reintroduces vTaskList-style reporting; run-time statistics need a

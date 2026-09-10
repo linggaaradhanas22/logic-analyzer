@@ -1,4 +1,26 @@
+# P5.1 pinned gateway configuration. Credentials are never stored here; set
+# them through `idf.py -B build/esp32 menuconfig` into the ignored sdkconfig.
+
+CONFIG_IDF_TARGET="esp32"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# 1 kHz FreeRTOS tick (docs/plan.md P1.6).
 CONFIG_FREERTOS_HZ=1000
+
+# Runtime statistics for the P5.4 UiTask / P8 measurements.
+CONFIG_FREERTOS_USE_TRACE_FACILITY=y
+CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
+CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
+
+# Task watchdog: LinkRx, LinkTx, NetServer and UiTask subscribe themselves.
 CONFIG_ESP_TASK_WDT_EN=y
 CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
-# UART pins and the exact target are selected after the ESP32 module is confirmed.
+
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=4096
+
+# lwIP windows for the TCP relay; re-measure in P8 before claiming throughput.
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=16384
+CONFIG_LWIP_TCP_WND_DEFAULT=16384
+
+CONFIG_MDNS_MAX_SERVICES=4

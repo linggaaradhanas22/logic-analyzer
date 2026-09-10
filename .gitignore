@@ -6,6 +6,9 @@
 # Generated workspaces, captures, reports and release artifacts.
 build/
 
+# ESP-IDF component-manager downloads; fw-esp32/dependencies.lock is tracked.
+fw-esp32/managed_components/
+
 # Python and native build by-products.
 __pycache__/
 .pytest_cache/
