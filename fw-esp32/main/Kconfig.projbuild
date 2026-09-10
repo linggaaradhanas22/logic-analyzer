@@ -14,4 +14,12 @@ menu "Logic analyzer gateway"
         help
             Station password. Empty selects an open network.
 
+    config LA_LINK_BAUD
+        int "UART2 analyzer link baud rate"
+        default 921600
+        help
+            Link rate to the Zynq analyzer. P5.5 runs the loopback gate at
+            921600 first and then at 2000000; the value lives in the generated,
+            git-ignored build/esp32/sdkconfig.
+
 endmenu

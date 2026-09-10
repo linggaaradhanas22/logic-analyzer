@@ -1,6 +1,8 @@
 #ifndef LA_BOARD_H
 #define LA_BOARD_H
 
+#include "sdkconfig.h"
+
 /*
  * P5.1 confirmed gateway board: DOIT ESP32 DevKit V1 (classic ESP32-WROOM-32,
  * dual core, CP2102 USB-UART, 4 MB flash, no PSRAM).
@@ -26,8 +28,13 @@
 #define LA_BOARD_LINK_RTS_GPIO 22
 #define LA_BOARD_LINK_CTS_GPIO 21
 
-/* Initial link rate; the P5.5 loopback gate then re-runs at 2 Mbps. */
+/* Link rate; the P5.5 loopback gate runs 921600 first and then rebuilds at
+ * 2 Mbps through the LA_LINK_BAUD Kconfig option (sdkconfig, never committed). */
+#ifdef CONFIG_LA_LINK_BAUD
+#define LA_BOARD_LINK_BAUD CONFIG_LA_LINK_BAUD
+#else
 #define LA_BOARD_LINK_BAUD 921600
+#endif
 
 /* Driver buffers and thresholds (P5.1: 16 KiB UART RX buffer, ~64-byte RX
  * FIFO threshold, 4 KiB TX ring so a maximum 1031-byte frame always fits). */

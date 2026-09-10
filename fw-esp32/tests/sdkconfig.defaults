@@ -1,0 +1,11 @@
+# P5.2 target Unity test app configuration: same target/tick/watchdog as the
+# gateway, without the Wi-Fi/TCP adapters.
+
+CONFIG_IDF_TARGET="esp32"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+CONFIG_FREERTOS_HZ=1000
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=4096

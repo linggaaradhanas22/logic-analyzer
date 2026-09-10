@@ -61,6 +61,29 @@ Use a separate Windows USB-UART adapter for direct UART0 bring-up, with its
 RTS/CTS signals wired as shown. Select the COM port explicitly when more than
 one USB serial device is present.
 
+### P5.5 loopback (no Zynq)
+
+To run the gateway loopback gate, remove the JD ribbon (the Zynq TX and the
+ESP32 TX would otherwise contend) and jumper the ESP32 alone:
+
+- GPIO17 (UART2 TX) <-> GPIO16 (UART2 RX)
+- GPIO22 (UART2 RTS) <-> GPIO21 (UART2 CTS)
+
+Then run `python tools/run.py test-e2e -- --target tcp://HOST:5555 --loopback
+--console COMx --loopback-bytes 10000000` (the console is the ESP32 USB port;
+without `--loopback` the gate is skipped so the Zynq E2E run stays safe). Run
+it once at the default 921600 and once after rebuilding the gateway with
+`CONFIG_LA_LINK_BAUD=2000000` in the ignored `build/esp32/sdkconfig` and
+reflashing. The `fifo_ovf=` counter on the console must stay 0.
+
+### P5.2 target Unity tests
+
+`python tools/run.py test-esp32-target` builds the standalone Unity app; with
+`-- --port COMx` it flashes, resets into run mode and captures the summary
+(`build/reports/test-esp32-target-capture.log`). It uses the UART driver's
+internal loopback, so no jumpers are needed; restore the gateway firmware with
+`python tools/run.py fw-esp32` and the usual flash flow afterwards.
+
 ## Power and Operating Rules
 
 - Keep the ESP32 on its own USB or approved 3.3 V supply and connect signal ground.
