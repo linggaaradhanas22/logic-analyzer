@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import struct
 
+import pytest
+
 from host.la_cli import protocol as p
 
 
@@ -93,6 +95,23 @@ def test_status_layout() -> None:
     assert result["min_free_stack"] == 900
     assert [d["events"] for d in result["decoders"]] == [1, 3, 5]
     assert [d["dropped_segments"] for d in result["decoders"]] == [2, 4, 6]
+
+
+def test_patgen_cfg_layout() -> None:
+    ctrl = (
+        p.PATGEN_EN_MASK
+        | (p.PATGEN_MODE_UART_115200 << p.PATGEN_MODE_SHIFT)
+        | (7 << 16)
+    )
+    payload = p.pack_patgen_cfg(ctrl)
+    assert payload == bytes([0x31, 0x00, 0x07, 0x00])
+    assert p.unpack_patgen_cfg(payload) == ctrl
+    with pytest.raises(ValueError):
+        p.pack_patgen_cfg(ctrl | 0x02)  # reserved bit
+    with pytest.raises(ValueError):
+        p.pack_patgen_cfg(p.PATGEN_EN_MASK | (6 << p.PATGEN_MODE_SHIFT))
+    with pytest.raises(p.FrameError):
+        p.unpack_patgen_cfg(b"\x00\x00\x00")
 
 
 def test_data_begin_and_end_layout() -> None:

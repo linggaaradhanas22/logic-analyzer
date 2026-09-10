@@ -122,6 +122,7 @@ int la_proto_message_type_valid(uint8_t type)
     case LA_PROTO_DECODER_CFG:
     case LA_PROTO_LIVE_START:
     case LA_PROTO_LIVE_STOP:
+    case LA_PROTO_PATGEN_CFG:
     case LA_PROTO_STATUS:
     case LA_PROTO_EVT_TRIGGERED:
     case LA_PROTO_EVT_DECODED:
@@ -326,6 +327,39 @@ int la_proto_unpack_decoder_config(la_proto_decoder_config_t *config,
         break;
     }
     return la_proto_validate_decoder_config(config);
+}
+
+size_t la_proto_pack_patgen_cfg(uint32_t patgen_ctrl,
+                                uint8_t *output,
+                                size_t output_capacity)
+{
+    if (output == NULL || output_capacity < LA_PROTO_PATGEN_CFG_WIRE_SIZE ||
+        (patgen_ctrl & ~LA_REG_PATGEN_CTRL_ALLOWED_MASK) != 0u ||
+        (patgen_ctrl & LA_REG_PATGEN_CTRL_MODE_MASK) >>
+                LA_REG_PATGEN_CTRL_MODE_LSB > 5u) {
+        return 0u;
+    }
+    put_u32_le(&output[0], patgen_ctrl);
+    return LA_PROTO_PATGEN_CFG_WIRE_SIZE;
+}
+
+int la_proto_unpack_patgen_cfg(uint32_t *patgen_ctrl,
+                               const uint8_t *input,
+                               size_t input_length)
+{
+    uint32_t value;
+
+    if (patgen_ctrl == NULL || input == NULL ||
+        input_length != LA_PROTO_PATGEN_CFG_WIRE_SIZE) {
+        return -1;
+    }
+    value = get_u32_le(input);
+    if ((value & ~LA_REG_PATGEN_CTRL_ALLOWED_MASK) != 0u ||
+        ((value & LA_REG_PATGEN_CTRL_MODE_MASK) >> LA_REG_PATGEN_CTRL_MODE_LSB) > 5u) {
+        return -1;
+    }
+    *patgen_ctrl = value;
+    return 0;
 }
 
 size_t la_proto_pack_pong(const la_proto_pong_t *pong,

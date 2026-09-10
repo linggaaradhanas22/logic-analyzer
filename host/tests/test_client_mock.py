@@ -62,6 +62,16 @@ def test_status(analyzer) -> None:
     assert result["decoders"][2]["dropped_segments"] == 1
 
 
+def test_patgen_cfg_acknowledged(analyzer) -> None:
+    mock = analyzer("ping")
+    client = _client(mock.uri)
+    try:
+        ctrl = p.PATGEN_EN_MASK | (p.PATGEN_MODE_COUNTER << p.PATGEN_MODE_SHIFT)
+        client.configure_patgen(ctrl)
+    finally:
+        client.close()
+
+
 def test_capture_raw_transfer(analyzer) -> None:
     mock = analyzer("capture_raw")
     client = _client(mock.uri)

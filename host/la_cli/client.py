@@ -183,6 +183,12 @@ class AnalyzerClient:
         self._send(p.ABORT)
         self._expect_ack(p.ABORT, "ABORT", deadline)
 
+    def configure_patgen(self, patgen_ctrl: int, timeout_s: float = 5.0) -> None:
+        """Latches a PATGEN_CTRL value (additive v1 PATGEN_CFG extension)."""
+        deadline = time.monotonic() + timeout_s
+        self._send(p.PATGEN_CFG, p.pack_patgen_cfg(patgen_ctrl))
+        self._expect_ack(p.PATGEN_CFG, "PATGEN_CFG", deadline)
+
     def capture(self, config: bytes, timeout_s: float = 30.0) -> CaptureData:
         """Arms a burst capture with a wire CONFIG payload and collects the
         DATA_BEGIN/CHUNK*/END transfer, ACKing in batches of 16."""

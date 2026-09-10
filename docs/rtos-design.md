@@ -176,6 +176,116 @@ which equals the CRC of the whole capture byte range.
   by DATA_END with the empty-buffer CRC; completion is sticky (`next()`
   stays -1).
 
+## P4 target wiring (P4.5-P4.9)
+
+The P4 firmware instantiates the design above in `fw-zynq/app/src`:
+`la_app.{h,c}` owns every static object, `drivers/la_irq` and
+`drivers/la_dma` and `drivers/la_link_uart` wrap the Xilinx drivers, and
+`tasks/la_acq_task`, `tasks/la_cmd_task`, `tasks/la_tx_task` and
+`tasks/la_status_task` run the task logic. The pure cores
+(`la_acq_fsm`, `la_burst_plan`, `la_cmd_dispatch`, `la_tx_win`,
+`la_tx_pack`, `la_irq_stats`, `la_regs_drv`) carry the decisions and are
+host-tested; the task files only move bytes and hardware state.
+
+### Interrupt plumbing (P4.5)
+
+`la_irq_init` installs handlers through the FreeRTOS port
+(`xPortInstallInterruptHandler` + `vPortEnableInterrupt`, the SDT-flow
+entry points) and then raises both fabric lines to
+`XINTERRUPT_DEFAULT_PRIORITY` (0xA0): the port itself does not set a GIC
+priority, and the ISR-safe API asserts unless the priority is numerically
+below the FreeRTOS mask (`configMAX_API_CALL_INTERRUPT_PRIORITY` = 18 ->
+0x90 on the 5-bit GIC). The DMA interrupt ID comes from
+`XAxiDma_Config.IntrId[0]`; the PL interrupt has no generated ID because
+`la_top_0` is a module reference, so it is derived from the P3 xlconcat
+wiring: `la_top_0/irq_o` -> `xlconcat/In0` -> `IRQ_F2P[0]` -> GIC 61,
+encoded as `61 - 32 = 29` in the SDT numbering (the DMA on `In1` is
+`XPAR_FABRIC_AXI_DMA_0_INTR = 30`, which pins the mapping).
+
+Both ISRs are notification-only: the PL ISR reads `IRQ_STAT`, write-1-clears
+the pending bits and latches them for AcqTask; the DMA ISR acknowledges the
+channel through `la_dma_isr()`. Neither touches a queue. `la_irq_stats`
+records every ISR duration and, from AcqTask, the ISR-exit-to-task wake
+latency in XTime counts; StatusTask prints min/avg/max in microseconds. The
+v1 STATUS payload has no latency field, so latency is reported through the
+console (and LOG for host-visible cases) rather than STATUS.
+
+### DMA burst driver (P4.6)
+
+`la_burst_plan` computes the worst-case word count before an ARM is
+accepted (raw: `ceil(samples/4)`; transition: one word per sample) and
+splits it into a finite chain of at most 256 BDs of at most 64 KiB. An ARM
+whose plan exceeds the 8 MiB capture pool is rejected with NAK overflow by
+`la_cmd_dispatch` before any register is touched. `la_dma_prepare` then
+resets the channel, recreates the BD ring inside the non-cached SG pool,
+programs the exact chain with actual lengths and buffer addresses, hands it
+to hardware and starts the channel. There is no `XAxiDma_SimpleTransfer`
+call and no cyclic mode anywhere. On PL DONE, AcqTask polls
+`la_dma_collect` until the closing RXEOF beat lands (bounded by 50 ms),
+sums the actual completed lengths, and resets the channel so a partially
+filled chain can never leak into the next capture; a channel/BD error or a
+timeout aborts instead of handing a job. The PL `WORD_COUNT` is the
+authoritative word count for the TxJob.
+
+### AcqTask (P4.7)
+
+AcqTask owns `la_acq_fsm`, all `la_regs_drv` writes, `la_dma` and the
+capture buffer. On an ARM from `ctrl_q` it applies the latched CONFIG to the
+registers, programs IRQ_EN, prepares the DMA chain, writes the CTRL.ARM
+pulse and posts an ARMED notice. It wakes on the PL/DMA notifications with
+`xTaskNotifyWait` and a software timeout that mirrors the PL trigger
+timeout (a backup; the PL aborts autonomously and has no ABORT IRQ bit). On
+completion it hands exactly one `la_tx_job_t` to TxTask through `job_q` and
+sets a buffer-busy gate that only the JOB_DONE notification from TxTask
+clears; the next ARM waits for that release, so the capture buffer is never
+reused while a burst is still on the wire. Empty captures are still handed
+over (DATA_BEGIN + DATA_END with the empty CRC) so the host never times
+out. ABORT or timeout writes CTRL.ABORT, stops the DMA and posts an
+ABORTED notice.
+
+### UART0 link (P4.8)
+
+`la_link_uart` drives PS UART0 through EMIO at 921600 8N1 with automatic
+RTS/CTS (`MODEMCR.FCM`). The XUartPs interrupt handler reports RX
+data/timeout/error events; the event handler copies the received bytes into
+the RX StreamBuffer with `xStreamBufferSendFromISR` and re-arms the
+receive, counting overflow and error events. TX is a single in-flight
+`XUartPs_Send` from a staging buffer: TxTask writes frames to the TX
+StreamBuffer and calls `la_link_uart_tx_kick`; the TX-empty interrupt
+refills the staging buffer from the StreamBuffer from ISR context. The
+staging buffer is never overwritten while the UART still reads it. A
+recorded bench caveat: with nothing driving the JD header, the floating
+UART0 RX pad generates framing/overrun interrupts continuously and can
+starve the CPU; the board wiring expects the peer (USB-UART adapter or
+ESP32) to drive RX/CTS, and a pad pull-up on `uart0_rx`/`uart0_ctsn` is the
+follow-up if the design must tolerate an unconnected header.
+
+### CmdTask and TxTask wiring (P4.9)
+
+CmdTask owns the `la_proto` parser and `la_cmd_dispatch`. It drains the RX
+StreamBuffer in 5 ms slices, feeds every accepted frame through the
+dispatch core and maps outcomes onto the queues: ACK/NAK/PONG/STATUS/LOG
+and EVT_TRIGGERED go to `tx_q`; ARM/ABORT go to `ctrl_q`; inbound
+ACK/NAK routing goes to `ack_q`; PATGEN_CFG is written straight to
+PATGEN_CTRL after the ACK. Notices from AcqTask reconcile the dispatch
+view and produce EVT_TRIGGERED frames. TxTask owns `la_tx_win`,
+`la_tx_pack`, the window-slot -> chunk-index map and the single TX
+StreamBuffer writer. It starts a job from `job_q`, sends DATA_BEGIN, up to
+1016-byte DATA_CHUNKs while the 16-deep window has room, and DATA_END once
+every chunk is produced and acknowledged; a NAK rebuilds the exact chunk
+payload with `la_tx_pack_chunk_at` under the original sequence. The Zynq
+sequence space is a single atomic counter shared by CmdTask and TxTask.
+
+| Queue | Producer | Consumer | Full policy |
+|---|---|---|---|
+| `ctrl_q` (4) | CmdTask | AcqTask | Reject is impossible from the dispatch guards; a full queue logs and drops the forward |
+| `notice_q` (8) | AcqTask | CmdTask | Lifecycle notices; a full queue drops the notice and the next one reconciles the view |
+| `tx_q` (16) | CmdTask | TxTask | Blocking send with a 20 ms budget, then drop + counter |
+| `ack_q` (32) | CmdTask | TxTask | Zero-wait; a full queue drops the routing message and counts a drop |
+| `job_q` (1) | AcqTask | TxTask | One job in flight by construction (buffer-busy gate) |
+| `rx_sb` 8 KiB | UART RX ISR | CmdTask | ISR counts the unsent remainder and the parser sees the loss |
+| `tx_sb` 4 KiB | TxTask | UART TX ISR | Bounded 100 ms send; a short send abandons the burst and counts a drop |
+
 ## ESP32 link relay core (P5.2)
 
 `la_relay.{h,c}` (in the `la_link` IDF component, include/link API; pure C,

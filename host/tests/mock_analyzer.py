@@ -145,6 +145,8 @@ class MockAnalyzer:
                 elif self.scenario == "chunk_bad_crc":
                     self._stream_capture(connection, corrupt_chunk=2)
                     capture_state["ack_wanted"] = 0
+            elif message_type == p.PATGEN_CFG:
+                self._send(connection, p.ACK, p.pack_ack(p.PATGEN_CFG, sequence))
             elif message_type == p.DECODER_CFG:
                 if self.scenario == "live":
                     self._send(connection, p.ACK, p.pack_ack(p.DECODER_CFG, sequence))

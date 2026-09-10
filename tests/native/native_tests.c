@@ -313,6 +313,34 @@ static int test_typed_protocol_payloads(void)
               LA_PROTO_DATA_CHUNK_FIELD_SIZE &&
               la_proto_pack_data_chunk(0u, NULL, 1u, payload, sizeof(payload)) == 0u,
           "DATA_CHUNK data argument guards");
+
+    {
+        /* PATGEN_CFG additive extension: EN | UART mode | DIV 7. */
+        static const uint8_t expected_patgen[LA_PROTO_PATGEN_CFG_WIRE_SIZE] = {
+            0x31u, 0x00u, 0x07u, 0x00u};
+        uint32_t patgen_ctrl = UINT32_C(0x00070031);
+        uint32_t unpacked_patgen = 0u;
+
+        packed = la_proto_pack_patgen_cfg(patgen_ctrl, payload, sizeof(payload));
+        CHECK(packed == LA_PROTO_PATGEN_CFG_WIRE_SIZE, "PATGEN_CFG pack size");
+        CHECK(memcmp(payload, expected_patgen, sizeof(expected_patgen)) == 0,
+              "PATGEN_CFG little-endian byte vector");
+        CHECK(la_proto_unpack_patgen_cfg(&unpacked_patgen, payload, packed) == 0 &&
+                  unpacked_patgen == patgen_ctrl,
+              "PATGEN_CFG round trip");
+        CHECK(la_proto_pack_patgen_cfg(patgen_ctrl | UINT32_C(0x00000002),
+                                       payload, sizeof(payload)) == 0u,
+              "PATGEN_CFG reserved bits rejected");
+        CHECK(la_proto_pack_patgen_cfg(UINT32_C(0x00000061), payload,
+                                       sizeof(payload)) == 0u,
+              "PATGEN_CFG undefined mode rejected");
+        CHECK(la_proto_pack_patgen_cfg(patgen_ctrl, payload,
+                                       LA_PROTO_PATGEN_CFG_WIRE_SIZE - 1u) == 0u &&
+                  la_proto_pack_patgen_cfg(patgen_ctrl, NULL, sizeof(payload)) == 0u,
+              "PATGEN_CFG pack capacity guards");
+        CHECK(la_proto_unpack_patgen_cfg(&unpacked_patgen, payload, 3u) == -1,
+              "PATGEN_CFG unpack rejects wrong length");
+    }
     return 0;
 }
 

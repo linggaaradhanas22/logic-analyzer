@@ -493,7 +493,24 @@ def _run_target(target: str, forwarded: Sequence[str]) -> int:
     if target == "test-esp32-target":
         return _blocked(target, "ESP-IDF Unity target tests require a selected ESP32 board and a human-operated COM port")
     if target == "hil":
-        return _blocked(target, "HIL tests require authorized Zybo/ESP32 hardware, wiring and exclusive COM-port access")
+        port = os.environ.get("LA_HIL_PORT")
+        forwarded_list = list(forwarded)
+        has_port = any(
+            argument == "--port" or argument.startswith("--port=")
+            for argument in forwarded_list
+        )
+        if not port and not has_port:
+            return _blocked(
+                target,
+                "HIL tests require authorized Zybo hardware, JD wiring with "
+                "RTS/CTS and exclusive COM-port access; set LA_HIL_PORT=COMx "
+                "or run `python tools/run.py hil -- --port COMx`",
+            )
+        command = [sys.executable, "-m", "pytest", "tests/hil"]
+        if port:
+            command.append(f"--port={port}")
+        command.extend(forwarded_list)
+        return _run_steps(target, [(command, PROJECT_ROOT)])
     if target == "bit":
         vivado = _tool("vivado")
         script = PROJECT_ROOT / "fpga" / "scripts" / "build.tcl"

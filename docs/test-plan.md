@@ -112,12 +112,45 @@ bench checks must remain explicitly marked `[HUMAN]` until observed.
 - `la_top.srst` is the active-high inversion of the synchronized
   `proc_sys_reset` peripheral reset (release synchronized, assert coincides
   with the PS reset).
-- `IRQ_F2P` is a single fabric input fed by both `la_top.irq_o` and
-  `axi_dma.s2mm_introut` (xlconcat); P4 software must distinguish the
-  sources by status reads, and the DMA interrupt alone cannot be masked in
-  the GIC.
+- `xlconcat_irq` fans `la_top_0/irq_o` (In0) and `axi_dma_0/s2mm_introut`
+  (In1) into `IRQ_F2P[1:0]`. The generated SDT exposes only the DMA line
+  (`XPAR_FABRIC_AXI_DMA_0_INTR = 30`, i.e. GIC 62) because module-reference
+  interrupts are not emitted; the PL line is GIC 61 and is used by the
+  firmware as the encoded ID 29. The two sources are separate GIC inputs,
+  not one shared line (corrected from the earlier caveat after reading the
+  XSA `system.hwh`: `NUM_PORTS = 2`, `dout_width = 2`, `IRQ_F2P` `[1:0]`).
 - Simulation is not silicon: DDR training, EMIO UART behavior, DMA coherency
   and pad electricals still gate on hardware runs ([HUMAN] P3.3/P4/P10).
+
+## P4 Acceptance Matrix
+
+| Requirement | Check | Evidence |
+|---|---|---|
+| P4.1 platform/app from the XSA | `python tools/run.py fw-zynq` | PASS 2026-09-10: Vitis 2026.1 built the `lap`/`fr` platform and `la_app.elf` (text 139084 / data 3656 / bss 123984) from 32 imported sources; report `build/reports/fw-zynq.json` |
+| P4.2 RTOS boot and soak | bench console + 10 min no assert | Boot banner and four tasks verified on the board; 10-minute soak result recorded in `docs/status.md`. The console is UART1 (COM6); link interrupts were disabled for the soak because the JD header is unconnected |
+| P4.3 MMU/linker | host `la_native_mem` + link ASSERT + boot programming | PASS locally (geometry branches and NC section programming); on-target DMA write + CPU readback remains unverified until a capture runs |
+| P4.4 register driver selftest | bench console | PASS on target: `LA P4.4 register selftest: OK (ID 0x4C410002)` through the AXI fabric |
+| P4.5 IRQ plumbing | compile + bench boot | Handlers installed with 0xA0 GIC priority; PL ID 29 derived from the xlconcat wiring. No PL/DMA interrupt has fired on bench yet (requires a capture) |
+| P4.6 DMA burst driver | compile + host plan tests | Finite SG chain logic host-tested (`la_native_plan`); multi-BD capture, short tail, error/reset and abort on target remain unverified |
+| P4.7/P4.9 task wiring | `test-native`, `test-host`, `fw-zynq` | Cores host-tested; CmdTask/TxTask/AcqTask compile and run on target; on-wire burst remains unverified |
+| P4.8 UART0 link | compile | Driver compiled and the EMIO UART initializes at boot; no frames exchanged (blocked on the JD adapter) |
+| P4.10 serial HIL | `python tools/run.py hil -- --port COMx` | BLOCKED: requires a 3.3 V USB-UART adapter on JD-1..4 + GND; only the onboard FTDI console (COM6) is present. `tests/hil/test_zynq_serial.py` is written and collects/skips without `--port` |
+
+### P4 Caveats (recorded, not silent)
+
+- The unconnected JD header leaves UART0 RX floating; framing/overrun
+  interrupts then storm the CPU (observed on bench: `ISR=0x16F`,
+  GIC 59 permanently pending, console starved). With the peer connected
+  (USB-UART adapter or ESP32) the line is driven and the storm cannot occur.
+  If the design must tolerate an unconnected header, add pad pull-ups for
+  `uart0_rx`/`uart0_ctsn` and rebuild the bitstream.
+- The PL interrupt has no SDT-generated ID; the firmware derives GIC 61
+  (encoded 29) from the `xlconcat`/`IRQ_F2P` wiring. Re-derive it if the P3
+  block design interrupt wiring changes.
+- v1 STATUS has no latency field, so P4.5 ISR/wake latency is reported on
+  the console (and through LOG frames where host-visible).
+- DMA burst, link flow control and the HIL decode gates are bench actions;
+  they are unverified, not passing.
 
 Native tests are functional agreement checks. They do not establish target
 FreeRTOS task timing, A9 decoder throughput, DMA descriptor coherency, UART

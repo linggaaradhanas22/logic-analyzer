@@ -1,5 +1,6 @@
 #include "la_cmd_dispatch.h"
 
+#include "la_burst_plan.h"
 #include "la_regs.h"
 
 #include <string.h>
@@ -138,6 +139,17 @@ static int handle_arm(la_cmd_dispatch_t *dispatch,
         result_nak(result, LA_PROTO_ARM, sequence, LA_PROTO_ERROR_UNSUPPORTED);
         return 0;
     }
+    if (dispatch->pool_bytes != 0u) {
+        uint64_t words;
+        uint8_t encoding =
+            (dispatch->config.mode & LA_REG_MODE_ENCODING_MASK) != 0u ? 1u : 0u;
+        if (la_burst_plan_words(encoding, dispatch->config.pre_samples,
+                                dispatch->config.post_samples, &words) != 0 ||
+            words * 4u > dispatch->pool_bytes) {
+            result_nak(result, LA_PROTO_ARM, sequence, LA_PROTO_ERROR_OVERFLOW);
+            return 0;
+        }
+    }
     result_ack(result, LA_PROTO_ARM, sequence);
     result->outcome = LA_CMD_OUT_ARM;
     dispatch->view = LA_CMD_VIEW_ARMED;
@@ -164,6 +176,29 @@ static int handle_abort(la_cmd_dispatch_t *dispatch,
     result_ack(result, LA_PROTO_ABORT, sequence);
     result->outcome = LA_CMD_OUT_ABORT;
     dispatch->view = LA_CMD_VIEW_IDLE;
+    return 0;
+}
+
+static int handle_patgen(la_cmd_dispatch_t *dispatch,
+                         uint8_t sequence,
+                         const uint8_t *payload,
+                         uint16_t length,
+                         la_cmd_result_t *result)
+{
+    uint32_t ctrl;
+
+    if (length != LA_PROTO_PATGEN_CFG_WIRE_SIZE) {
+        result_nak(result, LA_PROTO_PATGEN_CFG, sequence, LA_PROTO_ERROR_BAD_LENGTH);
+        return 0;
+    }
+    if (la_proto_unpack_patgen_cfg(&ctrl, payload, length) != 0) {
+        result_nak(result, LA_PROTO_PATGEN_CFG, sequence, LA_PROTO_ERROR_BAD_FIELD);
+        return 0;
+    }
+    dispatch->patgen_ctrl = ctrl;
+    dispatch->patgen_valid = 1u;
+    result_ack(result, LA_PROTO_PATGEN_CFG, sequence);
+    result->outcome = LA_CMD_OUT_PATGEN;
     return 0;
 }
 
@@ -241,6 +276,9 @@ int la_cmd_dispatch_step(la_cmd_dispatch_t *dispatch,
 
     case LA_PROTO_ABORT:
         return handle_abort(dispatch, sequence, payload, length, result);
+
+    case LA_PROTO_PATGEN_CFG:
+        return handle_patgen(dispatch, sequence, payload, length, result);
 
     case LA_PROTO_GET_STATUS:
         if (length != 0u) {
@@ -331,4 +369,28 @@ const la_proto_config_t *la_cmd_dispatch_config(const la_cmd_dispatch_t *dispatc
         return NULL;
     }
     return &dispatch->config;
+}
+
+void la_cmd_dispatch_set_pool(la_cmd_dispatch_t *dispatch, uint64_t pool_bytes)
+{
+    if (dispatch == NULL) {
+        return;
+    }
+    dispatch->pool_bytes = pool_bytes;
+}
+
+int la_cmd_dispatch_patgen_valid(const la_cmd_dispatch_t *dispatch)
+{
+    if (dispatch == NULL) {
+        return 0;
+    }
+    return dispatch->patgen_valid != 0u ? 1 : 0;
+}
+
+uint32_t la_cmd_dispatch_patgen_ctrl(const la_cmd_dispatch_t *dispatch)
+{
+    if (dispatch == NULL) {
+        return 0u;
+    }
+    return dispatch->patgen_ctrl;
 }

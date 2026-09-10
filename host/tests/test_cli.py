@@ -9,10 +9,13 @@ from click.testing import CliRunner
 from host.la_cli.commands import cli
 
 
-def test_ports_no_hardware() -> None:
+def test_ports_reports_candidates_or_none() -> None:
+    # The bench machine may have a USB-UART attached (for example the Zybo
+    # FTDI console), so accept either an empty report or a candidate list.
     result = CliRunner().invoke(cli, ["ports"])
     assert result.exit_code == 0
-    assert "no USB-UART" in result.output
+    if "no USB-UART" not in result.output:
+        assert "COM" in result.output
 
 
 def test_ping_command(analyzer) -> None:

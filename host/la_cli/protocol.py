@@ -17,9 +17,18 @@ FRAME_OVERHEAD = 7
 # Message types (la_proto_message_type_t).
 PING, PONG, CONFIG, ARM, ABORT, GET_STATUS = 0x01, 0x02, 0x10, 0x11, 0x12, 0x13
 DECODER_CFG, LIVE_START, LIVE_STOP = 0x14, 0x15, 0x16
+PATGEN_CFG = 0x17
 STATUS, EVT_TRIGGERED, EVT_DECODED, EVT_OVERRUN = 0x20, 0x21, 0x22, 0x23
 DATA_BEGIN, DATA_CHUNK, DATA_END = 0x30, 0x31, 0x32
 ACK, NAK, LOG = 0x40, 0x41, 0x7F
+
+# CONFIG ctrl_flags bits (la_regs.h).
+CTRL_SELFTEST_EN = 0x08
+CTRL_STREAM = 0x10
+
+# MODE.ENCODING values.
+MODE_RAW = 0
+MODE_TXN = 1
 
 # Error codes.
 ERROR_NONE = 0
@@ -36,6 +45,20 @@ DATA_END_SIZE = 4
 ACK_SIZE = 2
 NAK_SIZE = 3
 DECODER_CFG_SIZE = 20
+PATGEN_CFG_SIZE = 4
+
+# PATGEN_CTRL field masks (la_regs.h / docs/regmap.yaml).
+PATGEN_EN_MASK = 0x00000001
+PATGEN_MODE_MASK = 0x000000F0
+PATGEN_MODE_SHIFT = 4
+PATGEN_DIV_MASK = 0xFFFF0000
+PATGEN_ALLOWED_MASK = 0xFFFF00F1
+PATGEN_MODE_COUNTER = 0
+PATGEN_MODE_WALKING_ONE = 1
+PATGEN_MODE_PRBS8 = 2
+PATGEN_MODE_UART_115200 = 3
+PATGEN_MODE_SPI_1MHZ = 4
+PATGEN_MODE_I2C_400KHZ = 5
 
 _CRC16_TABLE = None
 _CRC32_TABLE = None
@@ -159,6 +182,21 @@ def chunk_payload(data: bytes, byte_offset: int) -> bytes:
 def unpack_data_end(payload: bytes) -> int:
     if len(payload) != DATA_END_SIZE:
         raise FrameError(f"DATA_END payload length {len(payload)}")
+    return struct.unpack_from("<I", payload, 0)[0]
+
+
+def pack_patgen_cfg(patgen_ctrl: int) -> bytes:
+    """PATGEN_CFG payload: raw PATGEN_CTRL value (additive v1 extension)."""
+    if patgen_ctrl & ~PATGEN_ALLOWED_MASK:
+        raise ValueError(f"PATGEN_CTRL reserved bits set: 0x{patgen_ctrl:08X}")
+    if (patgen_ctrl & PATGEN_MODE_MASK) >> PATGEN_MODE_SHIFT > PATGEN_MODE_I2C_400KHZ:
+        raise ValueError(f"undefined patgen mode: 0x{patgen_ctrl:08X}")
+    return struct.pack("<I", patgen_ctrl)
+
+
+def unpack_patgen_cfg(payload: bytes) -> int:
+    if len(payload) != PATGEN_CFG_SIZE:
+        raise FrameError(f"PATGEN_CFG payload length {len(payload)}")
     return struct.unpack_from("<I", payload, 0)[0]
 
 

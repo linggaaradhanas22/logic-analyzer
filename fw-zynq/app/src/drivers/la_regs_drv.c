@@ -1,5 +1,7 @@
 #include "la_regs_drv.h"
 
+#include <stddef.h>
+
 void la_regs_dev_init(la_regs_dev_t *dev, uintptr_t base,
                       la_regs_read32_fn read32, la_regs_write32_fn write32)
 {

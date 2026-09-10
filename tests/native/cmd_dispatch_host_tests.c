@@ -352,6 +352,85 @@ static int test_ack_nak_routing(void)
     return 0;
 }
 
+static int test_patgen_cfg(void)
+{
+    la_cmd_dispatch_t dispatch;
+    la_cmd_result_t result;
+    uint8_t payload[LA_PROTO_PATGEN_CFG_WIRE_SIZE];
+    uint32_t ctrl = LA_REG_PATGEN_CTRL_EN_MASK |
+                    ((uint32_t)LA_REG_PATGEN_CTRL_MODE_VALUE_UART_115200
+                     << LA_REG_PATGEN_CTRL_MODE_LSB) |
+                    (UINT32_C(7) << LA_REG_PATGEN_CTRL_DIV_LSB);
+
+    la_cmd_dispatch_init(&dispatch, TEST_FW_VERSION, TEST_PL_ID);
+    CHECK(la_cmd_dispatch_patgen_valid(&dispatch) == 0, "patgen latch starts empty");
+    CHECK(la_proto_pack_patgen_cfg(ctrl, payload, sizeof(payload)) ==
+              LA_PROTO_PATGEN_CFG_WIRE_SIZE,
+          "patgen payload packs");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_PATGEN_CFG, 0x11u, payload,
+                                LA_PROTO_PATGEN_CFG_WIRE_SIZE, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_PATGEN && result.type == LA_PROTO_PATGEN_CFG &&
+              result.sequence == 0x11u,
+          "PATGEN_CFG acknowledged and flagged");
+    CHECK(la_cmd_dispatch_patgen_valid(&dispatch) == 1 &&
+              la_cmd_dispatch_patgen_ctrl(&dispatch) == ctrl,
+          "patgen latch carries the validated value");
+
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_PATGEN_CFG, 0x12u, payload, 3u, 0u,
+                                &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK && result.error == LA_PROTO_ERROR_BAD_LENGTH,
+          "PATGEN_CFG bad length NAK");
+    payload[0] = 0x02u; /* reserved mode bit: mode 0x20 is undefined */
+    payload[1] = 0x00u;
+    payload[2] = 0x00u;
+    payload[3] = 0x00u;
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_PATGEN_CFG, 0x13u, payload, 4u, 0u,
+                                &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK && result.error == LA_PROTO_ERROR_BAD_FIELD,
+          "PATGEN_CFG undefined mode NAK bad field");
+    return 0;
+}
+
+static int test_arm_pool_capacity(void)
+{
+    la_cmd_dispatch_t dispatch;
+    la_cmd_result_t result;
+    la_proto_config_t config;
+    uint8_t payload[LA_PROTO_CONFIG_WIRE_SIZE];
+
+    /* Raw mode: 16384 samples fit in 16384 bytes; the pool holds 8192. */
+    la_cmd_dispatch_init(&dispatch, TEST_FW_VERSION, TEST_PL_ID);
+    la_cmd_dispatch_set_pool(&dispatch, 8192u);
+    make_config(&config);
+    config.pre_samples = 0u;
+    config.post_samples = 16384u;
+    (void)la_proto_pack_config(&config, payload, sizeof(payload));
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_CONFIG, 0u, payload,
+                                LA_PROTO_CONFIG_WIRE_SIZE, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_ACK,
+          "oversized config still latches");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_ARM, 1u, NULL, 0u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK && result.error == LA_PROTO_ERROR_OVERFLOW,
+          "oversized ARM NAK overflow before any register access");
+    CHECK(la_cmd_dispatch_view(&dispatch) == LA_CMD_VIEW_IDLE,
+          "rejected ARM leaves the view IDLE");
+
+    /* Transition mode worst case is one word per sample: 2048 samples fit
+     * exactly in the 8192-byte pool. */
+    config.mode = LA_REG_MODE_ENCODING_MASK;
+    config.pre_samples = 0u;
+    config.post_samples = 2048u;
+    (void)la_proto_pack_config(&config, payload, sizeof(payload));
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_CONFIG, 2u, payload,
+                                LA_PROTO_CONFIG_WIRE_SIZE, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_ACK,
+          "fitting config accepted");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_ARM, 3u, NULL, 0u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_ARM,
+          "fitting ARM accepted");
+    return 0;
+}
+
 static int test_argument_guards(void)
 {
     la_cmd_dispatch_t dispatch;
@@ -373,6 +452,7 @@ int main(void)
         test_unknown_and_inbound_rejected() != 0 || test_config_arm_lifecycle() != 0 ||
         test_config_errors() != 0 || test_arm_errors() != 0 || test_abort() != 0 ||
         test_get_status() != 0 || test_p7_commands_unsupported() != 0 ||
+        test_patgen_cfg() != 0 || test_arm_pool_capacity() != 0 ||
         test_ack_nak_routing() != 0 || test_argument_guards() != 0) {
         return 1;
     }

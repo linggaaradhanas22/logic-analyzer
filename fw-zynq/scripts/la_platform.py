@@ -347,17 +347,74 @@ def create_platform_and_domain(client, root: Path, xsa: Path):
     return platform
 
 
+APP_SOURCE_GROUPS = (
+    ("fw-zynq", "app", "src"),
+    ("fw-zynq", "app", "src", "drivers"),
+    ("fw-zynq", "app", "src", "tasks"),
+    ("common", "la_proto", "src"),
+    ("common", "la_proto", "include"),
+)
+
+
+def _collect_app_files(root: Path) -> list[str]:
+    """Flat source/header list for the app component (all names unique)."""
+    files: list[str] = []
+    for group in APP_SOURCE_GROUPS:
+        directory = root.joinpath(*group)
+        if not directory.is_dir():
+            raise SystemExit(f"fw-zynq blocked: source directory missing: {directory}")
+        for entry in sorted(directory.iterdir()):
+            if entry.suffix in (".c", ".h") and entry.is_file():
+                files.append(entry.name)
+    return files
+
+
+def _patch_user_config(app_dir: Path, sources: list[str]) -> None:
+    """Deterministic USER_COMPILE_SOURCES/INCLUDE_DIRECTORIES after import.
+
+    import_files updates UserConfig.cmake itself, but the generated list
+    ordering depends on the import calls; rewriting the two blocks keeps the
+    build reproducible and independent of that behaviour. All imported
+    sources live flat in src/, so the CMake source directory is enough.
+    """
+    import re
+
+    config = app_dir / "src" / "UserConfig.cmake"
+    if not config.is_file():
+        raise SystemExit(f"fw-zynq blocked: UserConfig.cmake missing at {config}")
+    text = config.read_text(encoding="utf-8")
+    source_block = "set(USER_COMPILE_SOURCES\n" + "".join(
+        f'"{name}"\n' for name in sources if name.endswith(".c")
+    ) + ")"
+    text = re.sub(r"set\(USER_COMPILE_SOURCES.*?\)\n", source_block + "\n", text,
+                  count=1, flags=re.S)
+    text = re.sub(r'set\(USER_INCLUDE_DIRECTORIES.*?\)\n',
+                  'set(USER_INCLUDE_DIRECTORIES\n".."\n)\n', text, count=1, flags=re.S)
+    config.write_text(text, encoding="utf-8", newline="\n")
+    print(f"VITIS UserConfig sources installed: {len(sources)} files")
+
+
 def create_app_and_build(client, root: Path, platform) -> None:
     """Create the la_app application component from the repo sources."""
     xpfm = client.find_platform_in_repos(PLATFORM_NAME)
     app = client.create_app_component(
         name=APP_NAME, platform=xpfm, domain=DOMAIN_NAME
     )
-    src = root / "fw-zynq" / "app" / "src"
-    app.import_files(from_loc=str(src), files=["main.c", "la_mem_geom.c", "la_mem_geom.h"])
+    files = _collect_app_files(root)
+    for group in APP_SOURCE_GROUPS:
+        directory = root.joinpath(*group)
+        names = sorted(
+            entry.name
+            for entry in directory.iterdir()
+            if entry.suffix in (".c", ".h") and entry.is_file()
+        )
+        if names:
+            app.import_files(from_loc=str(directory), files=names,
+                             dest_dir_in_cmp="src")
+    app_dir = workspace_path(root) / APP_NAME
+    _patch_user_config(app_dir, files)
     # import_files refuses to overwrite the Vitis-generated src/lscript.ld,
     # so the P4.3 linker script (NC carve + ASSERTs) replaces it in place.
-    app_dir = workspace_path(root) / APP_NAME
     lscript = app_dir / "src" / "lscript.ld"
     if not lscript.is_file():
         raise SystemExit(f"fw-zynq blocked: generated lscript.ld missing at {lscript}")

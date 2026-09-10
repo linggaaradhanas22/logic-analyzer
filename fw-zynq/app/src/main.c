@@ -1,34 +1,39 @@
 /*
- * P4.1 hello FreeRTOS on the Zybo console UART1 (BSP stdout).
+ * P4 Zynq FreeRTOS core entry point.
  *
- * Static-allocation only (see the FreeRTOSConfig.h policy fragment). Two
- * statically created tasks: LaHello prints a banner and counts, LaProbe
- * reports its own stack high-water mark after a delay so the first bench
- * session can confirm scheduling and stack checking on the console.
- * vApplicationGetIdleTaskMemory / vApplicationGetTimerTaskMemory feed the
- * idle and timer daemon tasks; the stack-overflow and malloc-failed hooks
- * print and halt so faults are visible instead of silent.
- *
- * P4.3 boot contract: before the scheduler starts, the linker geometry is
- * checked (firmware end below the non-cached DDR window; constants in
- * fw-zynq/app/src/la_mem_geom.h and fw-zynq/lscript.ld) and every 1 MiB
- * MMU section of the window is programmed Normal Non-cacheable so the
- * capture payload and SG descriptors the DMA writes later are coherent
- * without cache maintenance.
+ * Boot contract (P4.3/P4.4): check the linker geometry, program the
+ * non-cached DDR window, run the register driver selftest through the AXI
+ * fabric, then bring up the application (la_app_init creates the static
+ * tasks, queues, stream buffers and the UART/DMA/IRQ drivers) and start the
+ * scheduler. The console stays on UART1 (BSP stdout); UART0 is the analyzer
+ * link through EMIO on JD.
  */
 
 #include "FreeRTOS.h"
-#include "la_mem_geom.h"
 #include "task.h"
+
+#include "la_app.h"
+#include "la_mem_geom.h"
+#include "la_regs.h"
+
 #include "xil_io.h"
 #include "xil_mmu.h"
 #include "xil_printf.h"
 
-#define LA_PRIORITY (tskIDLE_PRIORITY + 1)
-#define LA_PL_BASE  0x40000000u
-
 extern uint8_t __la_fw_end[];
 extern uint8_t __la_nc_base[];
+
+static la_app_t s_app;
+
+static uint32_t boot_read32(uintptr_t address)
+{
+    return Xil_In32((UINTPTR)address);
+}
+
+static void boot_write32(uintptr_t address, uint32_t value)
+{
+    Xil_Out32((UINTPTR)address, value);
+}
 
 static void la_program_noncached(void *context, uintptr_t section_base)
 {
@@ -36,64 +41,13 @@ static void la_program_noncached(void *context, uintptr_t section_base)
     Xil_SetTlbAttributes((INTPTR)section_base, NORM_NONCACHE);
 }
 
-static TaskHandle_t hello_handle;
-static StackType_t  hello_stack[configMINIMAL_STACK_SIZE];
-static StaticTask_t hello_tcb;
-
-static TaskHandle_t probe_handle;
-static StackType_t  probe_stack[configMINIMAL_STACK_SIZE];
-static StaticTask_t probe_tcb;
-
-static void la_hello_task(void *pvParameters)
-{
-    uint32_t count = 0;
-    (void)pvParameters;
-    xil_printf("LA P4.1 FreeRTOS hello on UART1\r\n");
-    for (;;) {
-        xil_printf("LA hello tick %u\r\n", (unsigned)count);
-        if ((count % 3) == 0) {
-            /* Bench probe (P3.3): SLCR reads always complete, so they stream
-             * the live PS-side clock/reset state without touching the PL. */
-            xil_printf("LA SLCR ARM_PLL 0x%08X\r\n",
-                       (unsigned)Xil_In32(0xF8000100u));
-            xil_printf("LA SLCR IO_PLL  0x%08X\r\n",
-                       (unsigned)Xil_In32(0xF8000108u));
-            xil_printf("LA SLCR ARM_CLK 0x%08X\r\n",
-                       (unsigned)Xil_In32(0xF8000120u));
-            xil_printf("LA SLCR FPGA0_CLK 0x%08X\r\n",
-                       (unsigned)Xil_In32(0xF8000170u));
-            xil_printf("LA SLCR FPGA_RST 0x%08X\r\n",
-                       (unsigned)Xil_In32(0xF8000240u));
-        }
-        count++;
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-}
-
-static void la_probe_task(void *pvParameters)
-{
-    uint32_t pl_id;
-    uint32_t pl_status;
-
-    (void)pvParameters;
-    vTaskDelay(pdMS_TO_TICKS(5000));
-    xil_printf("LA probe: reading PL registers\r\n");
-    pl_id = Xil_In32(LA_PL_BASE + 0x00u);
-    pl_status = Xil_In32(LA_PL_BASE + 0x08u);
-    xil_printf("LA probe: PL ID=0x%08X STATUS=0x%08X\r\n",
-               (unsigned)pl_id, (unsigned)pl_status);
-    xil_printf("LA probe: hello stack high-water %u/%u words\r\n",
-               (unsigned)uxTaskGetStackHighWaterMark(hello_handle),
-               (unsigned)configMINIMAL_STACK_SIZE);
-    vTaskDelete(NULL);
-}
-
 void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
                                    StackType_t **ppxIdleTaskStackBuffer,
                                    uint32_t *pulIdleTaskStackSize)
 {
     static StaticTask_t idle_tcb;
-    static StackType_t  idle_stack[configMINIMAL_STACK_SIZE];
+    static StackType_t idle_stack[configMINIMAL_STACK_SIZE];
+
     *ppxIdleTaskTCBBuffer = &idle_tcb;
     *ppxIdleTaskStackBuffer = idle_stack;
     *pulIdleTaskStackSize = configMINIMAL_STACK_SIZE;
@@ -104,7 +58,8 @@ void vApplicationGetTimerTaskMemory(StaticTask_t **ppxTimerTaskTCBBuffer,
                                     uint32_t *pulTimerTaskStackSize)
 {
     static StaticTask_t timer_tcb;
-    static StackType_t  timer_stack[configTIMER_TASK_STACK_DEPTH];
+    static StackType_t timer_stack[configTIMER_TASK_STACK_DEPTH];
+
     *ppxTimerTaskTCBBuffer = &timer_tcb;
     *ppxTimerTaskStackBuffer = timer_stack;
     *pulTimerTaskStackSize = configTIMER_TASK_STACK_DEPTH;
@@ -127,23 +82,38 @@ void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 
 int main(void)
 {
+    la_regs_dev_t regs;
+    int selftest;
+
     if (la_mem_geometry_check((uintptr_t)__la_fw_end) != LA_MEM_CHECK_OK) {
         xil_printf("LA fatal: memory geometry check failed\r\n");
         for (;;) {
         }
     }
     la_mem_apply_noncached(la_program_noncached, NULL);
-    hello_handle = xTaskCreateStatic(la_hello_task, "la_hello",
-                                     configMINIMAL_STACK_SIZE, NULL,
-                                     LA_PRIORITY, hello_stack, &hello_tcb);
-    probe_handle = xTaskCreateStatic(la_probe_task, "la_probe",
-                                     configMINIMAL_STACK_SIZE, NULL,
-                                     LA_PRIORITY + 1, probe_stack, &probe_tcb);
-    if (hello_handle == NULL || probe_handle == NULL) {
-        xil_printf("LA fatal: task creation failed\r\n");
+    xil_printf("\r\nLA P4 FreeRTOS core on UART1\r\n");
+    xil_printf("LA memory: fw end 0x%08X nc base 0x%08X\r\n",
+               (unsigned)(uintptr_t)__la_fw_end,
+               (unsigned)(uintptr_t)__la_nc_base);
+
+    la_regs_dev_init(&regs, LA_REG_BASE_ADDRESS, boot_read32, boot_write32);
+    selftest = la_regs_selftest(&regs);
+    xil_printf("LA P4.4 register selftest: %s (ID 0x%08X)\r\n",
+               la_regs_selftest_name(selftest),
+               (unsigned)la_regs_read_id(&regs));
+    if (selftest != LA_REGS_SELFTEST_OK) {
+        xil_printf("LA fatal: register selftest failed\r\n");
         for (;;) {
         }
     }
+
+    if (la_app_init(&s_app) != 0) {
+        xil_printf("LA fatal: application init failed\r\n");
+        for (;;) {
+        }
+    }
+    xil_printf("LA app ready: %u tasks, UART0 921600 RTS/CTS\r\n",
+               (unsigned)uxTaskGetNumberOfTasks());
     vTaskStartScheduler();
     for (;;) {
     }

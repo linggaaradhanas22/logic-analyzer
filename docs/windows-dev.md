@@ -86,7 +86,7 @@ python tools/run.py jtag-zynq
 python tools/run.py fw-esp32
 python tools/run.py program
 python tools/run.py flash-esp -- --port COM12
-python tools/run.py hil
+python tools/run.py hil -- --port COM12
 ```
 
 For the normal Zybo development loop, set JP5 to JTAG and power-cycle once
@@ -100,6 +100,14 @@ is only required for the final release boot gate.
 explicit prerequisite message when the required installation, XSA, board or
 bench is unavailable. A Zybo console COM port is not the UART0 analyzer data
 endpoint. Select COM ports explicitly when more than one candidate exists.
+
+The `hil` target runs `tests/hil/test_zynq_serial.py` against the analyzer
+link: PS UART0 through EMIO on the JD header, 921600 8N1 with RTS/CTS. It
+needs a separate 3.3 V USB-UART adapter wired as TX->JD-2, RX->JD-1,
+RTS->JD-4, CTS->JD-3 and GND->JD-5 or JD-11; set `LA_HIL_PORT=COMx` or pass
+`--port COMx`. Without a port the HIL tests are skipped, and the unconnected
+JD RX input floats and storms the UART0 interrupt, so do not judge the
+firmware from a link-less run.
 
 ## Troubleshooting
 

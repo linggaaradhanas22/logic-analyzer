@@ -106,11 +106,28 @@ target_include_directories(la_native_mem PRIVATE
 add_executable(la_native_cmd
   tests/native/cmd_dispatch_host_tests.c
   fw-zynq/app/src/tasks/la_cmd_dispatch.c
+  fw-zynq/app/src/tasks/la_burst_plan.c
 )
 target_link_libraries(la_native_cmd PRIVATE la_native)
 target_include_directories(la_native_cmd PRIVATE
   common/la_proto/include
   fw-zynq/app/src/tasks
+)
+
+add_executable(la_native_plan
+  tests/native/burst_plan_host_tests.c
+  fw-zynq/app/src/tasks/la_burst_plan.c
+)
+target_include_directories(la_native_plan PRIVATE
+  fw-zynq/app/src/tasks
+)
+
+add_executable(la_native_irqstats
+  tests/native/irq_stats_host_tests.c
+  fw-zynq/app/src/drivers/la_irq_stats.c
+)
+target_include_directories(la_native_irqstats PRIVATE
+  fw-zynq/app/src/drivers
 )
 
 add_executable(la_native_txpack
@@ -134,6 +151,8 @@ add_test(NAME la_native_acq COMMAND la_native_acq)
 add_test(NAME la_native_mem COMMAND la_native_mem)
 add_test(NAME la_native_cmd COMMAND la_native_cmd)
 add_test(NAME la_native_txpack COMMAND la_native_txpack)
+add_test(NAME la_native_plan COMMAND la_native_plan)
+add_test(NAME la_native_irqstats COMMAND la_native_irqstats)
 
 if(Python3_EXECUTABLE)
   add_test(NAME la_native_ctypes

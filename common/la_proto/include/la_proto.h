@@ -16,6 +16,7 @@
 #define LA_PROTO_DATA_CHUNK_MAX ((uint16_t)1016u)
 #define LA_PROTO_CONFIG_WIRE_SIZE ((uint16_t)37u)
 #define LA_PROTO_DECODER_CONFIG_WIRE_SIZE ((uint16_t)20u)
+#define LA_PROTO_PATGEN_CFG_WIRE_SIZE ((uint16_t)4u)
 #define LA_PROTO_PONG_WIRE_SIZE ((uint16_t)16u)
 #define LA_PROTO_ACK_WIRE_SIZE ((uint16_t)2u)
 #define LA_PROTO_NAK_WIRE_SIZE ((uint16_t)3u)
@@ -34,6 +35,7 @@ typedef enum la_proto_message_type {
     LA_PROTO_DECODER_CFG = 0x14,
     LA_PROTO_LIVE_START = 0x15,
     LA_PROTO_LIVE_STOP = 0x16,
+    LA_PROTO_PATGEN_CFG = 0x17,
     LA_PROTO_STATUS = 0x20,
     LA_PROTO_EVT_TRIGGERED = 0x21,
     LA_PROTO_EVT_DECODED = 0x22,
@@ -218,6 +220,17 @@ LA_PROTO_API int la_proto_unpack_decoder_config(la_proto_decoder_config_t *confi
  * packs return the wire size or zero on invalid arguments/insufficient
  * capacity; all unpacks return 0 or -1. Reserved bytes are transmitted as
  * zero and ignored on unpack. */
+/* PATGEN_CFG payload: the raw la_top PATGEN_CTRL register value. This is an
+ * additive v1 extension (type 0x17) used by the serial HIL and E2E self-test
+ * flows to select the pattern-generator mode; the burst-path CONFIG payload
+ * has no patgen field. Validation: reserved bits zero and a defined MODE. */
+LA_PROTO_API size_t la_proto_pack_patgen_cfg(uint32_t patgen_ctrl,
+                                             uint8_t *output,
+                                             size_t output_capacity);
+LA_PROTO_API int la_proto_unpack_patgen_cfg(uint32_t *patgen_ctrl,
+                                            const uint8_t *input,
+                                            size_t input_length);
+
 LA_PROTO_API size_t la_proto_pack_pong(const la_proto_pong_t *pong,
                                        uint8_t *output,
                                        size_t output_capacity);

@@ -47,6 +47,7 @@ where the receiver documents forward-compatible handling.
 | `0x14` | `DECODER_CFG` | host -> Zynq | 20-byte decoder slot configuration |
 | `0x15` | `LIVE_START` | host -> Zynq | empty |
 | `0x16` | `LIVE_STOP` | host -> Zynq | empty |
+| `0x17` | `PATGEN_CFG` | host -> Zynq | `patgen_ctrl:u32` (additive v1 extension) |
 | `0x20` | `STATUS` | Zynq -> host | status snapshot, 52 bytes in v1 |
 | `0x21` | `EVT_TRIGGERED` | Zynq -> host | `trig_index:u64` |
 | `0x22` | `EVT_DECODED` | Zynq -> host | zero or more event records |
@@ -89,6 +90,19 @@ are not accepted in CONFIG.
 The receiver validates every field before accepting ARM or LIVE_START. The
 register-map source and generated constants define the masks and reset values;
 the C packer refuses invalid values instead of silently truncating them.
+
+### PATGEN_CFG, type `0x17`
+
+An additive v1 extension used by the serial HIL and E2E self-test flows; the
+burst CONFIG payload has no pattern-generator field. The payload is exactly 4
+bytes: the raw `PATGEN_CTRL` register value (`docs/regmap.yaml`), little-endian.
+Reserved bits must be zero and `MODE` must be a defined value (0 counter, 1
+walking-1, 2 PRBS8, 3 UART 115200, 4 SPI 1 MHz, 5 I2C 400 kHz); invalid
+values are rejected with NAK bad-field. The receiver acknowledges the frame
+and latches the value immediately; the pattern generator latches mode and DIV
+at its enable edge. Peers that do not implement the type reject it with NAK
+unsupported, which is the P4 burst firmware's behaviour only if the command
+is unknown - this firmware implements it.
 
 ### DECODER_CFG, type `0x14`
 
