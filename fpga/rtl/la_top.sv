@@ -209,6 +209,7 @@ module la_top #(
   la_pretrig_ring u_ring (
     .clk(clk), .srst(int_rst),
     .run(ring_run),
+    .stream_en(stream_en),
     .in_valid(sample_valid),
     .in_sample(sample),
     .trig(trig),

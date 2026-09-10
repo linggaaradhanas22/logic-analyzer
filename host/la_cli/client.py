@@ -183,6 +183,17 @@ class AnalyzerClient:
         self._send(p.ABORT)
         self._expect_ack(p.ABORT, "ABORT", deadline)
 
+    def arm(self, config: bytes, timeout_s: float = 5.0) -> None:
+        """Sends CONFIG then ARM and waits for both ACKs without collecting a
+        burst (used by abort/timeout bench tests)."""
+        deadline = time.monotonic() + timeout_s
+        if len(config) != p.CONFIG_SIZE:
+            raise ValueError(f"CONFIG payload must be {p.CONFIG_SIZE} bytes")
+        self._send(p.CONFIG, config)
+        self._expect_ack(p.CONFIG, "CONFIG", deadline)
+        self._send(p.ARM)
+        self._expect_ack(p.ARM, "ARM", deadline)
+
     def configure_patgen(self, patgen_ctrl: int, timeout_s: float = 5.0) -> None:
         """Latches a PATGEN_CTRL value (additive v1 PATGEN_CFG extension)."""
         deadline = time.monotonic() + timeout_s

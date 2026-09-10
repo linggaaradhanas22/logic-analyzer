@@ -40,6 +40,7 @@ TARGETS = (
     "program",
     "flash-esp",
     "test-host",
+    "test-e2e",
     "hil",
     "release",
     "check-env",
@@ -236,8 +237,9 @@ def _environment(target: str | None = None) -> dict[str, str]:
     ).rstrip(os.pathsep)
     if target in {"test-native", "test-esp32-mocks", "release"}:
         _import_msvc_environment(environment)
-    if target == "fw-esp32":
+    if target in {"fw-esp32", "test-esp32-target"}:
         _import_idf_environment(environment)
+    if target == "fw-esp32":
         _set_environment_value(environment, "SDKCONFIG", str(BUILD_ROOT / "esp32" / "sdkconfig"))
     return environment
 
@@ -491,7 +493,75 @@ def _run_target(target: str, forwarded: Sequence[str]) -> int:
         command, cwd = _python_script("regress.py", arguments)
         return _run_steps(target, [(command, cwd)])
     if target == "test-esp32-target":
-        return _blocked(target, "ESP-IDF Unity target tests require a selected ESP32 board and a human-operated COM port")
+        idf = _tool("idf.py")
+        if idf is None:
+            return _blocked(
+                target,
+                "native ESP-IDF is missing; provision .deps/esp-idf and set IDF_PATH",
+            )
+        forwarded_list = list(forwarded)
+        port = os.environ.get("LA_ESP32_PORT")
+        has_port = any(
+            argument == "--port" or argument.startswith("--port=")
+            for argument in forwarded_list
+        )
+        if port and not has_port:
+            forwarded_list.append(f"--port={port}")
+            has_port = True
+        if has_port:
+            script = PROJECT_ROOT / "fw-esp32" / "scripts" / "run_target_tests.py"
+            command = [
+                sys.executable,
+                str(script),
+                "--project-root",
+                str(PROJECT_ROOT),
+                "--idf",
+                str(idf),
+                "--idf-python",
+                str(_idf_python()),
+                *forwarded_list,
+            ]
+            return _run_steps(target, [(command, PROJECT_ROOT)], timeout=600.0)
+        build_dir = BUILD_ROOT / "esp32-tests"
+        command = _command(
+            idf,
+            [
+                "-B",
+                str(build_dir),
+                "-D",
+                f"SDKCONFIG={build_dir / 'sdkconfig'}",
+                "build",
+            ],
+            python_executable=_idf_python(),
+        )
+        code = _run_steps(target, [(command, PROJECT_ROOT / "fw-esp32" / "tests")])
+        if code != 0:
+            return code
+        return _blocked(
+            target,
+            "Unity target tests built under build/esp32-tests; run "
+            "`python tools/run.py test-esp32-target -- --port COMx` to flash, "
+            "execute and capture",
+        )
+    if target == "test-e2e":
+        target_uri = os.environ.get("LA_E2E_TARGET")
+        forwarded_list = list(forwarded)
+        has_target = any(
+            argument == "--target" or argument.startswith("--target=")
+            for argument in forwarded_list
+        )
+        if not target_uri and not has_target:
+            return _blocked(
+                target,
+                "E2E tests require a running analyzer link; set "
+                "LA_E2E_TARGET=tcp://HOST:5555 or run "
+                "`python tools/run.py test-e2e -- --target tcp://HOST:5555`",
+            )
+        command = [sys.executable, "-m", "pytest", "tests/e2e"]
+        if target_uri:
+            command.append(f"--target={target_uri}")
+        command.extend(forwarded_list)
+        return _run_steps(target, [(command, PROJECT_ROOT)])
     if target == "hil":
         port = os.environ.get("LA_HIL_PORT")
         forwarded_list = list(forwarded)

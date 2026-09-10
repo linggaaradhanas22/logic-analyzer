@@ -7,13 +7,15 @@
 // ---------------------------------------------------------------------------
 // Roles and schedule
 //   The module keeps a DEPTH-sample circular history of the valid sample
-//   stream while a capture runs. Two regimes exist:
+//   stream while a capture runs. Two regimes exist, selected by stream_en at
+//   the run rising edge (not by pre_req: a burst with PRE_SAMPLES=0 has no
+//   history but must still wait for the trigger before emitting):
 //
-//   * Stream mode (pre_req == 0, latched at run rising): the module is a
-//     pure FIFO pass-through. Every stored sample is emitted in order with
-//     one cycle of latency; `trig` only latches trig_index for status.
+//   * Stream mode (stream_en = 1): the module is a pure FIFO pass-through.
+//     Every stored sample is emitted in order with one cycle of latency;
+//     `trig` only latches trig_index for status.
 //
-//   * Burst mode (pre_req > 0): until `trig` is seen the history rolls over
+//   * Burst mode (stream_en = 0): until `trig` is seen the history rolls over
 //     (oldest sample overwritten) and nothing is emitted. On `trig` (which
 //     must coincide with in_valid, as la_trigger only pulses on valid
 //     samples) the sample stream is logically cut:
@@ -89,6 +91,7 @@ module la_pretrig_ring #(
   input  logic        clk,
   input  logic        srst,
   input  logic        run,             // capture active; config latched on rising edge
+  input  logic        stream_en,       // 1 = live pass-through, 0 = burst window
   input  logic        in_valid,        // one valid sample per pulse
   input  logic [7:0]  in_sample,
   input  logic        trig,            // trigger pulse; only meaningful with in_valid
@@ -169,7 +172,7 @@ module la_pretrig_ring #(
         o_sample     <= '0;
       end else if (run_rise) begin
         pre_req_q    <= pre_req;
-        stream_mode  <= (pre_req == 16'd0);
+        stream_mode  <= stream_en;
         latched      <= 1'b0;
         count        <= '0;
         wptr         <= '0;

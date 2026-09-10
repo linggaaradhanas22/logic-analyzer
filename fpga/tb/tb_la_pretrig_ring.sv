@@ -23,6 +23,7 @@ module tb_la_pretrig_ring;
   logic clk = 1'b0;
   logic srst = 1'b1;
   logic run = 1'b0;
+  logic stream_en = 1'b0;
   logic in_valid = 1'b0;
   logic [7:0] in_sample = 8'h00;
   logic trig = 1'b0;
@@ -42,6 +43,7 @@ module tb_la_pretrig_ring;
     .clk(clk),
     .srst(srst),
     .run(run),
+    .stream_en(stream_en),
     .in_valid(in_valid),
     .in_sample(in_sample),
     .trig(trig),
@@ -108,7 +110,7 @@ module tb_la_pretrig_ring;
     end else begin
       m_run_d <= run;
       if (run && !m_run_d) begin
-        m_stream <= (pre_req == 16'd0);
+        m_stream <= stream_en;
         m_latched <= 1'b0;
         m_count <= '0;
         m_pre_req <= pre_req;
@@ -282,6 +284,7 @@ module tb_la_pretrig_ring;
     begin
       int d;
       pre_req = 16'd0;
+      stream_en = 1'b1;
       run = 1'b1;
       @(negedge clk);
       // Segment A: 130 pulses, no stalls, trigger at pulse 55.
@@ -345,6 +348,7 @@ module tb_la_pretrig_ring;
       srst = 1'b0;
       @(posedge clk);
       pre_req = 16'd30;
+      stream_en = 1'b0;
       run = 1'b1;
       @(negedge clk);
       tb_pulse = 0;
@@ -365,6 +369,36 @@ module tb_la_pretrig_ring;
     end
 
     // ----------------------------------------------------------------
+    // Phase 2a2: burst with PRE_SAMPLES = 0 (pre_req 0, stream_en 0).
+    // Nothing may be emitted before the trigger; the trigger sample and the
+    // post samples follow, with pre_len 0. This is the PRE=0 burst case that
+    // stream_en separates from live pass-through.
+    // ----------------------------------------------------------------
+    begin
+      int d;
+      srst = 1'b1;
+      @(posedge clk);
+      srst = 1'b0;
+      @(posedge clk);
+      pre_req = 16'd0;
+      stream_en = 1'b0;
+      run = 1'b1;
+      @(negedge clk);
+      tb_pulse = 0;
+      quiet(2);
+      @(negedge clk);
+      if (out_valid) begin
+        $display("FAIL zero-pre burst emitted before trigger");
+        errors = errors + 1;
+      end
+      drive_samples(10, 1, 4, 1'b1, d);    // trigger sample index 4
+      check_status("s2a2 latch", 0, 4);
+      finish_run();
+      quiet(2);
+      end_phase("burst-zero-pre", 6, 0);
+    end
+
+    // ----------------------------------------------------------------
     // Phase 2b: trigger early; K clamps to trig_index = 7.
     // ----------------------------------------------------------------
     begin
@@ -374,6 +408,7 @@ module tb_la_pretrig_ring;
       srst = 1'b0;
       @(posedge clk);
       pre_req = 16'd100;
+      stream_en = 1'b0;
       run = 1'b1;
       @(negedge clk);
       tb_pulse = 0;
@@ -398,6 +433,7 @@ module tb_la_pretrig_ring;
       srst = 1'b0;
       @(posedge clk);
       pre_req = 16'd512;                   // exceeds DEPTH-1 by design
+      stream_en = 1'b0;
       run = 1'b1;
       @(negedge clk);
       tb_pulse = 0;
@@ -427,6 +463,7 @@ module tb_la_pretrig_ring;
       srst = 1'b0;
       @(posedge clk);
       pre_req = 16'd100;
+      stream_en = 1'b0;
       run = 1'b1;
       @(negedge clk);
       tb_pulse = 0;
@@ -473,6 +510,7 @@ module tb_la_pretrig_ring;
         errors = errors + 1;
       end
       pre_req = 16'd20;
+      stream_en = 1'b0;
       run = 1'b1;
       @(negedge clk);
       tb_pulse = 0;
@@ -524,6 +562,7 @@ module tb_la_pretrig_ring;
       srst = 1'b0;
       @(posedge clk);
       pre_req = 16'd40;
+      stream_en = 1'b0;
       run = 1'b1;
       @(negedge clk);
       tb_pulse = 0;

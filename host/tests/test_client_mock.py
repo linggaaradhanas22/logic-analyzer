@@ -72,6 +72,15 @@ def test_patgen_cfg_acknowledged(analyzer) -> None:
         client.close()
 
 
+def test_arm_acks_config_and_arm(analyzer) -> None:
+    mock = analyzer("ping")
+    client = _client(mock.uri)
+    try:
+        client.arm(p.pack_config(post_samples=1024), timeout_s=2.0)
+    finally:
+        client.close()
+
+
 def test_capture_raw_transfer(analyzer) -> None:
     mock = analyzer("capture_raw")
     client = _client(mock.uri)

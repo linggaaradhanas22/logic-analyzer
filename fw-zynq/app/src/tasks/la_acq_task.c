@@ -74,6 +74,10 @@ static void acq_abort(la_acq_ctx_t *ctx, int from_timeout)
     ctx->word_count = 0u;
     ctx->status = la_regs_read_status(&app->regs);
     app->status_reg = ctx->status;
+    /* Discard partial PL data (FIFO/packer/ring) so it cannot leak into the
+     * next capture's descriptor chain. The soft reset also clears the
+     * register block; the next ARM re-applies the full configuration. */
+    la_regs_write32(&app->regs, LA_REG_CTRL_OFFSET, LA_REG_CTRL_SOFT_RESET_MASK);
     acq_post_notice(ctx, LA_NOTICE_ABORTED);
 }
 
