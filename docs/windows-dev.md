@@ -82,13 +82,21 @@ evidence are stored in `build/reports`.
 ```powershell
 python tools/run.py bit
 python tools/run.py fw-zynq
+python tools/run.py jtag-zynq
 python tools/run.py fw-esp32
 python tools/run.py program
 python tools/run.py flash-esp -- --port COM12
 python tools/run.py hil
 ```
 
-`bit`, `fw-zynq`, `fw-esp32`, `program`, `flash-esp` and `hil` stop with an
+For the normal Zybo development loop, set JP5 to JTAG and power-cycle once
+after moving the jumper. `jtag-zynq` uses the board's PROG/UART USB cable to
+reset the PS through JTAG SRST, program `logic_analyzer.bit`, run the generated
+FSBL through its JTAG handoff, download `la_app.elf` and start Cortex-A9 #0.
+UART1 console output remains available on the FTDI COM port; the microSD card
+is only required for the final release boot gate.
+
+`bit`, `fw-zynq`, `jtag-zynq`, `fw-esp32`, `program`, `flash-esp` and `hil` stop with an
 explicit prerequisite message when the required installation, XSA, board or
 bench is unavailable. A Zybo console COM port is not the UART0 analyzer data
 endpoint. Select COM ports explicitly when more than one candidate exists.

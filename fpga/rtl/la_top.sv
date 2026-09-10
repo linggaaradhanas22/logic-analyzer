@@ -27,13 +27,26 @@
 //   [5] ABORTED   sticky abort/timeout
 //   [6] STREAMING live capture running
 // Sticky bits clear at the next ARM (or reset).
+//
+// blink_o is a free-running 1 Hz heartbeat (toggles every
+// BLINK_HALF_CYCLES FCLK cycles; 50,000,000 = 0.5 s at the 100 MHz
+// FCLK_CLK0). It drives the Zybo LD0 pad so a programmed PL design with a
+// running PS clock is visibly alive (P3.3 bench check) without any
+// firmware involvement. It starts low at reset release.
 
-module la_top (
+module la_top #(
+  // Blink half-period in FCLK cycles. The testbench overrides this so the
+  // cadence is observable in a short run; the bitstream uses the 0.5 s
+  // default. Must be >= 2 and <= 2**26 (0.67 s at 100 MHz).
+  parameter int BLINK_HALF_CYCLES = 50000000
+) (
   input  logic        clk,
   input  logic        srst,
   input  logic [7:0]  ch_in,
   // JE pattern-generator channels (external self-test loopback to ch_in)
   output logic [7:0]  patgen_o,
+  // Blink heartbeat to the Zybo LD0 pad (P3.3 visual PL-alive check)
+  output logic        blink_o,
   // AXIS word stream out (to the AXI DMA S2MM path)
   output logic        m_axis_tvalid,
   input  logic        m_axis_tready,
@@ -344,6 +357,25 @@ module la_top (
       if (ev_overflow) ovf_l     <= 1'b1;
     end
   end
+
+  // ------------------------------------------------------------------
+  // Blink heartbeat (P3.3 visual PL-alive check).
+  // ------------------------------------------------------------------
+  logic [25:0] blink_cnt;
+  logic        blink_toggle;
+
+  always_ff @(posedge clk) begin
+    if (int_rst) begin
+      blink_cnt    <= '0;
+      blink_toggle <= 1'b0;
+    end else if (blink_cnt == BLINK_HALF_CYCLES[25:0] - 26'd1) begin
+      blink_cnt    <= '0;
+      blink_toggle <= ~blink_toggle;
+    end else begin
+      blink_cnt <= blink_cnt + 26'd1;
+    end
+  end
+  assign blink_o = blink_toggle;
 
   // ------------------------------------------------------------------
   // Register block.

@@ -20,10 +20,12 @@
 #include "FreeRTOS.h"
 #include "la_mem_geom.h"
 #include "task.h"
+#include "xil_io.h"
 #include "xil_mmu.h"
 #include "xil_printf.h"
 
 #define LA_PRIORITY (tskIDLE_PRIORITY + 1)
+#define LA_PL_BASE  0x40000000u
 
 extern uint8_t __la_fw_end[];
 extern uint8_t __la_nc_base[];
@@ -48,7 +50,21 @@ static void la_hello_task(void *pvParameters)
     (void)pvParameters;
     xil_printf("LA P4.1 FreeRTOS hello on UART1\r\n");
     for (;;) {
-        xil_printf("LA hello tick %lu\r\n", (unsigned long)count);
+        xil_printf("LA hello tick %u\r\n", (unsigned)count);
+        if ((count % 3) == 0) {
+            /* Bench probe (P3.3): SLCR reads always complete, so they stream
+             * the live PS-side clock/reset state without touching the PL. */
+            xil_printf("LA SLCR ARM_PLL 0x%08X\r\n",
+                       (unsigned)Xil_In32(0xF8000100u));
+            xil_printf("LA SLCR IO_PLL  0x%08X\r\n",
+                       (unsigned)Xil_In32(0xF8000108u));
+            xil_printf("LA SLCR ARM_CLK 0x%08X\r\n",
+                       (unsigned)Xil_In32(0xF8000120u));
+            xil_printf("LA SLCR FPGA0_CLK 0x%08X\r\n",
+                       (unsigned)Xil_In32(0xF8000170u));
+            xil_printf("LA SLCR FPGA_RST 0x%08X\r\n",
+                       (unsigned)Xil_In32(0xF8000240u));
+        }
         count++;
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
@@ -56,11 +72,19 @@ static void la_hello_task(void *pvParameters)
 
 static void la_probe_task(void *pvParameters)
 {
+    uint32_t pl_id;
+    uint32_t pl_status;
+
     (void)pvParameters;
     vTaskDelay(pdMS_TO_TICKS(5000));
-    xil_printf("LA probe: hello stack high-water %lu/%lu words\r\n",
-               (unsigned long)uxTaskGetStackHighWaterMark(hello_handle),
-               (unsigned long)configMINIMAL_STACK_SIZE);
+    xil_printf("LA probe: reading PL registers\r\n");
+    pl_id = Xil_In32(LA_PL_BASE + 0x00u);
+    pl_status = Xil_In32(LA_PL_BASE + 0x08u);
+    xil_printf("LA probe: PL ID=0x%08X STATUS=0x%08X\r\n",
+               (unsigned)pl_id, (unsigned)pl_status);
+    xil_printf("LA probe: hello stack high-water %u/%u words\r\n",
+               (unsigned)uxTaskGetStackHighWaterMark(hello_handle),
+               (unsigned)configMINIMAL_STACK_SIZE);
     vTaskDelete(NULL);
 }
 

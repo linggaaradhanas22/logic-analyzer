@@ -16,7 +16,9 @@
 //      consecutive counter values with the trigger sample 0xA5 at window
 //      position K.
 //
-// Both scenarios check the STATUS register transitions.
+// Both scenarios check the STATUS register transitions. Scenario C checks
+// the blink heartbeat: with BLINK_HALF_CYCLES overridden to 1000 it must
+// start low at reset release and toggle exactly every 1000 cycles.
 
 `timescale 1ns/1ps
 
@@ -31,6 +33,7 @@ module tb_la_top;
   logic srst = 1'b1;
   logic [7:0] ch_in = 8'h00;
   logic [7:0] patgen_o;
+  logic blink_o;
   logic m_axis_tvalid;
   logic m_axis_tready = 1'b1;
   logic [31:0] m_axis_tdata;
@@ -58,9 +61,12 @@ module tb_la_top;
   logic [1:0] s_axi_rresp;
   logic irq_o;
 
-  la_top dut (
+  la_top #(
+    .BLINK_HALF_CYCLES(1000)
+  ) dut (
     .clk(clk), .srst(srst), .ch_in(ch_in),
     .patgen_o(patgen_o),
+    .blink_o(blink_o),
     .m_axis_tvalid(m_axis_tvalid), .m_axis_tready(m_axis_tready),
     .m_axis_tdata(m_axis_tdata), .m_axis_tkeep(m_axis_tkeep),
     .m_axis_tlast(m_axis_tlast),
@@ -116,6 +122,19 @@ module tb_la_top;
     if (!condition) begin
       $display("FAIL [%0t] %s", $time, tag);
       errors = errors + 1;
+    end
+  endtask
+
+  // Sample blink_o at negedge (after the posedge update) and count how many
+  // half-cycle samples elapse until it shows the target value.
+  task automatic wait_blink_edge(input logic target, input int bound,
+                                 output int waited);
+    int g;
+    waited = 0;
+    for (g = 0; g < bound; g++) begin
+      @(negedge clk);
+      waited = g + 1;
+      if (blink_o == target) break;
     end
   endtask
 
@@ -270,6 +289,20 @@ module tb_la_top;
     // JE output is quiet while the patgen is disabled (la_patgen holds
     // ch_o at zero when not running).
     fail_check("idle patgen_o zero", patgen_o == 8'h00);
+
+    // ================================================================
+    // Scenario C: blink heartbeat cadence (BLINK_HALF_CYCLES = 1000).
+    // ================================================================
+    begin
+      int t;
+      fail_check("C: blink low at reset release", blink_o == 1'b0);
+      wait_blink_edge(1'b1, 5000, t);   // first rising edge
+      fail_check("C: first rising edge seen", blink_o == 1'b1);
+      wait_blink_edge(1'b0, 5000, t);   // next falling edge
+      fail_check("C: half period to falling edge", t == 1000);
+      wait_blink_edge(1'b1, 5000, t);   // next rising edge
+      fail_check("C: half period to rising edge", t == 1000);
+    end
 
     // ================================================================
     // Scenario A: txn-mode UART selftest burst.

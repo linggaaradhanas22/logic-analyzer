@@ -39,6 +39,10 @@ set_property -dict [list PACKAGE_PIN T15 IOSTANDARD LVCMOS33] [get_ports uart0_r
 set_property -dict [list PACKAGE_PIN P14 IOSTANDARD LVCMOS33] [get_ports uart0_rtsn]
 set_property -dict [list PACKAGE_PIN R14 IOSTANDARD LVCMOS33] [get_ports uart0_ctsn]
 
+# ---- Blink heartbeat LED (P3.3 visual PL-alive check) ----------------------
+# LD0 = leds_4bits_tri_o_0 in the pinned board files (A.0/part0_pins.xml).
+set_property -dict [list PACKAGE_PIN M14 IOSTANDARD LVCMOS33] [get_ports blink_o]
+
 # ---- Asynchronous-input timing exceptions ---------------------------------
 # Acquisition pads are asynchronous with respect to FCLK_CLK0: their only
 # consumer is the la_input_sync synchronizer chain (ASYNC_REG) described in

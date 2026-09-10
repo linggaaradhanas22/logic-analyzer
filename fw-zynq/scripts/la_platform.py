@@ -69,12 +69,15 @@ def set_os_param_if_supported(domain, wanted: dict[str, str]) -> None:
         print(f"VITIS list_params(os) unavailable: {exc}")
         params = []
     print(f"VITIS OS params offered: {params}")
+    offered = {
+        str(p.get("parameter_name", "") if isinstance(p, dict) else p).lower()
+        for p in params
+    }
     for key in wanted:
-        if not params or any(str(p).lower() == key.lower() for p in params):
+        if not params or key.lower() in offered:
             try:
                 domain.set_config("os", key, wanted[key])
                 print(f"VITIS os config {key} = {wanted[key]}")
-                return
             except Exception as exc:
                 print(f"VITIS os config {key} not settable: {exc}")
 
@@ -125,28 +128,89 @@ def domain_export_include(ws: Path) -> Path:
     )
 
 
+CONSOLE_UART0_BASE = "0xe0000000"
+CONSOLE_UART1_BASE = "0xe0001000"
+
+
+def _console_uart_headers(ws: Path) -> list[Path]:
+    """All generated copies of FreeRTOSUARTConfig.h (BSP include root, the
+    ninja-tree gen_bsp copy libsrc actually compiles against, and the
+    platform export copy applications include)."""
+    candidates = [
+        ws / PLATFORM_NAME / CPU / DOMAIN_NAME / "bsp" / "include"
+        / "FreeRTOSUARTConfig.h",
+        domain_bsp_build_dir(ws) / "include" / "FreeRTOSUARTConfig.h",
+        ws / PLATFORM_NAME / "export" / PLATFORM_NAME / "sw" / DOMAIN_NAME
+        / "include" / "FreeRTOSUARTConfig.h",
+    ]
+    return [p for p in candidates if p.is_file()]
+
+
+def apply_console_uart_override(ws: Path) -> list[Path]:
+    """Point BSP stdin/stdout at the UART1 console (MIO 48/49 -> FTDI COM).
+
+    The freertos10_xilinx domain does not honour the stdout/STDIN os
+    parameters and the Vitis generator defaults STDOUT_BASEADDRESS to
+    UART0 (0xe0000000), which on this design is the EMIO UART0 routed to
+    the JD header (the ESP32 link), not the console. xil_printf's outbyte
+    (xuartps_hw.c) transmits on STDOUT_BASEADDRESS, so the hello banner and
+    all later console output silently vanish. The generated header is
+    therefore rewritten to UART1 (0xe0001000) in every copy after
+    platform.build(), with the originals kept for diff evidence, and the
+    uartps/freertos object sets are deleted so the ninja rebuild
+    recompiles outbyte with the corrected base. Idempotent per file.
+    """
+    targets = _console_uart_headers(ws)
+    if not targets:
+        raise SystemExit(
+            "fw-zynq blocked: no generated FreeRTOSUARTConfig.h under the "
+            "domain BSP; platform.build() must run after add_domain first"
+        )
+    for target in targets:
+        text = target.read_text(encoding="utf-8")
+        if f"STDOUT_BASEADDRESS {CONSOLE_UART1_BASE}" in text:
+            print(f"VITIS console UART1 override already present in {target}")
+            continue
+        backup = target.with_name("FreeRTOSUARTConfig.h.uart-orig")
+        if not backup.exists():
+            shutil.copyfile(target, backup)
+        text = text.replace(
+            f"STDIN_BASEADDRESS {CONSOLE_UART0_BASE}",
+            f"STDIN_BASEADDRESS {CONSOLE_UART1_BASE}",
+        )
+        text = text.replace(
+            f"STDOUT_BASEADDRESS {CONSOLE_UART0_BASE}",
+            f"STDOUT_BASEADDRESS {CONSOLE_UART1_BASE}",
+        )
+        if f"STDOUT_BASEADDRESS {CONSOLE_UART1_BASE}" not in text:
+            raise SystemExit(
+                f"fw-zynq blocked: expected UART0 base not found in {target}"
+            )
+        target.write_text(text, encoding="utf-8", newline="\n")
+        print(f"VITIS console UART1 override applied to {target} "
+              f"(orig kept at {backup})")
+    return targets
+
+
 def rebuild_domain_bsp(ws: Path) -> None:
-    """Rebuild the BSP libs after the policy header patch.
+    """Rebuild the BSP libs after the policy header patches.
 
     platform.build() regenerates FreeRTOSConfig.h from its template on every
     call, so the override cannot survive a second platform.build(); and the
     ninja tree carries no header depfiles, so a plain incremental build does
-    not recompile the kernel either. The freertos kernel object set is
-    therefore deleted and rebuilt in place, then the refreshed archives
-    (per-lib and the merged libxil.a) are copied over the platform export
-    copies the application links against.
+    not recompile the kernel either. The freertos kernel and uartps (outbyte
+    picks up STDOUT_BASEADDRESS there) object sets are therefore deleted and
+    rebuilt in place, then the refreshed archives (per-lib and the merged
+    libxil.a) are copied over the platform export copies the application
+    links against.
     """
     build_dir = domain_bsp_build_dir(ws)
-    kernel_obj_dir = (
-        build_dir
-        / "libsrc"
-        / "freertos10_xilinx"
-        / "src"
-        / "CMakeFiles"
-        / "freertos.dir"
-    )
-    if kernel_obj_dir.exists():
-        shutil.rmtree(kernel_obj_dir)
+    for lib in ("freertos10_xilinx", "uartps"):
+        lib_dir = build_dir / "libsrc" / lib
+        for cmake_dir in lib_dir.rglob("CMakeFiles"):
+            for obj_dir in cmake_dir.glob("*.dir"):
+                shutil.rmtree(obj_dir)
+                print(f"VITIS deleted object set {obj_dir} for header patch")
     ninja = Path(os.environ.get("XILINX_VITIS", "")) / "bin" / "ninja.exe"
     if not ninja.is_file():
         ninja = Path("ninja")
@@ -255,6 +319,14 @@ def create_platform_and_domain(client, root: Path, xsa: Path):
     set_os_param_if_supported(
         domain,
         {
+            # Observed freertos-domain param names (2026.1): the classic
+            # standalone-style keys are accepted silently but have no effect;
+            # only freertos_stdout/freertos_stdin change the generated
+            # FreeRTOSUARTConfig.h. The post-build console override below is
+            # still applied as the authoritative fix (and as the guard when
+            # a platform is created without these params).
+            "freertos_stdout": "ps7_uart_1",
+            "freertos_stdin": "ps7_uart_1",
             "stdout": "ps7_uart_1",
             "stdin": "ps7_uart_1",
             "standalone_stdout": "ps7_uart_1",
@@ -266,6 +338,7 @@ def create_platform_and_domain(client, root: Path, xsa: Path):
     platform.build()
     print(f"VITIS platform built: {PLATFORM_NAME} domain {DOMAIN_NAME}")
     target = apply_freertos_policy_override(root, ws)
+    apply_console_uart_override(ws)
     rebuild_domain_bsp(ws)
     export_hdr = domain_export_include(ws)
     if export_hdr.is_file() and FRAGMENT_MARKER not in export_hdr.read_text(encoding="utf-8"):

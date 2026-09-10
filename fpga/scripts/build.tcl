@@ -215,7 +215,7 @@ foreach pin {
 try_net ps7/FCLK_RESET0_N inv_fclk_rst/Op1
 try_net inv_fclk_rst/Res rst_ps7/ext_reset_in
 try_net const_hi/dout rst_ps7/dcm_locked
-try_net const_lo/dout rst_ps7/aux_reset_in
+try_net const_hi/dout rst_ps7/aux_reset_in
 try_net const_lo/dout rst_ps7/mb_debug_sys_rst
 try_net rst_ps7/peripheral_aresetn inv_srst/Op1
 try_net inv_srst/Res la_top_0/srst
@@ -241,18 +241,21 @@ try_net la_top_0/irq_o xlconcat_irq/In0
 try_net axi_dma_0/s2mm_introut xlconcat_irq/In1
 try_net xlconcat_irq/dout ps7/IRQ_F2P
 
-# External ports: JC channel inputs, JE pattern outputs, JD UART0 EMIO.
+# External ports: JC channel inputs, JE pattern outputs, blink LED (LD0),
+# JD UART0 EMIO.
 # (The ps7 UART0 EMIO scalars belong to the inferred UART_0 interface; the
 # override warnings below are expected and harmless: this script is the
 # source of truth and the BD is never regenerated from writ_bd_tcl.)
 create_bd_port -dir I -from 7 -to 0 ch_in
 create_bd_port -dir O -from 7 -to 0 patgen_o
+create_bd_port -dir O blink_o
 create_bd_port -dir O uart0_tx
 create_bd_port -dir I uart0_rx
 create_bd_port -dir O uart0_rtsn
 create_bd_port -dir I uart0_ctsn
 try_net la_top_0/ch_in ch_in
 try_net la_top_0/patgen_o patgen_o
+try_net la_top_0/blink_o blink_o
 try_net ps7/UART0_TX uart0_tx
 try_net ps7/UART0_RX uart0_rx
 try_net ps7/UART0_RTSN uart0_rtsn
