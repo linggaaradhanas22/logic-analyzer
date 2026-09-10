@@ -11,10 +11,10 @@
 //      the sink, the register block and the controller.
 //
 //   B) raw-mode burst driven by the counter patgen with a level trigger on
-//      0xA5: 300 samples (window K = 100 + POST = 200) arrive as 75 full
-//      words plus tail, and the reconstructed samples must be strictly
-//      consecutive counter values with the trigger sample 0xA5 at window
-//      position K.
+//      0xA5: exactly 300 samples (window K = 100 + POST = 200) arrive as
+//      exactly 75 full words with one tlast on the last word, and the
+//      reconstructed samples must be strictly consecutive counter values
+//      with the trigger sample 0xA5 at window position K.
 //
 // Both scenarios check the STATUS register transitions. Scenario C checks
 // the blink heartbeat: with BLINK_HALF_CYCLES overridden to 1000 it must
@@ -386,16 +386,16 @@ module tb_la_top;
       fail_check("B: trigger index plausible",
                  trig_index_v > 32'd100 && trig_index_v < 32'd600);
       axi_read(LA_REG_WORD_COUNT_LO_OFFSET, v);
-      // The controller stops the ring K+POST samples after the window
-      // starts; pipeline latency at the run drop can add or remove a few
-      // samples at the tail, so counts are checked bounded. Verified core:
-      // a strictly consecutive counter stream with the trigger sample 0xA5
-      // at window position K and consistent word counts.
+      // The controller stops the ring exactly K+POST samples after the
+      // window starts and latches the raw packet word count, so the sink
+      // sees exactly ceil((K+POST)/4) words with one tlast on the last one.
       fail_check("B: sink word count matches controller", wlog_n == v[31:0]);
+      fail_check("B: word count exact", v == 32'd75);
       fail_check("B: tlast exactly once", tlast_count == 1);
+      fail_check("B: tlast on the last word", llog[wlog_n-1] == 1'b1);
       reconstruct_raw();
-      fail_check("B: sample count bounded", sample_n >= 290 && sample_n <= 310);
-      if (sample_n >= 290 && sample_n <= 310) begin
+      fail_check("B: sample count exact", sample_n == 300);
+      if (sample_n == 300) begin
         logic seq_ok;
         int kk;
         int longest;

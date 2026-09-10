@@ -53,7 +53,10 @@
 //   Events are single-cycle pulses (ev_triggered_o, ev_done_o,
 //   ev_aborted_o, ev_overflow_o). armed_o is high in ARMED; streaming_o is
 //   high while a stream capture is running (ARMED or CAPT). Word counters
-//   cover the capture from arm through the closing word.
+//   cover the capture from arm through the closing word. pkt_words_o carries
+//   the raw burst packet word count (ceil((K+POST)/4), latched at the
+//   trigger; 0 in stream or txn mode) so the raw packer can close the packet
+//   on its final word.
 //
 // Interface: single FCLK, synchronous active-high srst; ports described in
 // the port list.
@@ -95,7 +98,11 @@ module la_capture_ctrl (
   output logic [31:0] word_count_lo_o,
   output logic [31:0] word_count_hi_o,
   output logic        txn_mode_o,
-  output logic [23:0] txn_max_run_o
+  output logic [23:0] txn_max_run_o,
+  // Exact word count of a raw burst packet (0 in stream/txn mode): the raw
+  // packer tags the final word with tlast from this value, so a word-aligned
+  // burst still closes its DMA packet instead of deferring tlast forever.
+  output logic [31:0] pkt_words_o
 );
 
   localparam logic [1:0] S_IDLE  = 2'd0;
@@ -114,6 +121,7 @@ module la_capture_ctrl (
   logic [15:0] pre_req_q;
   logic [31:0] s_elapsed_q;      // valid samples since arm (burst)
   logic [31:0] rem_q;            // burst emissions remaining (K + POST)
+  logic [31:0] pkt_words_q;      // raw burst packet words (ceil((K+POST)/4))
   logic [31:0] words_lo_q;
   logic [31:0] words_hi_q;
   logic [31:0] cycles_q;         // FCLK cycles since the last live flush
@@ -138,6 +146,7 @@ module la_capture_ctrl (
   assign flush_o        = flush_pulse_q;
   assign word_count_lo_o = words_lo_q;
   assign word_count_hi_o = words_hi_q;
+  assign pkt_words_o     = pkt_words_q;
 
   always_ff @(posedge clk) begin
     if (srst) begin
@@ -151,6 +160,7 @@ module la_capture_ctrl (
       max_run_q     <= 24'hFFFFFF;
       s_elapsed_q   <= '0;
       rem_q         <= '0;
+      pkt_words_q   <= '0;
       words_lo_q    <= '0;
       words_hi_q    <= '0;
       cycles_q      <= '0;
@@ -179,6 +189,7 @@ module la_capture_ctrl (
         live_q          <= live_flush_cycles_i;
         max_run_q       <= txn_max_run_i;
         s_elapsed_q     <= '0;
+        pkt_words_q     <= '0;
         words_lo_q      <= '0;
         words_hi_q      <= '0;
         cycles_q        <= '0;
@@ -209,11 +220,18 @@ module la_capture_ctrl (
               if (!stream_q) begin
                 // Burst: K = min(pre_req, samples seen so far); the ring
                 // clamps identically, so the countdown matches its window.
-                // POST counts from the trigger sample onward.
+                // POST counts from the trigger sample onward. The raw
+                // packet word count is latched here so the packer can close
+                // the packet on its final word (txn mode uses the encoder
+                // flush instead).
                 if (pre_req_q <= s_elapsed_q[15:0]) begin
                   rem_q <= {16'd0, pre_req_q} + post_q;
+                  pkt_words_q <= txn_q ? 32'd0
+                                       : (({16'd0, pre_req_q} + post_q + 32'd3) >> 2);
                 end else begin
                   rem_q <= s_elapsed_q + post_q;
+                  pkt_words_q <= txn_q ? 32'd0
+                                       : ((s_elapsed_q + post_q + 32'd3) >> 2);
                 end
               end
             end

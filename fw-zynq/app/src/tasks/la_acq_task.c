@@ -209,7 +209,13 @@ static void acq_handle_ctrl(la_acq_ctx_t *ctx, const la_ctrl_msg_t *message)
         acq_post_notice(ctx, LA_NOTICE_ABORTED);
         return;
     }
-    la_regs_write32(&app->regs, LA_REG_CTRL_OFFSET, LA_REG_CTRL_ARM_MASK);
+    /* ARM together with the sticky CTRL bits: a plain ARM write would
+     * clear SELFTEST_EN/STREAM because the register block keeps only the
+     * sticky mask (P2.11). */
+    la_regs_write32(&app->regs, LA_REG_CTRL_OFFSET,
+                    LA_REG_CTRL_ARM_MASK |
+                        (message->config.ctrl_flags &
+                         (LA_REG_CTRL_SELFTEST_EN_MASK | LA_REG_CTRL_STREAM_MASK)));
     acq_post_notice(ctx, LA_NOTICE_ARMED);
 }
 

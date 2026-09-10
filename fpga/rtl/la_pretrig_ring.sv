@@ -55,8 +55,11 @@
 //   controller reaches its emission target it deasserts run. Per the
 //   controller protocol the pending count is zero at that point (the last
 //   needed sample has been emitted); any remainder left by an overflow stop
-//   is discarded at the next run edge. Pre-trigger samples before run are
-//   never captured.
+//   is discarded at the next run edge. The first run cycle is gated off
+//   (run_d): latched/o_has still hold the previous run's values there, so
+//   without the gate a leftover presented sample would leak into the new
+//   capture before the run_rise clear lands. Pre-trigger samples before run
+//   are never captured.
 //
 // Status outputs
 //   trig_index : sample index (count of valid samples since run rising, 0
@@ -224,7 +227,10 @@ module la_pretrig_ring #(
       end
     end
 
-  assign out_valid  = o_has && run && (stream_mode || latched);
+  // run_d gates the first run cycle: latched/o_has still hold the previous
+  // run's values there, and without the gate a leftover presented sample
+  // would be emitted into the new capture before the run_rise clear lands.
+  assign out_valid  = o_has && run && run_d && (stream_mode || latched);
   assign out_sample = o_sample;
   assign pre_len    = pre_len_q;
   assign trig_index = trig_index_q;

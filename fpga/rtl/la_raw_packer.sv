@@ -8,9 +8,17 @@
 // emitted when four samples are buffered, or when a flush closes a packet
 // with 1..3 buffered samples (tkeep marks the tail), or when the word count
 // of the current packet reaches PACKET_WORDS (65536 by default: the 65536th
-// word carries tlast and the count restarts). A flush with no partial beat
+// word carries tlast and the count restarts).
+//
+// pkt_words_i selects the burst packet length: when nonzero the word at
+// index pkt_words_i-1 carries tlast, so an exactly word-aligned burst closes
+// its packet on the final word instead of waiting for a flush that can never
+// produce another word. In that mode a flush with nothing buffered emits
+// nothing. With pkt_words_i == 0 (stream/live) a flush with no partial beat
 // defers tlast to the next complete word (at DIV=0 the deferral is at most
-// three FCLK cycles), so no empty or retro-tagged beat is ever created.
+// three FCLK cycles), so no empty or retro-tagged beat is ever created. A
+// transition from a live packet to a burst packet drops any deferred tlast
+// and restarts the packet word count.
 //
 // The beat slot is a single register; m_valid is asserted whenever a beat is
 // available and the beat leaves on m_ready. While the slot is busy the
@@ -32,6 +40,12 @@ module la_raw_packer #(
   output logic        s_ready,
   input  logic [7:0]  s_data,
   input  logic        flush_req,
+  // Burst packet length in words (0 = stream/live: count-based tlast only).
+  // When nonzero, the word at index pkt_words_i-1 carries tlast, so an
+  // exactly word-aligned burst still closes its packet; a flush with nothing
+  // buffered then emits nothing instead of deferring tlast to a word that
+  // never arrives.
+  input  logic [31:0] pkt_words_i,
   output logic        m_valid,
   input  logic        m_ready,
   output logic [31:0] m_data,
@@ -51,13 +65,16 @@ module la_raw_packer #(
   logic        beat_last_q;
   logic        flush_wait_q;
   logic        last_pending_q;
-  logic [15:0] words_q;          // words emitted in the current packet
+  logic [31:0] words_q;          // words emitted in the current packet
+  logic        pkt_words_seen_q; // pkt_words_i was nonzero last cycle
+  logic        pkt_last;         // this word is the burst packet's last
 
   logic flush_act;
   logic [31:0] partial_data;
   logic [3:0]  partial_keep;
 
   assign flush_act = flush_wait_q || flush_req;
+  assign pkt_last = (pkt_words_i != 32'd0) && (words_q == pkt_words_i - 32'd1);
   // Samples are accepted while no flush is being processed. Buffering
   // (n < 3) never needs the beat slot; the sample that completes a word
   // does, so it waits for the slot to be empty or popped this cycle.
@@ -98,9 +115,18 @@ module la_raw_packer #(
       flush_wait_q   <= 1'b0;
       last_pending_q <= 1'b0;
       words_q        <= '0;
+      pkt_words_seen_q <= 1'b0;
     end else begin
       // Park a flush request that cannot execute while the slot is busy.
       if (flush_req && beat_valid_q && !m_ready) flush_wait_q <= 1'b1;
+
+      // A new burst packet drops any deferred tlast left by a live packet
+      // and restarts the packet word count.
+      if ((pkt_words_i != 32'd0) && !pkt_words_seen_q) begin
+        last_pending_q <= 1'b0;
+        words_q        <= '0;
+      end
+      pkt_words_seen_q <= (pkt_words_i != 32'd0);
 
       // Sample accumulation (only while no flush is being processed).
       if (s_valid && s_ready) begin
@@ -117,7 +143,9 @@ module la_raw_packer #(
       if (!beat_valid_q || m_ready) begin
         if (flush_act) begin
           // Flush executes. A partial beat closes the packet with tkeep
-          // and tlast; a word-aligned flush defers tlast to the next word.
+          // and tlast. A word-aligned flush in live mode defers tlast to
+          // the next word; in a burst the counted final word already
+          // carried tlast, so an aligned flush emits nothing.
           flush_wait_q <= 1'b0;
           if (n_q != 2'd0) begin
             beat_valid_q <= 1'b1;
@@ -128,7 +156,7 @@ module la_raw_packer #(
             words_q      <= '0;
             last_pending_q <= 1'b0;
           end else begin
-            last_pending_q <= 1'b1;
+            if (pkt_words_i == 32'd0) last_pending_q <= 1'b1;
             if (beat_valid_q) beat_valid_q <= 1'b0;
           end
         end else if (s_valid && s_ready && (n_q == 2'd3)) begin
@@ -136,9 +164,9 @@ module la_raw_packer #(
           beat_valid_q <= 1'b1;
           beat_data_q  <= {s_data, buf2_q, buf1_q, buf0_q};
           beat_keep_q  <= 4'hF;
-          beat_last_q  <= last_pending_q || (words_q == LAST[15:0]);
-          if (last_pending_q || (words_q == LAST[15:0])) words_q <= '0;
-          else words_q <= words_q + 16'd1;
+          beat_last_q  <= last_pending_q || (words_q[15:0] == LAST[15:0]) || pkt_last;
+          if (last_pending_q || (words_q[15:0] == LAST[15:0]) || pkt_last) words_q <= '0;
+          else words_q <= words_q + 32'd1;
           last_pending_q <= 1'b0;
           n_q <= 2'd0;
         end else begin

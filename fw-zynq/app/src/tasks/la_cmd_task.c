@@ -165,6 +165,9 @@ static void cmd_handle_outcome(la_cmd_ctx_t *ctx, const la_cmd_result_t *result)
         cmd_post_status(ctx);
         break;
     case LA_CMD_OUT_PATGEN:
+        /* The dispatch result carries the request type/sequence; acknowledge
+         * first, then latch the register (rtos-design.md P4.9). */
+        cmd_post_ack(ctx, result->type, result->sequence);
         la_regs_write32(&ctx->app->regs, LA_REG_PATGEN_CTRL_OFFSET,
                         la_cmd_dispatch_patgen_ctrl(&ctx->dispatch));
         break;

@@ -149,6 +149,7 @@ module la_top #(
   logic streaming;
   logic [31:0] word_count_lo;
   logic [31:0] word_count_hi;
+  logic [31:0] ctrl_pkt_words;
 
   assign int_rst = srst || soft_reset_pulse;
   assign selftest_en = ctrl_q[$clog2(LA_REG_CTRL_SELFTEST_EN_MASK)];
@@ -244,6 +245,7 @@ module la_top #(
     .s_ready(pck_s_ready),
     .s_data(ring_out_sample),
     .flush_req(pck_flush),
+    .pkt_words_i(ctrl_pkt_words),
     .m_valid(pck_m_valid),
     .m_ready(pck_m_ready),
     .m_data(pck_m_data),
@@ -323,7 +325,8 @@ module la_top #(
     .word_count_lo_o(word_count_lo),
     .word_count_hi_o(word_count_hi),
     .txn_mode_o(),
-    .txn_max_run_o()
+    .txn_max_run_o(),
+    .pkt_words_o(ctrl_pkt_words)
   );
 
   // ------------------------------------------------------------------

@@ -52,12 +52,12 @@ bench checks must remain explicitly marked `[HUMAN]` until observed.
 | P2.3 trigger | `tb_la_trigger` | level + "empty edge mask = true" rise/fall semantics, no spurious first-sample edge, divider-gap tolerance, mirror parity per cycle |
 | P2.4 pre-trigger ring | `tb_la_pretrig_ring` | stream pass-through, exact pre/post seam (no dup/loss/invention), history wrap, K clamp at DEPTH-1 with a permanently full ring, stall overflow with exact drop count, double trigger during replay, abort and clean rerun; value-FIFO scoreboard |
 | P2.5 txn encoder | `tb_la_txn_encoder` | predicted-word event model parity, run totals == accepted samples, max_run splits, mid-run/no-op flushes, flush behind a stalled word, max_run=1, reset |
-| P2.6 raw packer | `tb_la_raw_packer` | byte-stream reconstruction equals accepted samples (tkeep-aware), packet length/tlast structure, flush tails, word-aligned deferred flush, stalls, activity assertion |
+| P2.6 raw packer | `tb_la_raw_packer` | byte-stream reconstruction equals accepted samples (tkeep-aware), packet length/tlast structure, flush tails, live-mode word-aligned deferred flush, burst packet count (aligned and partial tail), live-to-burst tlast isolation, stalls, activity assertion |
 | P2.7 capture control | `tb_la_capture_ctrl` | full/window-only/empty burst emission targets and word counts, timeout, abort, overflow drain, stream timer and 65536-word flushes |
 | P2.8 AXIS FIFO | `tb_la_axis_fifo` | order/transport wrap, fill and stall, non-compliant drop with sticky overflow and clear, count accuracy, reset |
 | P2.9 patgen | `tb_la_patgen` | counter/walking-1/PRBS8 models with DIV scaling; recorded-history decoders for UART 115200 "LA-TEST\n", SPI 0x4C41 frames and the I2C write sequence |
 | P2.10 registers | `tb_la_regs` | AXI-Lite BFM: independent AW/W order, BREADY/RREADY stalls, byte strobes, self-clearing ARM/ABORT/SOFT_RESET, masked fields, PRE/TXN clamps, IRQ W1C + events, out-of-range |
-| P2.11 top integration | `tb_la_top` | AXI BFM + AXIS sink + word-to-sample reconstruction: txn UART selftest decodes "LA-TEST\n"; raw counter burst verified stream, counts, tlast, STATUS/IRQ behavior |
+| P2.11 top integration | `tb_la_top` | AXI BFM + AXIS sink + word-to-sample reconstruction: txn UART selftest decodes "LA-TEST\n"; raw counter burst verified stream, exact K+POST sample count, one tlast on the last word, STATUS/IRQ behavior |
 | P2.12 static rules | reviewed in the status ledger | module/port naming consistent (`la_*`, AXI-style signals), register offsets only from the generated package, no hand-edited generated files (`gen --check` passes) |
 
 ### P2 Caveats (recorded, not silent)

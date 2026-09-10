@@ -23,6 +23,7 @@ module tb_la_raw_packer;
   logic s_ready;
   logic [7:0] s_data = 8'h00;
   logic flush_req = 1'b0;
+  logic [31:0] pkt_words_i = 32'd0;
   logic m_valid;
   logic m_ready = 1'b1;
   logic [31:0] m_data;
@@ -38,6 +39,7 @@ module tb_la_raw_packer;
     .s_ready(s_ready),
     .s_data(s_data),
     .flush_req(flush_req),
+    .pkt_words_i(pkt_words_i),
     .m_valid(m_valid),
     .m_ready(m_ready),
     .m_data(m_data),
@@ -97,6 +99,7 @@ module tb_la_raw_packer;
     s_valid = 1'b0;
     flush_req = 1'b0;
     m_ready = 1'b1;
+    pkt_words_i = 32'd0;
     repeat (3) @(posedge clk);
     srst = 1'b0;
     @(posedge clk);
@@ -283,6 +286,73 @@ module tb_la_raw_packer;
           errors = errors + 1;
         end
         srst = 1'b0;
+      end
+    end
+
+    // ----------------------------------------------------------------
+    // Scenario 6: burst packet count (pkt_words_i = 3) with an aligned end.
+    // The third word must carry tlast; the capture-end flush emits nothing.
+    // ----------------------------------------------------------------
+    scenario_reset();
+    begin
+      pkt_words_i = 32'd3;
+      for (k = 0; k < 12; k++) begin
+        cycle(1'b1, k[7:0], 1'b0, 1'b1);   // 3 full words
+      end
+      finish_scenario("burst-aligned", 1'b1);
+      if (beat_n != 3) begin
+        $display("FAIL [burst-aligned] expected 3 beats, got %0d", beat_n);
+        errors = errors + 1;
+      end
+      if (!lasts[2] || lasts[0] || lasts[1]) begin
+        $display("FAIL [burst-aligned] tlast not exactly on the last word");
+        errors = errors + 1;
+      end
+    end
+
+    // ----------------------------------------------------------------
+    // Scenario 7: burst packet count (pkt_words_i = 4) with a partial tail.
+    // The fourth word is the partial beat and must carry tlast and tkeep.
+    // ----------------------------------------------------------------
+    scenario_reset();
+    begin
+      pkt_words_i = 32'd4;
+      for (k = 0; k < 14; k++) begin
+        cycle(1'b1, k[7:0], 1'b0, 1'b1);   // 3 full words + 2 samples
+      end
+      finish_scenario("burst-partial", 1'b1);
+      if (beat_n != 4) begin
+        $display("FAIL [burst-partial] expected 4 beats, got %0d", beat_n);
+        errors = errors + 1;
+      end
+      if (!lasts[3] || keeps[3] != 4'h3 || lasts[0] || lasts[1] || lasts[2]) begin
+        $display("FAIL [burst-partial] tail beat/tlast/keep wrong");
+        errors = errors + 1;
+      end
+    end
+
+    // ----------------------------------------------------------------
+    // Scenario 8: a live-mode deferred tlast (pkt_words_i = 0) must not leak
+    // into the next burst packet; the burst closes on its counted word.
+    // ----------------------------------------------------------------
+    scenario_reset();
+    begin
+      for (k = 0; k < 4; k++) begin
+        cycle(1'b1, k[7:0], 1'b0, 1'b1);   // one full word
+      end
+      cycle(1'b0, 8'h00, 1'b1, 1'b1);      // live aligned flush: defers tlast
+      pkt_words_i = 32'd2;
+      for (k = 4; k < 12; k++) begin
+        cycle(1'b1, k[7:0], 1'b0, 1'b1);   // two more words
+      end
+      finish_scenario("live-to-burst", 1'b0);
+      if (beat_n != 3) begin
+        $display("FAIL [live-to-burst] expected 3 beats, got %0d", beat_n);
+        errors = errors + 1;
+      end
+      if (lasts[0] || lasts[1] || !lasts[2]) begin
+        $display("FAIL [live-to-burst] tlast leaked or missing");
+        errors = errors + 1;
       end
     end
 

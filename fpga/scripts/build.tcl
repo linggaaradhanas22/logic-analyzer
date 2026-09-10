@@ -163,6 +163,11 @@ set_property -dict [list \
 set la_top [create_bd_cell -type module -reference la_top la_top_0]
 
 # -- AXI DMA: S2MM only, SG enabled, 26-bit buffer length, 32-bit stream.
+# -- The control/status stream is disabled: the acquisition datapath has no
+# -- per-packet sideband status, and leaving C_SG_INCLUDE_STSCNTRL_STRM at its
+# -- Vivado default (1) with S_AXIS_S2MM_STS tied off leaves the S2MM SG engine
+# -- unable to complete descriptors (observed on bench 2026-09-10: channel
+# -- running, no errors, BD never completed, no data written).
 set dma [bd_cell axi_dma axi_dma_0]
 set_property -dict [list \
   CONFIG.C_INCLUDE_MM2S {0} \
@@ -170,6 +175,7 @@ set_property -dict [list \
   CONFIG.C_INCLUDE_SG {1} \
   CONFIG.C_SG_LENGTH_WIDTH {26} \
   CONFIG.C_M_AXI_S2MM_DATA_WIDTH {64} \
+  CONFIG.C_SG_INCLUDE_STSCNTRL_STRM {0} \
 ] $dma
 
 # -- AXI fabrics (SmartConnect: this Vivado 2026.1 install ships no
