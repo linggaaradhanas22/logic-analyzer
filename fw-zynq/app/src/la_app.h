@@ -65,7 +65,7 @@
 #define LA_PRIO_TX 4u
 #define LA_PRIO_STATUS 1u
 
-#define LA_FW_VERSION UINT32_C(0x00040000)
+#define LA_FW_VERSION UINT32_C(0x00070000)
 
 typedef enum la_ctrl_kind {
     LA_CTRL_ARM = 1,

@@ -36,7 +36,8 @@
 //
 // Stream sequence (stream_en = 1)
 //   The ring runs in pass-through (la_top forces pre_req = 0 in stream
-//   mode). A trigger is optional and only fires the trigger event. Flushes
+//   mode). A trigger is optional and fires the trigger event once per arm
+//   (a continuously true trigger does not re-fire). Flushes
 //   close packets: a timer counts FCLK cycles since the previous flush
 //   (LIVE_FLUSH_CYCLES, 0 = disabled) and in txn mode a 16-bit word count
 //   since the previous flush requests a flush at 65536 words; in raw mode
@@ -133,6 +134,7 @@ module la_capture_ctrl (
   logic        ev_trig_r;
   logic        ev_abort_r;
   logic        ev_ovf_r;
+  logic        trig_seen_q;      // stream trigger is one-shot per arm
 
   assign ring_run_o    = (state_q == S_ARMED) || (state_q == S_CAPT);
   assign armed_o       = (state_q == S_ARMED);
@@ -172,6 +174,7 @@ module la_capture_ctrl (
       ev_trig_r     <= 1'b0;
       ev_abort_r    <= 1'b0;
       ev_ovf_r      <= 1'b0;
+      trig_seen_q   <= 1'b0;
     end else begin
       // One-cycle pulse defaults.
       ev_trig_r     <= 1'b0;
@@ -196,6 +199,7 @@ module la_capture_ctrl (
         words_since_q   <= '0;
         drain_cnt_q     <= '0;
         last_word_seen_q <= 1'b0;
+        trig_seen_q     <= 1'b0;
         // Stream captures run straight into CAPT: there is nothing to wait
         // for (the trigger is optional and only fires an event).
         if (stream_en_i) state_q <= S_CAPT;
@@ -243,8 +247,12 @@ module la_capture_ctrl (
             if (abort_i) begin
               state_q <= S_IDLE;
               ev_abort_r <= 1'b1;
-            end else if (stream_q && trig_i) begin
-              ev_trig_r <= 1'b1;      // optional live trigger: event only
+            end else if (stream_q && trig_i && !trig_seen_q) begin
+              // Optional live trigger: event only, one-shot per arm. A
+              // continuously true trigger (e.g. mask/edges zero) must not
+              // re-fire, or the IRQ status bit would never clear.
+              ev_trig_r   <= 1'b1;
+              trig_seen_q <= 1'b1;
             end else if (ring_overflow_i || fifo_ovf_i) begin
               // Overflow: never silent. Stop, deliver the partial stream.
               ev_ovf_r <= 1'b1;

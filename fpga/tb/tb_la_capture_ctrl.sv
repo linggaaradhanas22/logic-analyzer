@@ -144,10 +144,14 @@ module tb_la_capture_ctrl;
   int flush_count = 0;
   logic flush_seen = 1'b0;
   int emission_count = 0;
+  int trig_pulses = 0;
 
   always @(posedge clk) begin
     if (!srst) begin
-      if (ev_triggered_o) e_trig <= 1'b1;
+      if (ev_triggered_o) begin
+        e_trig <= 1'b1;
+        trig_pulses <= trig_pulses + 1;
+      end
       if (ev_done_o) e_done <= 1'b1;
       if (ev_aborted_o) e_abort <= 1'b1;
       if (ev_overflow_o) e_ovf <= 1'b1;
@@ -204,6 +208,7 @@ module tb_la_capture_ctrl;
     flush_count = 0;
     flush_seen = 1'b0;
     emission_count = 0;
+    trig_pulses = 0;
   endtask
 
   task automatic arm_capture();
@@ -394,6 +399,40 @@ module tb_la_capture_ctrl;
     abort_i = 1'b0;
     idle_cycles(2);
     fail_check("s8 aborted", e_abort);
+    idle_cycles(2);
+
+    // ----------------------------------------------------------------
+    // Scenario 9: a continuously true stream trigger (mask/edges zero, the
+    // live default) fires exactly one event per arm and does not block the
+    // live flush cadence; re-arming allows a new one-shot.
+    // ----------------------------------------------------------------
+    scenario_reset(1'b0, 1'b1, 0, 0, 0, 128);
+    arm_capture();
+    begin
+      int i;
+      for (i = 0; i < 20; i++) begin
+        cycle(1'b1, 1'b1);
+      end
+    end
+    idle_cycles(2);
+    fail_check("s9 one trigger pulse while trig held high", trig_pulses == 1);
+    fail_check("s9 still streaming", streaming_o);
+    fail_check("s9 no done", !e_done);
+    @(negedge clk);
+    abort_i = 1'b1;
+    @(negedge clk);
+    abort_i = 1'b0;
+    idle_cycles(2);
+    fail_check("s9 aborted", e_abort);
+    scenario_reset(1'b0, 1'b1, 0, 0, 0, 0);
+    arm_capture();
+    cycle(1'b1, 1'b1);
+    idle_cycles(2);
+    fail_check("s9 re-arm fires once more", trig_pulses == 1);
+    @(negedge clk);
+    abort_i = 1'b1;
+    @(negedge clk);
+    abort_i = 1'b0;
     idle_cycles(2);
 
     if (errors != 0) begin
