@@ -67,7 +67,11 @@
 #define LA_PRIO_ACQ 6u
 #define LA_PRIO_CMD 5u
 #define LA_PRIO_DECODER 5u
-#define LA_PRIO_TX 4u
+/* P8.1 review: TxTask is the consumer of the decoder event queue. Below the
+ * decoders (4) it starved under sustained overload - the decoders never
+ * blocked because AcqTask kept seg_q non-empty - so no event or overrun
+ * frame was ever sent. Equal priority gives FreeRTOS round-robin drain. */
+#define LA_PRIO_TX 5u
 #define LA_PRIO_STATUS 1u
 
 #define LA_FW_VERSION UINT32_C(0x00070000)

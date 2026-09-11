@@ -84,6 +84,11 @@ class AnalyzerClient:
         sees an abrupt disconnect instead of a clean FIN."""
         self._transport.kill()
 
+    def raw_send(self, data: bytes) -> None:
+        """P8.4 fault injection: sends raw bytes outside the protocol framing
+        (garbage-flood parser-resync tests)."""
+        self._transport.send(data)
+
     def _next_sequence(self) -> int:
         sequence = self._sequence
         self._sequence = (self._sequence + 1) & 0xFF

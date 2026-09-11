@@ -101,11 +101,18 @@ static void decoder_apply_config(la_decoder_ctx_t *ctx)
     }
 }
 
+#define LA_DECODER_SEGMENTS_PER_TURN 4u
+
 static void decoder_drain_segments(la_decoder_ctx_t *ctx)
 {
     la_live_segment_msg_t message;
+    uint32_t drained = 0u;
 
-    while (xQueueReceive(ctx->seg_q, &message, 0) == pdTRUE) {
+    /* Bound the per-turn work so a LIVE_STOP notification is handled within
+     * a few segment times even when the queue is backed up under overload. */
+    while (drained < LA_DECODER_SEGMENTS_PER_TURN &&
+           xQueueReceive(ctx->seg_q, &message, 0) == pdTRUE) {
+        drained++;
         if (la_decoder_core_enabled(&ctx->core) && message.length >= 4u) {
             const uint32_t *words = (const uint32_t *)(uintptr_t)
                 la_live_ring_slot_address(&ctx->app->live_ring, message.slot);

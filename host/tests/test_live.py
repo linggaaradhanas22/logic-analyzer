@@ -102,6 +102,23 @@ def test_live_client_kill_hook(analyzer) -> None:
         client.ping()
 
 
+def test_live_client_raw_send_hook(analyzer) -> None:
+    mock = analyzer("status")
+    client = AnalyzerClient(open_uri(mock.uri))
+    try:
+        # Garbage, a filler that completes any pending partial frame and a
+        # bad-CRC frame force the peer parser to resync before the next
+        # valid command.
+        garbage = bytes(range(256)) * 8
+        flush = b"\x00" * (p.MAX_PAYLOAD + 64)
+        bad = bytes([p.SOF, p.PING, 0, 0, 0, 0xDE, 0xAD])
+        client.raw_send(garbage + flush + bad)
+        result = client.status()
+        assert "state" in result and "status_reg" in result
+    finally:
+        client.close()
+
+
 def test_live_client_count_stops_early(analyzer) -> None:
     mock = analyzer("live")
     client = AnalyzerClient(open_uri(mock.uri))

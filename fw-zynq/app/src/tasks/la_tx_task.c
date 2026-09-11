@@ -273,6 +273,21 @@ static void tx_drain_events(la_tx_ctx_t *ctx)
     tx_report_decoder_overruns(ctx);
     while (xQueueReceive(ctx->app->ev_q, &block, 0) == pdTRUE) {
         if (block != NULL && block->length != 0u) {
+            size_t needed = (size_t)block->length + LA_PROTO_FRAME_OVERHEAD;
+
+            /* Bound the drain by the TX stream buffer: under overload the
+             * producers keep the ev_q non-empty, so an unbounded drain never
+             * returns and starves the control path (jobs, ACKs, STATUS).
+             * Put the block back and let the UART drain before retrying. */
+            if (xStreamBufferSpacesAvailable(ctx->app->tx_sb) < needed) {
+                if (xQueueSendToFront(ctx->app->ev_q, &block, 0) != pdTRUE) {
+                    ctx->app->tx_drops++;
+                    if (xQueueSend(ctx->app->block_q, &block, 0) != pdTRUE) {
+                        ctx->app->tx_drops++;
+                    }
+                }
+                return;
+            }
             (void)tx_write(ctx, LA_PROTO_EVT_DECODED,
                            la_app_next_sequence(ctx->app), block->data,
                            block->length);

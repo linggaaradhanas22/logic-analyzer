@@ -17,8 +17,16 @@ allocation. Priorities are relative, with a larger number meaning more urgent.
 | `DecodeSpiTask` | 5 | 3 KiB | `seg_q[SPI]` | Same ownership contract for SPI |
 | `DecodeI2cTask` | 5 | 3 KiB | `seg_q[I2C]` | Same ownership contract for I2C |
 | `CmdTask` | 5 | 4 KiB | 8 KiB RX StreamBuffer | Parse, validate and dispatch commands; never touches DMA payloads |
-| `TxTask` | 4 | 4 KiB | `ev_q`, `tx_q`, control notifications | Pack event/status/data frames, flush at 2 ms, release event blocks and write the single-producer TX StreamBuffer |
+| `TxTask` | 5 | 4 KiB | `ev_q`, `tx_q`, control notifications | Pack event/status/data frames, flush at 2 ms, release event blocks and write the single-producer TX StreamBuffer |
 | `StatusTask` | 1 | 2 KiB | `vTaskDelay(500 ms)` | Stack watermarks, runtime statistics, counters, watchdog and heartbeat LED |
+
+P8.1 priority review (2026-09-11): TxTask was priority 4, below the decoder
+tasks. Under sustained overload AcqTask keeps every `seg_q` non-empty, so the
+decoders never blocked and TxTask never ran: no event or overrun frame was
+sent while the decoder counters climbed. TxTask now shares priority 5 with
+the decoders and CmdTask, so FreeRTOS round-robins the consumer with the
+producers; the event drain is additionally bounded by the TX StreamBuffer
+space so the control path is serviced every turn.
 
 `Idle` maintains the idle counter. Stack overflow and assertion hooks record a
 LOG event and halt rather than continuing with corrupted ownership. The ARM_CA9

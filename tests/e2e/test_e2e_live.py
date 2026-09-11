@@ -18,6 +18,11 @@ decoders-off smoke) and checks a clean return to IDLE.
 `test_live_link_overrun_reported_on_stall` is the P8.4 fault injection: it
 stalls the host read for 3 s and requires the gateway to report the resulting
 best-effort frame drops as EVT_OVERRUN(stage=2 link).
+`test_live_spi_overload_reports_loss` drives the 1 MHz SPI source (far above
+the live link capacity) and requires reported loss, no crash and a clean
+state reset.
+`test_live_garbage_flood_resync` sends garbage plus a bad-CRC frame and
+requires the next command to be answered (parser resync).
 `test_live_tcp_kill_reconnect` RSTs the client mid-live and requires a fresh
 connection to be served (stale-client regression guard).
 
@@ -232,6 +237,44 @@ def test_live_raw_stream_decoders_off(client: AnalyzerClient) -> None:
     assert all(event.get("overrun") for event in events) or not events
     status = client.status()
     assert status["state"] == 0, "decoder-free live stream did not stop cleanly"
+
+
+def test_live_spi_overload_reports_loss(client: AnalyzerClient) -> None:
+    """P8.4/P7.6 overload: the patgen SPI at 1 MHz (DIV=0) offers ~230 k
+    events/s, far beyond the live link capacity. The loss must be reported
+    with a nonzero counter, no crash, a clean return to IDLE and a working
+    command path afterwards (state reset)."""
+    _configure_patgen(client, 4, 0)
+    events = client.live(
+        p.pack_decoder_cfg_spi(0, 0, mosi_channel=1, cs_channel=2, cs_active=0),
+        config=_stream_config(1), count=None, timeout_s=5.0)
+    overruns = [event for event in events if event.get("overrun")]
+    assert overruns, "1 MHz SPI overload produced no loss report"
+    assert overruns[0]["stage"] in (1, 2), overruns
+    assert overruns[0]["dropped"] >= 1, overruns
+    status = client.status()
+    assert status["state"] == 0, "overload did not return to IDLE"
+    # Recovery: the normal 10 kHz SPI source decodes cleanly again.
+    _configure_patgen(client, 4, 99)
+    events = client.live(
+        p.pack_decoder_cfg_spi(0, 0, mosi_channel=1, cs_channel=2, cs_active=0),
+        config=_stream_config(1), count=32, timeout_s=5.0)
+    assert not [event for event in events if event.get("overrun")]
+
+
+def test_live_garbage_flood_resync(client: AnalyzerClient) -> None:
+    """P8.4: flood the gateway with garbage (including SOF bytes), complete
+    any pending partial frame, force a CRC resync, then require the next
+    valid command to be answered. The host-stream parser must resync and no
+    task may die."""
+    garbage = bytes(range(256)) * 8
+    flush = b"\x00" * (p.MAX_PAYLOAD + 64)
+    bad_crc = bytes([p.SOF, p.PING, 0, 0, 0, 0xDE, 0xAD])
+    client.raw_send(garbage + flush + bad_crc)
+    pong = client.ping(timeout_s=10.0)
+    assert pong["fw_version"] != 0, pong
+    status = client.status()
+    assert status["state"] == 0
 
 
 def test_live_tcp_kill_reconnect(client: AnalyzerClient, request) -> None:
