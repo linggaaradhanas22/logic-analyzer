@@ -52,17 +52,19 @@ def count_samples(data: bytes, encoding: int) -> int:
 
 
 def _metadata_text(total_samples: int, samplerate: int) -> bytes:
-    text = (
-        "[global]\n"
-        "sigrok version=0.2.0\n"
-        "\n"
-        "[device 1]\n"
-        "capturefile=logic-1-1\n"
-        f"total samples={total_samples}\n"
-        f"samplerate={samplerate}\n"
-        f"unitsize={1}\n"
-    )
-    return text.encode("ascii")
+    lines = [
+        "[global]",
+        "sigrok version=0.2.0",
+        "",
+        "[device 1]",
+        "capturefile=logic-1",
+        f"total probes={CHANNELS}",
+        f"samplerate={samplerate}",
+        "unitsize=1",
+        f"total samples={total_samples}",
+    ]
+    lines.extend(f"probe{index + 1}=CH{index}" for index in range(CHANNELS))
+    return ("\n".join(lines) + "\n").encode("ascii")
 
 
 def _spool_decoded(data: bytes, encoding: int) -> tuple[int, io.BytesIO]:

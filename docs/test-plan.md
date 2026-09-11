@@ -152,6 +152,19 @@ bench checks must remain explicitly marked `[HUMAN]` until observed.
 - DMA burst, link flow control and the HIL decode gates are bench actions;
   they are unverified, not passing.
 
+### P6 Acceptance
+
+Bench results for P4/P5/P6 supersede the P4 entry-criteria table above where
+they differ; `docs/status.md` is the authoritative ledger.
+
+| Requirement | Check | Evidence |
+|---|---|---|
+| P6.1 la-cli | `python tools/run.py test-host` | PASS 2026-09-11: 49/49 host tests (protocol, client/mock, export, live, Wi-Fi helper); `build/reports/test-host.json` |
+| P6.2 internal burst matrix | `python tools/run.py test-e2e -- --target tcp://HOST:5555` | PASS 2026-09-11: 18/18 matrix configs (counter, walking-1, PRBS8, UART, SPI, I2C at 1M/10M/100M, three consecutive captures each) plus the P4.6 suite; full run 25 passed + 1 skipped; zero CRC/format/FIFO-overflow; `build/reports/test-e2e.json` |
+| P6.3 external JE->JC loopback | same with `--external-loopback --channel-mask 0x3F` | PASS 2026-09-11: 18/18 through six jumpers (channels 0-5); channels 6-7 remain open pending two more jumpers |
+| P6.4 PulseView export | open the `.sr` in PulseView 0.4.2 | PASS 2026-09-11: `docs/images/p6-pulseview-uart.png`; the export writer gained `capturefile=logic-1`, `total probes=8` and `probe1..8` |
+| Tag | `v0.1-burst` | annotated tag on the P6 close-out commit |
+
 Native tests are functional agreement checks. They do not establish target
 FreeRTOS task timing, A9 decoder throughput, DMA descriptor coherency, UART
 flow-control behavior, FPGA timing, electrical levels or physical wiring.

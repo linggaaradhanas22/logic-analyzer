@@ -44,3 +44,16 @@ def pytest_addoption(parser) -> None:
         help="run the P5.5 ESP32 loopback gate (requires the TX/RX and "
         "RTS/CTS jumpers and the JD ribbon removed)",
     )
+    parser.addoption(
+        "--external-loopback",
+        action="store_true",
+        help="P6.3: run the burst matrix over the JE->JC jumper loopback "
+        "(SELFTEST_EN=0; the eight JE/JC jumpers must be installed)",
+    )
+    parser.addoption(
+        "--channel-mask",
+        type=lambda value: int(value, 0),
+        default=0xFF,
+        help="P6.3 enabled-channel mask for the external loopback "
+        "(0x3F when only JE/JC channels 0-5 are jumpered; default 0xFF)",
+    )

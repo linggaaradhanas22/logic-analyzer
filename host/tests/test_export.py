@@ -51,6 +51,9 @@ def test_sr_export_raw(tmp_path) -> None:
         assert "samplerate=100000000" in metadata
         assert "total samples=2048" in metadata
         assert "unitsize=1" in metadata
+        assert "capturefile=logic-1\n" in metadata
+        assert "total probes=8" in metadata
+        assert "probe1=CH0" in metadata and "probe8=CH7" in metadata
         decoded = archive.read("logic-1-1")
     assert decoded == bytes(samples)
 

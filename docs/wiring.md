@@ -84,6 +84,22 @@ reflashing. The `fifo_ovf=` counter on the console must stay 0.
 internal loopback, so no jumpers are needed; restore the gateway firmware with
 `python tools/run.py fw-esp32` and the usual flash flow afterwards.
 
+### P6.3 external loopback (JE -> JC)
+
+With the Zynq link active, jumper the patgen outputs to the acquisition
+inputs: JE-1..4 -> JC-1..4 (channels 0-3) and JE-7..10 -> JC-7..10
+(channels 4-7). Run the burst matrix with the external mux:
+
+```powershell
+python tools\run.py test-e2e -- --target tcp://la-esp32.local:5555 --external-loopback -k test_matrix
+```
+
+The protocol modes (UART, SPI, I2C) use channels 0-4 only. When fewer than
+eight jumpers are available, mask the unwired channels, for example
+`--channel-mask 0x3F` for channels 0-5; the step modes are then verified over
+the enabled channels. Keep the JD ribbon connected: these jumpers are
+separate from the P5.5 ESP32 loopback, which requires the JD ribbon removed.
+
 ## Power and Operating Rules
 
 - Keep the ESP32 on its own USB or approved 3.3 V supply and connect signal ground.
