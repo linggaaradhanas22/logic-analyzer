@@ -34,6 +34,16 @@ static la_ack_msg_t s_ack_q_storage[LA_ACK_Q_DEPTH];
 static StaticQueue_t s_job_q_struct;
 static la_tx_job_t s_job_q_storage[1];
 
+static StaticQueue_t s_block_q_struct;
+static la_event_batch_t *s_block_q_storage[LA_EVENT_BLOCK_COUNT];
+static la_event_batch_t s_event_blocks[LA_EVENT_BLOCK_COUNT];
+static StaticQueue_t s_ev_q_struct;
+static la_event_batch_t *s_ev_q_storage[LA_EV_Q_DEPTH];
+static StaticQueue_t s_cfg_q_struct[LA_DECODER_COUNT];
+static la_decoder_config_msg_t s_cfg_q_storage[LA_DECODER_COUNT][LA_CFG_Q_DEPTH];
+static StaticQueue_t s_seg_q_struct[LA_DECODER_COUNT];
+static la_live_segment_msg_t s_seg_q_storage[LA_DECODER_COUNT][LA_SEG_Q_DEPTH];
+
 static StaticTask_t s_acq_tcb;
 static StackType_t s_acq_stack[LA_STACK_ACQ];
 static StaticTask_t s_cmd_tcb;
@@ -42,6 +52,11 @@ static StaticTask_t s_tx_tcb;
 static StackType_t s_tx_stack[LA_STACK_TX];
 static StaticTask_t s_status_tcb;
 static StackType_t s_status_stack[LA_STACK_STATUS];
+static StaticTask_t s_decoder_tcb[LA_DECODER_COUNT];
+static StackType_t s_decoder_stack[LA_DECODER_COUNT][LA_STACK_DECODER];
+
+static const char *const s_decoder_names[LA_DECODER_COUNT] = {
+    "la_dec0", "la_dec1", "la_dec2"};
 
 uint8_t la_app_next_sequence(la_app_t *app)
 {
@@ -50,6 +65,8 @@ uint8_t la_app_next_sequence(la_app_t *app)
 
 int la_app_init(la_app_t *app)
 {
+    uint8_t slot;
+
     if (app == NULL) {
         return -1;
     }
@@ -74,9 +91,49 @@ int la_app_init(la_app_t *app)
     app->job_q = xQueueCreateStatic(1u, sizeof(la_tx_job_t),
                                     (uint8_t *)s_job_q_storage,
                                     &s_job_q_struct);
+    app->block_q = xQueueCreateStatic(LA_EVENT_BLOCK_COUNT,
+                                      sizeof(la_event_batch_t *),
+                                      (uint8_t *)s_block_q_storage,
+                                      &s_block_q_struct);
+    app->ev_q = xQueueCreateStatic(LA_EV_Q_DEPTH, sizeof(la_event_batch_t *),
+                                   (uint8_t *)s_ev_q_storage, &s_ev_q_struct);
     if (app->rx_sb == NULL || app->tx_sb == NULL || app->ctrl_q == NULL ||
         app->notice_q == NULL || app->tx_q == NULL || app->ack_q == NULL ||
-        app->job_q == NULL) {
+        app->job_q == NULL || app->block_q == NULL || app->ev_q == NULL) {
+        return -1;
+    }
+
+    for (slot = 0u; slot < LA_DECODER_COUNT; ++slot) {
+        la_decoder_ctx_t *decoder = &app->decoders[slot];
+
+        decoder->app = app;
+        decoder->slot = slot;
+        decoder->cfg_q = xQueueCreateStatic(LA_CFG_Q_DEPTH,
+                                            sizeof(la_decoder_config_msg_t),
+                                            (uint8_t *)s_cfg_q_storage[slot],
+                                            &s_cfg_q_struct[slot]);
+        decoder->seg_q = xQueueCreateStatic(LA_SEG_Q_DEPTH,
+                                            sizeof(la_live_segment_msg_t),
+                                            (uint8_t *)s_seg_q_storage[slot],
+                                            &s_seg_q_struct[slot]);
+        if (decoder->cfg_q == NULL || decoder->seg_q == NULL) {
+            return -1;
+        }
+        la_decoder_core_init(&decoder->core);
+    }
+    for (slot = 0u; slot < LA_EVENT_BLOCK_COUNT; ++slot) {
+        la_event_batch_t *block = &s_event_blocks[slot];
+
+        la_event_batch_init(block);
+        if (xQueueSend(app->block_q, &block, 0) != pdTRUE) {
+            return -1;
+        }
+    }
+    if (la_segment_pool_init(&app->pool, LA_LIVE_SEGMENT_BYTES) != 0) {
+        return -1;
+    }
+    if (la_live_ring_init(&app->live_ring, &app->pool, la_mem_capture_base(),
+                          LA_LIVE_SEGMENT_COUNT, LA_LIVE_SEGMENT_BYTES) != 0) {
         return -1;
     }
 
@@ -92,6 +149,15 @@ int la_app_init(la_app_t *app)
     if (app->acq_task == NULL || app->cmd_task == NULL ||
         app->tx_task == NULL || app->status_task == NULL) {
         return -1;
+    }
+    for (slot = 0u; slot < LA_DECODER_COUNT; ++slot) {
+        app->decoders[slot].task = xTaskCreateStatic(
+            la_decoder_task, s_decoder_names[slot], LA_STACK_DECODER,
+            &app->decoders[slot], LA_PRIO_DECODER, s_decoder_stack[slot],
+            &s_decoder_tcb[slot]);
+        if (app->decoders[slot].task == NULL) {
+            return -1;
+        }
     }
 
     if (la_link_uart_init(&app->link, XPAR_XUARTPS_0_BASEADDR, 921600u,

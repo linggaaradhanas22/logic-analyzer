@@ -25,6 +25,7 @@ typedef struct la_tx_ctx {
     uint64_t next_chunk;
     uint32_t jobs;
     uint32_t abandons;
+    uint32_t reported_drops[LA_DECODER_COUNT];
 } la_tx_ctx_t;
 
 static void tx_map_add(la_tx_ctx_t *ctx, uint8_t sequence, uint64_t chunk)
@@ -240,6 +241,46 @@ static void tx_send_frame(la_tx_ctx_t *ctx, const la_tx_frame_t *frame)
                    frame->length);
 }
 
+static void tx_report_decoder_overruns(la_tx_ctx_t *ctx)
+{
+    uint8_t slot;
+
+    for (slot = 0u; slot < LA_DECODER_COUNT; ++slot) {
+        uint32_t current = ctx->app->decoder_dropped_events[slot];
+
+        if (current != ctx->reported_drops[slot]) {
+            uint8_t payload[LA_PROTO_EVT_OVERRUN_WIRE_SIZE];
+            uint32_t delta = current - ctx->reported_drops[slot];
+
+            ctx->reported_drops[slot] = current;
+            if (la_proto_pack_evt_overrun(delta, 1u, payload, sizeof(payload)) ==
+                LA_PROTO_EVT_OVERRUN_WIRE_SIZE) {
+                (void)tx_write(ctx, LA_PROTO_EVT_OVERRUN,
+                               la_app_next_sequence(ctx->app), payload,
+                               (uint16_t)sizeof(payload));
+            }
+        }
+    }
+}
+
+static void tx_drain_events(la_tx_ctx_t *ctx)
+{
+    la_event_batch_t *block;
+
+    while (xQueueReceive(ctx->app->ev_q, &block, 0) == pdTRUE) {
+        if (block != NULL && block->length != 0u) {
+            (void)tx_write(ctx, LA_PROTO_EVT_DECODED,
+                           la_app_next_sequence(ctx->app), block->data,
+                           block->length);
+        }
+        if (block != NULL &&
+            xQueueSend(ctx->app->block_q, &block, 0) != pdTRUE) {
+            ctx->app->tx_drops++;
+        }
+    }
+    tx_report_decoder_overruns(ctx);
+}
+
 static la_tx_ctx_t s_tx_ctx;
 
 void la_tx_task(void *parameters)
@@ -281,6 +322,7 @@ void la_tx_task(void *parameters)
             }
             tx_send_frame(ctx, &frame);
         }
+        tx_drain_events(ctx);
         tx_pump(ctx);
     }
 }

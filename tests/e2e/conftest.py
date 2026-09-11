@@ -57,3 +57,16 @@ def pytest_addoption(parser) -> None:
         help="P6.3 enabled-channel mask for the external loopback "
         "(0x3F when only JE/JC channels 0-5 are jumpered; default 0xFF)",
     )
+    parser.addoption(
+        "--live",
+        action="store_true",
+        help="P7.6: run the live decode gates (requires the P7 firmware, the "
+        "JE-1->JC-1 jumper and a patgen UART 115200 source on CH0)",
+    )
+    parser.addoption(
+        "--live-seconds",
+        type=float,
+        default=10.0,
+        help="P7.6 continuous UART live stream duration in seconds "
+        "(default 10; the plan zero-drop gate uses 60)",
+    )

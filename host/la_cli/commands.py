@@ -210,19 +210,22 @@ def abort(target: str, timeout_s: float) -> None:
     click.echo("aborted")
 
 
-@cli.command(help="Decoded live events: --decoder uart:rx=0,baud=115200 (P7.5; the "
-                  "burst-phase firmware NAKs this until the live path exists).")
+@cli.command(help="Decoded live events: --decoder uart:rx=0,baud=115200 (P7.5).")
 @click.option("--target", "-t", required=True, help="analyzer link target URI")
 @click.option("--decoder", "decoder_spec", default="uart:rx=0,baud=115200", show_default=True,
               help="decoder configuration, currently uart:rx=CH,baud=BAUD")
 @click.option("--rate", default="100M", show_default=True,
               help="sample rate used to derive samples/bit for the decoder")
+@click.option("--patgen", "patgen_mode",
+              type=click.Choice(["off", "counter", "walking", "prbs", "uart", "spi", "i2c"]),
+              default="off", show_default=True,
+              help="configure the on-board pattern generator before starting")
 @click.option("--count", default=None, type=int, help="stop after N events")
 @click.option("--csv", is_flag=True, help="emit CSV rows instead of text")
 @click.option("--timeout", "timeout_s", default=None, type=float,
               help="overall deadline in seconds (default: until --count or Ctrl+C)")
-def live(target: str, decoder_spec: str, rate: str, count: int | None, csv: bool,
-         timeout_s: float | None) -> None:
+def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int | None,
+         csv: bool, timeout_s: float | None) -> None:
     match = re.fullmatch(r"uart:rx=(\d+),baud=(\d+)", decoder_spec.strip())
     if not match:
         raise click.BadParameter("decoder must be uart:rx=CH,baud=BAUD in this phase")
@@ -234,11 +237,26 @@ def live(target: str, decoder_spec: str, rate: str, count: int | None, csv: bool
     sample_div = _sample_div(rate_hz)
     actual_rate = FS_HZ // (sample_div + 1)
     decoder_cfg = p.pack_decoder_cfg_uart(0, rx_channel, baud, actual_rate)
+    # Live decode consumes transition words; the 2 ms flush interval matches
+    # the PL default (LIVE_FLUSH_CYCLES at 100 MHz).
+    stream_config = p.pack_config(
+        ctrl_flags=p.CTRL_STREAM,
+        sample_div=sample_div,
+        mode=1,  # transition encoding
+        chan_en=0xFF,
+        post_samples=0,
+        txn_max_run=0x00FFFFFF,
+        live_flush_cycles=200_000,
+    )
+    patgen_modes = {"counter": 0, "walking": 1, "prbs": 2, "uart": 3, "spi": 4, "i2c": 5}
 
     client = _make_client(target)
     try:
+        if patgen_mode != "off":
+            client.configure_patgen(p.PATGEN_EN_MASK | (patgen_modes[patgen_mode] << 4))
         try:
-            events = client.live(decoder_cfg, count=count, timeout_s=timeout_s)
+            events = client.live(decoder_cfg, config=stream_config, count=count,
+                                 timeout_s=timeout_s)
         except KeyboardInterrupt:
             client.stop_live()
             click.echo("live stopped")

@@ -123,6 +123,17 @@ required.
 For I2C, bytes 4 and 5 are signed `scl` and `sda` channel numbers. Bytes 6
 through 19 are reserved. Both channels are required and distinct.
 
+### LIVE_START / LIVE_STOP, types `0x15` / `0x16`
+
+Both payloads are empty. `LIVE_START` is accepted only in IDLE with a latched
+STREAM `CONFIG` whose `live_flush_cycles` is nonzero and, when at least one
+decoder slot is enabled, with transition encoding (`MODE.ENCODING = 1`);
+otherwise it is NAKed (bad-state or bad-field). The reply is an ACK, the PL
+streams from the arm edge and the host-visible state becomes CAPT.
+`LIVE_STOP` is accepted from CAPT and is an idempotent ACK in IDLE. An ARM
+whose CONFIG has STREAM set is still NAK unsupported: live streaming uses
+`LIVE_START`.
+
 ## Status and Events
 
 The v1 `STATUS` payload is 52 bytes:

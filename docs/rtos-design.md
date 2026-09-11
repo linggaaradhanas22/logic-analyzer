@@ -344,6 +344,55 @@ sequence space is a single atomic counter shared by CmdTask and TxTask.
 | `rx_sb` 8 KiB | UART RX ISR | CmdTask | ISR counts the unsent remainder and the parser sees the loss |
 | `tx_sb` 4 KiB | TxTask | UART TX ISR | Bounded 100 ms send; a short send abandons the burst and counts a drop |
 
+### P7 live path wiring (P7.2-P7.4)
+
+`drivers/la_dma` gained the live ring calls: `la_dma_prepare_live` builds an
+ordinary 16-BD SG ring (one 256 KiB segment per BD, no cyclic mode) with the
+segment index in the BD ID, `la_dma_collect_live` drains and frees completed
+BDs with their actual lengths, `la_dma_post_live` allocates one free BD and
+re-posts it for a recycled segment, and `la_dma_free_bd_count` bounds the
+repost loop. AcqTask owns the whole live lifecycle:
+
+- **LIVE_START** (from CmdTask `ctrl_q`) waits for the burst buffer-busy gate,
+  applies the STREAM CONFIG, starts the pool ring and the live BD ring,
+  publishes the enabled decoder configurations on each decoder task's `cfg_q`
+  and arms the PL. The PL streams from the arm edge (stream configuration
+  arms straight to CAPT) and a `LA_NOTICE_STREAMING` reconciles the dispatch
+  view.
+- **Completion IRQs** collect completed BDs, publish each segment with the
+  enabled-decoder count and push a `la_live_segment_msg_t` to every enabled
+  decoder's `seg_q` (depth 8). A full `seg_q` releases only that decoder's
+  reference and counts `decoder_queue_drops`; the decoder observes the
+  sequence gap as DISCONTINUITY. Free segments are re-acquired and re-posted
+  in the same IRQ, and a decoder release notification (`LA_NOTIFY_SEGMENT_FREE`)
+  triggers the same repost loop.
+- **Pool exhaustion**: when no descriptor is posted and no segment is free
+  the consumers are behind, so AcqTask stops before the PL FIFO overflows,
+  reports `EVT_OVERRUN(stage=0)` and quiesces. A PL FIFO overflow also ends
+  the stream after the controller's drain and DONE.
+- **LIVE_STOP/ABORT**: write CTRL.ABORT, reset the S2MM channel, notify every
+  decoder task (`LA_NOTIFY_LIVE_STOP`) to drain and release, then abort the
+  ring and wait (bounded, 200 x 1 ms) until the last CPU-owned reference is
+  released before returning to IDLE. A partially read segment is never
+  overwritten because a slot is only reposted while FREE.
+
+`tasks/la_decoder_task` (one per slot, prio 5, 1 KiB stack) drains `cfg_q`
+then `seg_q`, feeds `la_decoder_core` and fills a static event block from the
+free-block queue. A full block or the 2 ms flush timer sends the block
+pointer to the multi-producer `ev_q`; a missing free block or a full `ev_q`
+drops whole events and increments the per-slot dropped counter. After every
+segment it copies the core counters into the app arrays that STATUS reads.
+`TxTask` drains `ev_q` into `EVT_DECODED` frames, recycles the block, and
+reports any decoder drop increase as `EVT_OVERRUN(stage=1)`.
+
+| Queue | Producer | Consumer | Full policy |
+|---|---|---|---|
+| `cfg_q` (2) per decoder | AcqTask (LIVE_START) | decoder task | One config per run; a full queue leaves the slot disabled |
+| `seg_q` (8) per decoder | AcqTask | decoder task | Drop that decoder's reference only; the sequence gap becomes DISCONTINUITY |
+| `block_q` (12) | TxTask + decoder tasks | decoder tasks | No free block drops the event and counts it |
+| `ev_q` (8) | decoder tasks (multi-producer) | TxTask | Full queue drops the whole batch and counts its records |
+| `notice_q` | AcqTask | CmdTask | EVT_OVERRUN notices are additive to the lifecycle notices |
+
 ## ESP32 link relay core (P5.2)
 
 `la_relay.{h,c}` (in the `la_link` IDF component, include/link API; pure C,

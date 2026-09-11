@@ -269,17 +269,22 @@ class AnalyzerClient:
         self._pump(deadline, on_data)
         return CaptureData(meta, bytes(collected), chunks, self._parser_stats())
 
-    def live(self, decoder_config: bytes, count: int | None = None,
-             timeout_s: float | None = None) -> list[dict]:
-        """Configures a decoder slot, starts the live stream and collects
-        decoded events (P7.5 host side; the P4 burst firmware rejects
-        DECODER_CFG/LIVE_START as unsupported until the P7 live path
-        exists). Stops after `count` events, after an EVT_OVERRUN, or on the
-        deadline; a caller interrupt leaves LIVE_STOP to the command."""
+    def live(self, decoder_config: bytes, config: bytes | None = None,
+             count: int | None = None, timeout_s: float | None = None) -> list[dict]:
+        """Configures the live stream and collects decoded events (P7.5).
+
+        `config` is an optional 37-byte STREAM CONFIG payload sent before the
+        decoder slot; the P7 firmware requires it (LIVE_START without a
+        latched STREAM CONFIG is NAKed). Stops after `count` events, after an
+        EVT_OVERRUN, or on the deadline; a caller interrupt leaves LIVE_STOP
+        to the command."""
         if timeout_s is None:
             deadline = float("inf")
         else:
             deadline = time.monotonic() + timeout_s
+        if config is not None:
+            self._send(p.CONFIG, config)
+            self._expect_ack(p.CONFIG, "CONFIG", deadline)
         self._send(p.DECODER_CFG, decoder_config)
         self._expect_ack(p.DECODER_CFG, "DECODER_CFG", deadline)
         self._send(p.LIVE_START)

@@ -35,12 +35,15 @@
 
 #include <stdint.h>
 
-/* AcqTask notification bits (ISRs and CmdTask use these). */
+/* AcqTask/decoder-task notification bits (ISRs, CmdTask and peer tasks). */
 #define LA_NOTIFY_PL_IRQ ((uint32_t)0x00000001u)
 #define LA_NOTIFY_DMA_IRQ ((uint32_t)0x00000002u)
 #define LA_NOTIFY_CTRL ((uint32_t)0x00000004u)
 #define LA_NOTIFY_TX ((uint32_t)0x00000008u)
 #define LA_NOTIFY_JOB_DONE ((uint32_t)0x00000010u)
+#define LA_NOTIFY_SEGMENT_FREE ((uint32_t)0x00000020u)
+#define LA_NOTIFY_LIVE_STOP ((uint32_t)0x00000040u)
+#define LA_NOTIFY_DECODER ((uint32_t)0x00000080u)
 
 typedef struct la_irq {
     la_regs_dev_t regs;

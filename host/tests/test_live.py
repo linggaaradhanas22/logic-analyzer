@@ -75,6 +75,23 @@ def test_live_command_csv(analyzer) -> None:
     assert rows[0] == "BYTE,0,10000,4c"
 
 
+def test_live_command_sends_stream_config_and_patgen(analyzer) -> None:
+    mock = analyzer("live")
+    result = CliRunner().invoke(cli, [
+        "live", "--target", mock.uri, "--count", "8", "--patgen", "uart",
+    ])
+    assert result.exit_code == 0, result.output
+    assert mock.last_config is not None
+    assert len(mock.last_config) == p.CONFIG_SIZE
+    assert mock.last_config[0] & p.CTRL_STREAM
+    assert int.from_bytes(mock.last_config[8:12], "little") & 1  # transition encoding
+    assert int.from_bytes(mock.last_config[33:37], "little") == 200_000
+    assert mock.last_patgen is not None
+    ctrl = int.from_bytes(mock.last_patgen, "little")
+    assert ctrl & p.PATGEN_EN_MASK
+    assert (ctrl & p.PATGEN_MODE_MASK) >> p.PATGEN_MODE_SHIFT == p.PATGEN_MODE_UART_115200
+
+
 def test_live_command_bad_decoder_spec() -> None:
     result = CliRunner().invoke(cli, [
         "live", "--target", "tcp://127.0.0.1:1", "--decoder", "spi:mosi=1",

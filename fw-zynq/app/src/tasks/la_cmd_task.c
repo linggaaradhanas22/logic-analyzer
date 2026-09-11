@@ -64,6 +64,7 @@ static void cmd_post_status(la_cmd_ctx_t *ctx)
     la_app_t *app = ctx->app;
     la_proto_status_t status;
     uint8_t payload[LA_PROTO_STATUS_WIRE_SIZE];
+    uint8_t slot;
 
     memset(&status, 0, sizeof(status));
     status.state = (uint8_t)la_cmd_dispatch_view(&ctx->dispatch);
@@ -72,6 +73,11 @@ static void cmd_post_status(la_cmd_ctx_t *ctx)
     status.trig_index = app->trig_index;
     status.cpu_load_permille = app->cpu_load_permille;
     status.min_free_stack = app->min_free_stack;
+    for (slot = 0u; slot < LA_PROTO_DECODER_MAX_SLOTS; ++slot) {
+        status.decoders[slot].events = app->decoder_events[slot];
+        status.decoders[slot].dropped_segments =
+            app->decoder_dropped_segments[slot];
+    }
     if (la_proto_pack_status(&status, payload, sizeof(payload)) !=
         LA_PROTO_STATUS_WIRE_SIZE) {
         app->tx_drops++;

@@ -60,6 +60,8 @@ class MockAnalyzer:
         self.scenario = scenario
         self.port: int
         self.received_acks: list[tuple[int, int]] = []
+        self.last_config: bytes | None = None
+        self.last_patgen: bytes | None = None
         self.parser = p.FrameParser()
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -128,6 +130,7 @@ class MockAnalyzer:
                         len(self.received_acks) >= capture_state["ack_wanted"]):
                     capture_state["ack_wanted"] = 0  # drain satisfied
             elif message_type == p.CONFIG:
+                self.last_config = payload
                 if self.scenario == "nak_config":
                     self._send(connection, p.NAK,
                                p.pack_nak(p.CONFIG, sequence, p.ERROR_BAD_FIELD))
@@ -146,6 +149,7 @@ class MockAnalyzer:
                     self._stream_capture(connection, corrupt_chunk=2)
                     capture_state["ack_wanted"] = 0
             elif message_type == p.PATGEN_CFG:
+                self.last_patgen = payload
                 self._send(connection, p.ACK, p.pack_ack(p.PATGEN_CFG, sequence))
             elif message_type == p.DECODER_CFG:
                 if self.scenario == "live":
