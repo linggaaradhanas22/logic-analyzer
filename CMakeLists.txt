@@ -17,7 +17,7 @@ endif()
 add_library(la_native SHARED
   common/la_proto/src/la_proto.c
   common/la_decode/src/la_decode.c
-  fw-zynq/tests/host/segment_pool.c
+  fw-zynq/app/src/live/la_segment_pool.c
 )
 
 set_target_properties(la_native PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
@@ -27,7 +27,7 @@ target_include_directories(la_native
   PUBLIC
     common/la_proto/include
     common/la_decode/include
-    fw-zynq/tests/host
+    fw-zynq/app/src/live
 )
 
 if(NOT WIN32)
@@ -42,7 +42,7 @@ target_link_libraries(la_native_tests PRIVATE la_native)
 target_include_directories(la_native_tests PRIVATE
   common/la_proto/include
   common/la_decode/include
-  fw-zynq/tests/host
+  fw-zynq/app/src/live
 )
 
 add_executable(la_esp32_mocks
@@ -140,6 +140,19 @@ target_include_directories(la_native_txpack PRIVATE
   fw-zynq/app/src/tasks
 )
 
+add_executable(la_native_live
+  tests/native/live_core_host_tests.c
+  fw-zynq/app/src/live/la_live_ring.c
+  fw-zynq/app/src/live/la_decoder_core.c
+  fw-zynq/app/src/live/la_event_batch.c
+)
+target_link_libraries(la_native_live PRIVATE la_native)
+target_include_directories(la_native_live PRIVATE
+  common/la_proto/include
+  common/la_decode/include
+  fw-zynq/app/src/live
+)
+
 enable_testing()
 add_test(NAME la_native_tests COMMAND la_native_tests)
 add_test(NAME la_esp32_mocks COMMAND la_esp32_mocks)
@@ -153,6 +166,7 @@ add_test(NAME la_native_cmd COMMAND la_native_cmd)
 add_test(NAME la_native_txpack COMMAND la_native_txpack)
 add_test(NAME la_native_plan COMMAND la_native_plan)
 add_test(NAME la_native_irqstats COMMAND la_native_irqstats)
+add_test(NAME la_native_live COMMAND la_native_live)
 
 if(Python3_EXECUTABLE)
   add_test(NAME la_native_ctypes

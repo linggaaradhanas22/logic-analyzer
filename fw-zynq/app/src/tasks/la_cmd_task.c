@@ -111,6 +111,30 @@ static void cmd_forward_ctrl(la_cmd_ctx_t *ctx, la_ctrl_kind_t kind,
     (void)xTaskNotify(app->acq_task, LA_NOTIFY_CTRL, eSetBits);
 }
 
+static void cmd_forward_live(la_cmd_ctx_t *ctx, la_ctrl_kind_t kind)
+{
+    la_app_t *app = ctx->app;
+    la_ctrl_msg_t message;
+    uint8_t slot;
+
+    memset(&message, 0, sizeof(message));
+    message.kind = kind;
+    message.config = *la_cmd_dispatch_config(&ctx->dispatch);
+    message.config_valid = 1u;
+    for (slot = 0u; slot < LA_PROTO_DECODER_MAX_SLOTS; ++slot) {
+        if (la_cmd_dispatch_decoder(&ctx->dispatch, slot,
+                                    &message.decoders[slot]) == 0) {
+            message.decoder_valid[slot] = 1u;
+            message.decoder_count++;
+        }
+    }
+    if (xQueueSend(app->ctrl_q, &message, 0) != pdTRUE) {
+        cmd_post_log(ctx, "ctrl queue full");
+        return;
+    }
+    (void)xTaskNotify(app->acq_task, LA_NOTIFY_CTRL, eSetBits);
+}
+
 static void cmd_post_ack_msg(la_cmd_ctx_t *ctx, const la_cmd_result_t *result)
 {
     la_app_t *app = ctx->app;
@@ -171,6 +195,17 @@ static void cmd_handle_outcome(la_cmd_ctx_t *ctx, const la_cmd_result_t *result)
         la_regs_write32(&ctx->app->regs, LA_REG_PATGEN_CTRL_OFFSET,
                         la_cmd_dispatch_patgen_ctrl(&ctx->dispatch));
         break;
+    case LA_CMD_OUT_DECODER_CFG:
+        cmd_post_ack(ctx, result->type, result->sequence);
+        break;
+    case LA_CMD_OUT_LIVE_START:
+        cmd_post_ack(ctx, result->type, result->sequence);
+        cmd_forward_live(ctx, LA_CTRL_LIVE_START);
+        break;
+    case LA_CMD_OUT_LIVE_STOP:
+        cmd_post_ack(ctx, result->type, result->sequence);
+        cmd_forward_ctrl(ctx, LA_CTRL_LIVE_STOP, NULL);
+        break;
     case LA_CMD_OUT_CHUNK_ACK:
     case LA_CMD_OUT_CHUNK_NAK:
     case LA_CMD_OUT_BURST_NAK:
@@ -220,6 +255,20 @@ static void cmd_handle_notice(la_cmd_ctx_t *ctx, const la_notice_t *notice)
     case LA_NOTICE_DONE:
         la_cmd_dispatch_acq_notice(&ctx->dispatch, LA_CMD_ACQ_DONE);
         break;
+    case LA_NOTICE_STREAMING:
+        la_cmd_dispatch_acq_notice(&ctx->dispatch, LA_CMD_ACQ_STREAMING);
+        break;
+    case LA_NOTICE_OVERRUN: {
+        uint8_t payload[LA_PROTO_EVT_OVERRUN_WIRE_SIZE];
+
+        if (la_proto_pack_evt_overrun(notice->dropped, notice->stage, payload,
+                                      sizeof(payload)) ==
+            LA_PROTO_EVT_OVERRUN_WIRE_SIZE) {
+            cmd_post_frame(ctx, LA_PROTO_EVT_OVERRUN, la_app_next_sequence(app),
+                           payload, sizeof(payload));
+        }
+        break;
+    }
     case LA_NOTICE_ABORTED: {
         char text[48];
 

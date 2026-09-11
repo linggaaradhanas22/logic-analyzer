@@ -37,14 +37,17 @@
  * lifecycle event. See docs/rtos-design.md "CmdTask command dispatch core
  * (P4.9)".
  *
- * P4 scope guards: DECODER_CFG, LIVE_START and LIVE_STOP are rejected with
- * NAK unsupported (P7.4 extends this table), and an ARM whose latched
- * CONFIG has the STREAM flag set is rejected with NAK unsupported - the
- * same guard la_acq_fsm applies until the P7.x live path exists. CONFIG
- * while the machine is not IDLE is rejected as busy. PATGEN_CFG (the
- * additive v1 extension for the pattern generator) is accepted in any
- * state and latched for CmdTask to write; an ARM whose worst-case capture
- * cannot fit the configured capture pool is rejected with NAK overflow.
+ * P4/P7 scope guards: DECODER_CFG, LIVE_START and LIVE_STOP are accepted
+ * (P7.4): DECODER_CFG latches a validated decoder slot configuration in
+ * IDLE, LIVE_START requires a latched STREAM CONFIG (transition encoding
+ * whenever a decoder is enabled) and moves the view to CAPT, LIVE_STOP is
+ * accepted from CAPT and is an idempotent ACK in IDLE. An ARM whose latched
+ * CONFIG has the STREAM flag set is still rejected with NAK unsupported -
+ * live streaming uses LIVE_START, not ARM. CONFIG while the machine is not
+ * IDLE is rejected as busy. PATGEN_CFG (the additive v1 extension for the
+ * pattern generator) is accepted in any state and latched for CmdTask to
+ * write; an ARM whose worst-case capture cannot fit the configured capture
+ * pool is rejected with NAK overflow.
  */
 
 #include "la_proto.h"
@@ -70,7 +73,8 @@ typedef enum la_cmd_acq_notice {
     LA_CMD_ACQ_ARMED = 0,
     LA_CMD_ACQ_TRIGGERED,
     LA_CMD_ACQ_DONE,
-    LA_CMD_ACQ_ABORTED
+    LA_CMD_ACQ_ABORTED,
+    LA_CMD_ACQ_STREAMING
 } la_cmd_acq_notice_t;
 
 typedef enum la_cmd_outcome {
@@ -84,7 +88,10 @@ typedef enum la_cmd_outcome {
     LA_CMD_OUT_PATGEN,
     LA_CMD_OUT_CHUNK_ACK,
     LA_CMD_OUT_CHUNK_NAK,
-    LA_CMD_OUT_BURST_NAK
+    LA_CMD_OUT_BURST_NAK,
+    LA_CMD_OUT_DECODER_CFG,
+    LA_CMD_OUT_LIVE_START,
+    LA_CMD_OUT_LIVE_STOP
 } la_cmd_outcome_t;
 
 typedef struct la_cmd_result {
@@ -94,6 +101,7 @@ typedef struct la_cmd_result {
     uint8_t sequence; /* echoed request sequence; chunk sequence for the
                        * ACK/NAK routing outcomes */
     uint8_t error;    /* LA_PROTO_ERROR_* code for NAK outcomes */
+    uint8_t slot;     /* decoder slot for OUT_DECODER_CFG */
     uint8_t payload[LA_PROTO_PONG_WIRE_SIZE]; /* valid for OUT_PONG */
 } la_cmd_result_t;
 
@@ -106,6 +114,9 @@ typedef struct la_cmd_dispatch {
     uint32_t patgen_ctrl;
     uint8_t patgen_valid;
     uint64_t pool_bytes; /* burst capture pool capacity; 0 disables the check */
+    la_proto_decoder_config_t decoders[LA_PROTO_DECODER_MAX_SLOTS];
+    uint8_t decoder_valid[LA_PROTO_DECODER_MAX_SLOTS];
+    uint8_t decoder_count;
 } la_cmd_dispatch_t;
 
 LA_CMD_API void la_cmd_dispatch_init(la_cmd_dispatch_t *dispatch,
@@ -142,5 +153,13 @@ LA_CMD_API const la_proto_config_t *la_cmd_dispatch_config(const la_cmd_dispatch
  * la_cmd_dispatch_patgen_valid() is nonzero. */
 LA_CMD_API int la_cmd_dispatch_patgen_valid(const la_cmd_dispatch_t *dispatch);
 LA_CMD_API uint32_t la_cmd_dispatch_patgen_ctrl(const la_cmd_dispatch_t *dispatch);
+
+/* Validated decoder slot latch (P7.4). Returns 0 and copies the latched
+ * configuration when slot holds one, -1 otherwise. decoder_count is the
+ * number of slots holding an enabled (non-OFF) configuration. */
+LA_CMD_API int la_cmd_dispatch_decoder(const la_cmd_dispatch_t *dispatch,
+                                       uint8_t slot,
+                                       la_proto_decoder_config_t *config);
+LA_CMD_API uint8_t la_cmd_dispatch_decoder_count(const la_cmd_dispatch_t *dispatch);
 
 #endif /* LA_CMD_DISPATCH_H */

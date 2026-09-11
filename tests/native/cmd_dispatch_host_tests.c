@@ -220,11 +220,11 @@ static int test_arm_errors(void)
 
     CHECK(send_stream_config(&dispatch, 5u, &result) == 0 &&
               result.outcome == LA_CMD_OUT_ACK,
-          "STREAM CONFIG stores in P4");
+          "STREAM CONFIG latches");
     CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_ARM, 6u, NULL, 0u, 0u, &result) == 0 &&
               result.outcome == LA_CMD_OUT_NAK &&
               result.error == LA_PROTO_ERROR_UNSUPPORTED,
-          "STREAM ARM NAK unsupported until P7.x");
+          "STREAM ARM NAK unsupported (live uses LIVE_START)");
     CHECK(la_cmd_dispatch_view(&dispatch) == LA_CMD_VIEW_IDLE, "rejected ARM stays IDLE");
     return 0;
 }
@@ -282,23 +282,201 @@ static int test_get_status(void)
     return 0;
 }
 
-static int test_p7_commands_unsupported(void)
+static void make_uart_decoder(la_proto_decoder_config_t *config, uint8_t slot)
 {
-    static const uint8_t types[] = {LA_PROTO_DECODER_CFG, LA_PROTO_LIVE_START,
-                                    LA_PROTO_LIVE_STOP};
+    memset(config, 0, sizeof(*config));
+    config->slot = slot;
+    config->type = LA_PROTO_DECODER_UART;
+    config->params.uart.rx_channel = 0u;
+    config->params.uart.data_bits = 8u;
+    config->params.uart.parity = 0u;
+    config->params.uart.stop_bits = 1u;
+    config->params.uart.inverted = 0u;
+    config->params.uart.baud_hz = 115200u;
+    config->params.uart.sample_rate_hz = 100000000u;
+}
+
+static int test_decoder_cfg(void)
+{
     la_cmd_dispatch_t dispatch;
     la_cmd_result_t result;
-    size_t index;
+    la_proto_decoder_config_t config;
+    la_proto_decoder_config_t latched;
+    uint8_t payload[LA_PROTO_DECODER_CONFIG_WIRE_SIZE];
 
     la_cmd_dispatch_init(&dispatch, TEST_FW_VERSION, TEST_PL_ID);
-    for (index = 0u; index < sizeof(types); ++index) {
-        CHECK(la_cmd_dispatch_step(&dispatch, types[index], (uint8_t)index, NULL, 0u, 0u,
-                                   &result) == 0 &&
-                  result.outcome == LA_CMD_OUT_NAK &&
-                  result.error == LA_PROTO_ERROR_UNSUPPORTED &&
-                  result.type == types[index],
-              "P7.x command NAK unsupported in the burst path");
-    }
+    CHECK(la_cmd_dispatch_decoder_count(&dispatch) == 0u, "no decoder latches initially");
+    CHECK(la_cmd_dispatch_decoder(&dispatch, 0u, &latched) == -1,
+          "empty decoder slot not readable");
+
+    make_uart_decoder(&config, 0u);
+    CHECK(la_proto_pack_decoder_config(&config, payload, sizeof(payload)) ==
+              LA_PROTO_DECODER_CONFIG_WIRE_SIZE,
+          "decoder config packs");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_DECODER_CFG, 0x21u, payload,
+                                (uint16_t)sizeof(payload), 0u, &result) == 0,
+          "DECODER_CFG routed");
+    CHECK(result.outcome == LA_CMD_OUT_DECODER_CFG && result.type == LA_PROTO_DECODER_CFG &&
+              result.sequence == 0x21u && result.slot == 0u,
+          "DECODER_CFG acknowledged with the slot");
+    CHECK(la_cmd_dispatch_decoder_count(&dispatch) == 1u, "one decoder latched");
+    CHECK(la_cmd_dispatch_decoder(&dispatch, 0u, &latched) == 0 &&
+              latched.type == LA_PROTO_DECODER_UART &&
+              latched.params.uart.baud_hz == 115200u &&
+              latched.params.uart.sample_rate_hz == 100000000u,
+          "decoder latch contents");
+
+    make_uart_decoder(&config, 1u);
+    (void)la_proto_pack_decoder_config(&config, payload, sizeof(payload));
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_DECODER_CFG, 0x22u, payload,
+                                (uint16_t)sizeof(payload), 0u, &result) == 0 &&
+              result.slot == 1u,
+          "second decoder slot accepted");
+    CHECK(la_cmd_dispatch_decoder_count(&dispatch) == 2u, "two decoders latched");
+
+    make_uart_decoder(&config, 0u);
+    config.type = LA_PROTO_DECODER_OFF;
+    (void)la_proto_pack_decoder_config(&config, payload, sizeof(payload));
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_DECODER_CFG, 0x23u, payload,
+                                (uint16_t)sizeof(payload), 0u, &result) == 0 &&
+              result.slot == 0u,
+          "decoder slot reconfiguration accepted");
+    CHECK(la_cmd_dispatch_decoder_count(&dispatch) == 1u,
+          "an OFF slot is not counted as enabled");
+    CHECK(la_cmd_dispatch_decoder(&dispatch, 0u, &latched) == 0 &&
+              latched.type == LA_PROTO_DECODER_OFF,
+          "reconfigured slot latches OFF");
+
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_DECODER_CFG, 0x24u, payload,
+                                (uint16_t)(sizeof(payload) - 1u), 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_LENGTH,
+          "DECODER_CFG bad length NAK");
+
+    memset(payload, 0, sizeof(payload));
+    payload[0] = 0u;
+    payload[1] = LA_PROTO_DECODER_SPI;
+    payload[4] = 0xFFu; /* SCK 0xFF: not a channel, and no data channel */
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_DECODER_CFG, 0x25u, payload,
+                                (uint16_t)sizeof(payload), 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK && result.error == LA_PROTO_ERROR_BAD_FIELD,
+          "DECODER_CFG bad field NAK");
+
+    CHECK(send_config(&dispatch, 0x26u, &result) == 0, "burst CONFIG accepted");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_ARM, 0x27u, NULL, 0u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_ARM,
+          "ARM accepted");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_DECODER_CFG, 0x28u, payload,
+                                (uint16_t)sizeof(payload), 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK && result.error == LA_PROTO_ERROR_BUSY,
+          "DECODER_CFG while busy NAK");
+    return 0;
+}
+
+static int test_live_lifecycle(void)
+{
+    la_cmd_dispatch_t dispatch;
+    la_cmd_result_t result;
+    la_proto_config_t config;
+    la_proto_decoder_config_t decoder;
+    uint8_t config_payload[LA_PROTO_CONFIG_WIRE_SIZE];
+    uint8_t decoder_payload[LA_PROTO_DECODER_CONFIG_WIRE_SIZE];
+
+    la_cmd_dispatch_init(&dispatch, TEST_FW_VERSION, TEST_PL_ID);
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LIVE_START, 1u, NULL, 0u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_STATE,
+          "LIVE_START without CONFIG NAK bad state");
+
+    CHECK(send_config(&dispatch, 2u, &result) == 0, "burst CONFIG accepted");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LIVE_START, 3u, NULL, 0u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_FIELD,
+          "LIVE_START without STREAM NAK bad field");
+
+    make_config(&config);
+    config.ctrl_flags = LA_REG_CTRL_STREAM_MASK;
+    config.live_flush_cycles = 200000u;
+    (void)la_proto_pack_config(&config, config_payload, sizeof(config_payload));
+    config_payload[33] = 0u;
+    config_payload[34] = 0u;
+    config_payload[35] = 0u;
+    config_payload[36] = 0u;
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_CONFIG, 4u, config_payload,
+                                (uint16_t)sizeof(config_payload), 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_FIELD,
+          "STREAM CONFIG with zero flush cycles NAK bad field");
+
+    config.live_flush_cycles = 200000u;
+    config.mode = 0u;
+    (void)la_proto_pack_config(&config, config_payload, sizeof(config_payload));
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_CONFIG, 5u, config_payload,
+                                (uint16_t)sizeof(config_payload), 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_ACK,
+          "STREAM CONFIG accepted");
+    make_uart_decoder(&decoder, 0u);
+    (void)la_proto_pack_decoder_config(&decoder, decoder_payload,
+                                       sizeof(decoder_payload));
+    (void)la_cmd_dispatch_step(&dispatch, LA_PROTO_DECODER_CFG, 6u, decoder_payload,
+                               (uint16_t)sizeof(decoder_payload), 0u, &result);
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LIVE_START, 7u, NULL, 0u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_FIELD,
+          "LIVE_START with a decoder in raw mode NAK bad field");
+
+    config.mode = LA_REG_MODE_ENCODING_MASK;
+    (void)la_proto_pack_config(&config, config_payload, sizeof(config_payload));
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_CONFIG, 8u, config_payload,
+                                (uint16_t)sizeof(config_payload), 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_ACK,
+          "transition-encoding STREAM CONFIG accepted");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LIVE_START, 9u, NULL, 0u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_LIVE_START && result.type == LA_PROTO_LIVE_START &&
+              result.sequence == 9u,
+          "LIVE_START accepted with ACK");
+    CHECK(la_cmd_dispatch_view(&dispatch) == LA_CMD_VIEW_CAPT,
+          "LIVE_START moves the view to CAPT");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LIVE_START, 10u, NULL, 0u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK && result.error == LA_PROTO_ERROR_BUSY,
+          "double LIVE_START NAK busy");
+    CHECK(send_config(&dispatch, 11u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK && result.error == LA_PROTO_ERROR_BUSY,
+          "CONFIG while streaming NAK busy");
+
+    la_cmd_dispatch_acq_notice(&dispatch, LA_CMD_ACQ_STREAMING);
+    CHECK(la_cmd_dispatch_view(&dispatch) == LA_CMD_VIEW_CAPT,
+          "streaming notice keeps the view CAPT");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LIVE_STOP, 12u, NULL, 0u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_LIVE_STOP && result.type == LA_PROTO_LIVE_STOP &&
+              result.sequence == 12u,
+          "LIVE_STOP accepted with ACK");
+    CHECK(la_cmd_dispatch_view(&dispatch) == LA_CMD_VIEW_IDLE,
+          "LIVE_STOP returns the view to IDLE");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LIVE_STOP, 13u, NULL, 0u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_ACK,
+          "LIVE_STOP while IDLE is an idempotent ACK");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LIVE_STOP, 14u, (const uint8_t *)"x", 1u, 0u,
+                                &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_LENGTH,
+          "LIVE_STOP with payload NAK bad length");
+
+    /* Decoder-free raw streaming stays legal (P7.2 decoders-off HIL). */
+    config.mode = 0u;
+    config.live_flush_cycles = 200000u;
+    (void)la_proto_pack_config(&config, config_payload, sizeof(config_payload));
+    (void)la_cmd_dispatch_step(&dispatch, LA_PROTO_CONFIG, 15u, config_payload,
+                               (uint16_t)sizeof(config_payload), 0u, &result);
+    make_uart_decoder(&decoder, 0u);
+    decoder.type = LA_PROTO_DECODER_OFF;
+    (void)la_proto_pack_decoder_config(&decoder, decoder_payload,
+                                       sizeof(decoder_payload));
+    (void)la_cmd_dispatch_step(&dispatch, LA_PROTO_DECODER_CFG, 16u, decoder_payload,
+                               (uint16_t)sizeof(decoder_payload), 0u, &result);
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LIVE_START, 17u, NULL, 0u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_LIVE_START,
+          "LIVE_START accepted with all decoders off");
     return 0;
 }
 
@@ -451,7 +629,8 @@ int main(void)
     if (test_init_clears() != 0 || test_ping_pong() != 0 ||
         test_unknown_and_inbound_rejected() != 0 || test_config_arm_lifecycle() != 0 ||
         test_config_errors() != 0 || test_arm_errors() != 0 || test_abort() != 0 ||
-        test_get_status() != 0 || test_p7_commands_unsupported() != 0 ||
+        test_get_status() != 0 || test_decoder_cfg() != 0 ||
+        test_live_lifecycle() != 0 ||
         test_patgen_cfg() != 0 || test_arm_pool_capacity() != 0 ||
         test_ack_nak_routing() != 0 || test_argument_guards() != 0) {
         return 1;

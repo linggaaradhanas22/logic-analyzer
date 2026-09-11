@@ -9,6 +9,11 @@
 #define LA_SEGMENT_API
 #endif
 
+/* P7.1 live pool. The same implementation backs the Windows/Linux native
+ * ownership tests and the FreeRTOS app: the lock backend is selected in the
+ * .c file (Win32 critical section / pthread mutex / FreeRTOS critical
+ * section), and the opaque lock_storage keeps the public ABI stable. */
+
 #define LA_SEGMENT_POOL_CAPACITY 16u
 #define LA_SEGMENT_INVALID_SLOT UINT16_MAX
 

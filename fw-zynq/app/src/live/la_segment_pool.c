@@ -1,11 +1,16 @@
-#include "segment_pool.h"
+#include "la_segment_pool.h"
 
 #include <string.h>
 
 #if defined(_WIN32)
 #include <windows.h>
-#else
+#elif defined(LA_NATIVE_BUILD)
 #include <pthread.h>
+#else
+/* FreeRTOS target (fw-zynq app build): every pool operation runs in a task,
+ * never an ISR, and is short, so a critical section is the lock. */
+#include "FreeRTOS.h"
+#include "task.h"
 #endif
 
 #if defined(_WIN32)
@@ -14,6 +19,17 @@ typedef char la_lock_size_check[(sizeof(CRITICAL_SECTION) <= sizeof(((la_segment
 static CRITICAL_SECTION *pool_lock(la_segment_pool_t *pool)
 {
     return (CRITICAL_SECTION *)pool->lock_storage;
+}
+
+static int pool_lock_init(la_segment_pool_t *pool)
+{
+    InitializeCriticalSection(pool_lock(pool));
+    return 0;
+}
+
+static void pool_lock_destroy(la_segment_pool_t *pool)
+{
+    DeleteCriticalSection(pool_lock(pool));
 }
 
 static void lock_pool(la_segment_pool_t *pool)
@@ -25,11 +41,21 @@ static void unlock_pool(la_segment_pool_t *pool)
 {
     LeaveCriticalSection(pool_lock(pool));
 }
-#else
+#elif defined(LA_NATIVE_BUILD)
 
 static pthread_mutex_t *pool_lock(la_segment_pool_t *pool)
 {
     return (pthread_mutex_t *)pool->lock_storage;
+}
+
+static int pool_lock_init(la_segment_pool_t *pool)
+{
+    return pthread_mutex_init(pool_lock(pool), NULL) == 0 ? 0 : -1;
+}
+
+static void pool_lock_destroy(la_segment_pool_t *pool)
+{
+    (void)pthread_mutex_destroy(pool_lock(pool));
 }
 
 static void lock_pool(la_segment_pool_t *pool)
@@ -40,6 +66,31 @@ static void lock_pool(la_segment_pool_t *pool)
 static void unlock_pool(la_segment_pool_t *pool)
 {
     (void)pthread_mutex_unlock(pool_lock(pool));
+}
+
+#else
+
+static int pool_lock_init(la_segment_pool_t *pool)
+{
+    (void)pool;
+    return 0;
+}
+
+static void pool_lock_destroy(la_segment_pool_t *pool)
+{
+    (void)pool;
+}
+
+static void lock_pool(la_segment_pool_t *pool)
+{
+    (void)pool;
+    taskENTER_CRITICAL();
+}
+
+static void unlock_pool(la_segment_pool_t *pool)
+{
+    (void)pool;
+    taskEXIT_CRITICAL();
 }
 
 #endif
@@ -69,13 +120,9 @@ int la_segment_pool_init(la_segment_pool_t *pool, uint32_t segment_capacity)
     }
     memset(pool, 0, sizeof(*pool));
     pool->segment_capacity = segment_capacity;
-#if defined(_WIN32)
-    InitializeCriticalSection(pool_lock(pool));
-#else
-    if (pthread_mutex_init(pool_lock(pool), NULL) != 0) {
+    if (pool_lock_init(pool) != 0) {
         return -1;
     }
-#endif
     for (index = 0u; index < LA_SEGMENT_POOL_CAPACITY; ++index) {
         pool->slots[index].state = LA_SEGMENT_FREE;
     }
@@ -87,11 +134,7 @@ void la_segment_pool_destroy(la_segment_pool_t *pool)
     if (pool == NULL) {
         return;
     }
-#if defined(_WIN32)
-    DeleteCriticalSection(pool_lock(pool));
-#else
-    (void)pthread_mutex_destroy(pool_lock(pool));
-#endif
+    pool_lock_destroy(pool);
 }
 
 int la_segment_pool_acquire(la_segment_pool_t *pool, la_segment_handle_t *handle)

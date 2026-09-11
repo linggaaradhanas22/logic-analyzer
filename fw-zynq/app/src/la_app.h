@@ -57,20 +57,27 @@
 
 typedef enum la_ctrl_kind {
     LA_CTRL_ARM = 1,
-    LA_CTRL_ABORT = 2
+    LA_CTRL_ABORT = 2,
+    LA_CTRL_LIVE_START = 3,
+    LA_CTRL_LIVE_STOP = 4
 } la_ctrl_kind_t;
 
 typedef struct la_ctrl_msg {
     la_ctrl_kind_t kind;
     la_proto_config_t config;
     uint8_t config_valid;
+    la_proto_decoder_config_t decoders[LA_PROTO_DECODER_MAX_SLOTS];
+    uint8_t decoder_valid[LA_PROTO_DECODER_MAX_SLOTS];
+    uint8_t decoder_count;
 } la_ctrl_msg_t;
 
 typedef enum la_notice_kind {
     LA_NOTICE_ARMED = 0,
     LA_NOTICE_TRIGGERED,
     LA_NOTICE_DONE,
-    LA_NOTICE_ABORTED
+    LA_NOTICE_ABORTED,
+    LA_NOTICE_STREAMING,
+    LA_NOTICE_OVERRUN
 } la_notice_kind_t;
 
 typedef struct la_notice {
@@ -78,6 +85,8 @@ typedef struct la_notice {
     uint64_t trig_index;
     uint64_t word_count;
     uint32_t status;
+    uint32_t dropped;   /* valid when kind == LA_NOTICE_OVERRUN */
+    uint8_t stage;      /* EVT_OVERRUN stage when kind == LA_NOTICE_OVERRUN */
 } la_notice_t;
 
 typedef struct la_tx_frame {

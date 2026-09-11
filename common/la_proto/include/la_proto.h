@@ -23,6 +23,7 @@
 #define LA_PROTO_STATUS_WIRE_SIZE ((uint16_t)52u)
 #define LA_PROTO_DATA_BEGIN_WIRE_SIZE ((uint16_t)16u)
 #define LA_PROTO_DATA_END_WIRE_SIZE ((uint16_t)4u)
+#define LA_PROTO_EVT_OVERRUN_WIRE_SIZE ((uint16_t)8u)
 #define LA_PROTO_DATA_CHUNK_FIELD_SIZE ((uint16_t)4u)
 
 typedef enum la_proto_message_type {
@@ -65,6 +66,8 @@ typedef enum la_proto_decoder_type {
     LA_PROTO_DECODER_SPI = 2,
     LA_PROTO_DECODER_I2C = 3
 } la_proto_decoder_type_t;
+
+#define LA_PROTO_DECODER_MAX_SLOTS 3u
 
 typedef struct la_proto_config {
     uint32_t ctrl_flags;
@@ -257,6 +260,17 @@ LA_PROTO_API int la_proto_unpack_nak(uint8_t *nak_type,
                                      uint8_t *error,
                                      const uint8_t *input,
                                      size_t input_length);
+
+/* EVT_OVERRUN payload (protocol.md): dropped:u32 LE, stage:u8, reserved[3].
+ * stage is 0 for DMA, 1 for decoder and 2 for link. */
+LA_PROTO_API size_t la_proto_pack_evt_overrun(uint32_t dropped,
+                                              uint8_t stage,
+                                              uint8_t *output,
+                                              size_t output_capacity);
+LA_PROTO_API int la_proto_unpack_evt_overrun(uint32_t *dropped,
+                                             uint8_t *stage,
+                                             const uint8_t *input,
+                                             size_t input_length);
 
 LA_PROTO_API size_t la_proto_pack_status(const la_proto_status_t *status,
                                          uint8_t *output,

@@ -38,7 +38,8 @@ typedef enum la_acq_event_kind {
     LA_ACQ_EVT_NONE = 0,
     LA_ACQ_EVT_TRIGGERED = 1,
     LA_ACQ_EVT_JOB = 2,
-    LA_ACQ_EVT_ABORTED = 3
+    LA_ACQ_EVT_ABORTED = 3,
+    LA_ACQ_EVT_STREAMING = 4
 } la_acq_event_kind_t;
 
 typedef enum la_acq_abort_cause {
@@ -63,11 +64,13 @@ typedef struct la_acq_fsm {
 LA_ACQ_API void la_acq_fsm_init(la_acq_fsm_t *fsm);
 
 /* CONFIG step: latch the burst/stream decision. Returns 0 when accepted,
- * -1 when not IDLE, -2 when the STREAM bit is set (P7.x scope). */
+ * -1 when not IDLE. A stream (live) configuration arms straight into CAPT
+ * (the PL streams from the arm edge); a burst configuration arms into
+ * ARMED and waits for a trigger. */
 LA_ACQ_API int la_acq_fsm_configure(la_acq_fsm_t *fsm, int stream_enabled);
 
-/* ARM step: IDLE -> ARMED. Returns 0, or -1 when not IDLE (incl. busy
- * double-arm), -2 when the latched configuration is stream mode. */
+/* ARM step: IDLE -> ARMED (burst) or IDLE -> CAPT (stream/live). Returns 0,
+ * or -1 when not IDLE (incl. busy double-arm). */
 LA_ACQ_API int la_acq_fsm_arm(la_acq_fsm_t *fsm);
 
 /* Trigger notification: ARMED -> CAPT and reports LA_ACQ_EVT_TRIGGERED
@@ -91,5 +94,9 @@ LA_ACQ_API int la_acq_fsm_complete(la_acq_fsm_t *fsm, uint64_t word_count,
                                    uint32_t status, la_acq_event_t *event);
 
 LA_ACQ_API la_acq_state_t la_acq_fsm_state(const la_acq_fsm_t *fsm);
+
+/* Nonzero when the latched configuration is stream/live. Valid after
+ * configure() and until the next configure(). */
+LA_ACQ_API int la_acq_fsm_stream(const la_acq_fsm_t *fsm);
 
 #endif /* LA_ACQ_FSM_H */

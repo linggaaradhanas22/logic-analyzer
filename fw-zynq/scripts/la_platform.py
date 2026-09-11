@@ -351,8 +351,11 @@ APP_SOURCE_GROUPS = (
     ("fw-zynq", "app", "src"),
     ("fw-zynq", "app", "src", "drivers"),
     ("fw-zynq", "app", "src", "tasks"),
+    ("fw-zynq", "app", "src", "live"),
     ("common", "la_proto", "src"),
     ("common", "la_proto", "include"),
+    ("common", "la_decode", "src"),
+    ("common", "la_decode", "include"),
 )
 
 

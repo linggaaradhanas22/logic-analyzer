@@ -1,5 +1,7 @@
 #include "la_acq_fsm.h"
 
+#include <stddef.h>
+
 void la_acq_fsm_init(la_acq_fsm_t *fsm)
 {
     fsm->state = LA_ACQ_IDLE;
@@ -21,10 +23,9 @@ int la_acq_fsm_arm(la_acq_fsm_t *fsm)
     if (fsm->state != LA_ACQ_IDLE) {
         return -1;
     }
-    if (fsm->stream_cfg != 0) {
-        return -2;
-    }
-    fsm->state = LA_ACQ_ARMED;
+    /* A stream configuration starts immediately at the arm edge; a burst
+     * configuration waits in ARMED for the trigger. */
+    fsm->state = fsm->stream_cfg != 0 ? LA_ACQ_CAPT : LA_ACQ_ARMED;
     return 0;
 }
 
@@ -90,4 +91,9 @@ int la_acq_fsm_complete(la_acq_fsm_t *fsm, uint64_t word_count,
 la_acq_state_t la_acq_fsm_state(const la_acq_fsm_t *fsm)
 {
     return fsm->state;
+}
+
+int la_acq_fsm_stream(const la_acq_fsm_t *fsm)
+{
+    return fsm != NULL && fsm->stream_cfg != 0;
 }

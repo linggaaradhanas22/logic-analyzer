@@ -447,6 +447,34 @@ int la_proto_unpack_nak(uint8_t *nak_type,
     return 0;
 }
 
+size_t la_proto_pack_evt_overrun(uint32_t dropped,
+                                 uint8_t stage,
+                                 uint8_t *output,
+                                 size_t output_capacity)
+{
+    if (output == NULL || output_capacity < LA_PROTO_EVT_OVERRUN_WIRE_SIZE) {
+        return 0u;
+    }
+    memset(output, 0, LA_PROTO_EVT_OVERRUN_WIRE_SIZE);
+    put_u32_le(&output[0], dropped);
+    output[4] = stage;
+    return LA_PROTO_EVT_OVERRUN_WIRE_SIZE;
+}
+
+int la_proto_unpack_evt_overrun(uint32_t *dropped,
+                                uint8_t *stage,
+                                const uint8_t *input,
+                                size_t input_length)
+{
+    if (dropped == NULL || stage == NULL || input == NULL ||
+        input_length != LA_PROTO_EVT_OVERRUN_WIRE_SIZE) {
+        return -1;
+    }
+    *dropped = get_u32_le(&input[0]);
+    *stage = input[4];
+    return 0;
+}
+
 size_t la_proto_pack_status(const la_proto_status_t *status,
                             uint8_t *output,
                             size_t output_capacity)

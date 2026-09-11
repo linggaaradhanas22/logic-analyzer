@@ -202,8 +202,109 @@ static int handle_patgen(la_cmd_dispatch_t *dispatch,
     return 0;
 }
 
-static int handle_ack(uint8_t sequence,
-                      const uint8_t *payload,
+static uint8_t decoder_enabled_count(const la_cmd_dispatch_t *dispatch)
+{
+    uint8_t count = 0u;
+    uint8_t slot;
+
+    for (slot = 0u; slot < LA_PROTO_DECODER_MAX_SLOTS; ++slot) {
+        if (dispatch->decoder_valid[slot] != 0u &&
+            dispatch->decoders[slot].type != LA_PROTO_DECODER_OFF) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+static int handle_decoder_cfg(la_cmd_dispatch_t *dispatch,
+                              uint8_t sequence,
+                              const uint8_t *payload,
+                              uint16_t length,
+                              la_cmd_result_t *result)
+{
+    la_proto_decoder_config_t config;
+
+    if (length != LA_PROTO_DECODER_CONFIG_WIRE_SIZE) {
+        result_nak(result, LA_PROTO_DECODER_CFG, sequence, LA_PROTO_ERROR_BAD_LENGTH);
+        return 0;
+    }
+    if (dispatch->view != LA_CMD_VIEW_IDLE) {
+        result_nak(result, LA_PROTO_DECODER_CFG, sequence, LA_PROTO_ERROR_BUSY);
+        return 0;
+    }
+    if (la_proto_unpack_decoder_config(&config, payload, length) != 0) {
+        result_nak(result, LA_PROTO_DECODER_CFG, sequence, LA_PROTO_ERROR_BAD_FIELD);
+        return 0;
+    }
+    dispatch->decoders[config.slot] = config;
+    dispatch->decoder_valid[config.slot] = 1u;
+    dispatch->decoder_count = decoder_enabled_count(dispatch);
+    result_ack(result, LA_PROTO_DECODER_CFG, sequence);
+    result->outcome = LA_CMD_OUT_DECODER_CFG;
+    result->slot = config.slot;
+    return 0;
+}
+
+static int handle_live_start(la_cmd_dispatch_t *dispatch,
+                             uint8_t sequence,
+                             const uint8_t *payload,
+                             uint16_t length,
+                             la_cmd_result_t *result)
+{
+    (void)payload;
+    if (length != 0u) {
+        result_nak(result, LA_PROTO_LIVE_START, sequence, LA_PROTO_ERROR_BAD_LENGTH);
+        return 0;
+    }
+    if (dispatch->view != LA_CMD_VIEW_IDLE) {
+        result_nak(result, LA_PROTO_LIVE_START, sequence, LA_PROTO_ERROR_BUSY);
+        return 0;
+    }
+    if (dispatch->config_valid == 0u) {
+        result_nak(result, LA_PROTO_LIVE_START, sequence, LA_PROTO_ERROR_BAD_STATE);
+        return 0;
+    }
+    if ((dispatch->config.ctrl_flags & LA_REG_CTRL_STREAM_MASK) == 0u ||
+        dispatch->config.live_flush_cycles == 0u) {
+        result_nak(result, LA_PROTO_LIVE_START, sequence, LA_PROTO_ERROR_BAD_FIELD);
+        return 0;
+    }
+    if (dispatch->decoder_count != 0u &&
+        (dispatch->config.mode & LA_REG_MODE_ENCODING_MASK) == 0u) {
+        /* Live decode consumes transition words; raw packing is only legal
+         * when no decoder is enabled. */
+        result_nak(result, LA_PROTO_LIVE_START, sequence, LA_PROTO_ERROR_BAD_FIELD);
+        return 0;
+    }
+    result_ack(result, LA_PROTO_LIVE_START, sequence);
+    result->outcome = LA_CMD_OUT_LIVE_START;
+    dispatch->view = LA_CMD_VIEW_CAPT;
+    return 0;
+}
+
+static int handle_live_stop(la_cmd_dispatch_t *dispatch,
+                            uint8_t sequence,
+                            const uint8_t *payload,
+                            uint16_t length,
+                            la_cmd_result_t *result)
+{
+    (void)payload;
+    if (length != 0u) {
+        result_nak(result, LA_PROTO_LIVE_STOP, sequence, LA_PROTO_ERROR_BAD_LENGTH);
+        return 0;
+    }
+    if (dispatch->view == LA_CMD_VIEW_IDLE) {
+        /* Idempotent: stopping an idle machine is trivially satisfied. */
+        result_ack(result, LA_PROTO_LIVE_STOP, sequence);
+        return 0;
+    }
+    result_ack(result, LA_PROTO_LIVE_STOP, sequence);
+    result->outcome = LA_CMD_OUT_LIVE_STOP;
+    dispatch->view = LA_CMD_VIEW_IDLE;
+    return 0;
+}
+
+static int handle_ack(uint8_t sequence,                      const uint8_t *payload,
                       uint16_t length,
                       la_cmd_result_t *result)
 {
@@ -298,12 +399,13 @@ int la_cmd_dispatch_step(la_cmd_dispatch_t *dispatch,
         return handle_nak(sequence, payload, length, result);
 
     case LA_PROTO_DECODER_CFG:
+        return handle_decoder_cfg(dispatch, sequence, payload, length, result);
+
     case LA_PROTO_LIVE_START:
+        return handle_live_start(dispatch, sequence, payload, length, result);
+
     case LA_PROTO_LIVE_STOP:
-        /* P7.4 extends the dispatch table to decoder configuration and the
-         * live stream; the burst-path firmware rejects them up front. */
-        result_nak(result, type, sequence, LA_PROTO_ERROR_UNSUPPORTED);
-        return 0;
+        return handle_live_stop(dispatch, sequence, payload, length, result);
 
     case LA_PROTO_PONG:
     case LA_PROTO_STATUS:
@@ -334,6 +436,9 @@ void la_cmd_dispatch_acq_notice(la_cmd_dispatch_t *dispatch,
     switch (notice) {
     case LA_CMD_ACQ_ARMED:
         dispatch->view = LA_CMD_VIEW_ARMED;
+        break;
+    case LA_CMD_ACQ_STREAMING:
+        dispatch->view = LA_CMD_VIEW_CAPT;
         break;
     case LA_CMD_ACQ_TRIGGERED:
         dispatch->view = LA_CMD_VIEW_CAPT;
@@ -393,4 +498,21 @@ uint32_t la_cmd_dispatch_patgen_ctrl(const la_cmd_dispatch_t *dispatch)
         return 0u;
     }
     return dispatch->patgen_ctrl;
+}
+
+int la_cmd_dispatch_decoder(const la_cmd_dispatch_t *dispatch,
+                            uint8_t slot,
+                            la_proto_decoder_config_t *config)
+{
+    if (dispatch == NULL || config == NULL || slot >= LA_PROTO_DECODER_MAX_SLOTS ||
+        dispatch->decoder_valid[slot] == 0u) {
+        return -1;
+    }
+    *config = dispatch->decoders[slot];
+    return 0;
+}
+
+uint8_t la_cmd_dispatch_decoder_count(const la_cmd_dispatch_t *dispatch)
+{
+    return dispatch != NULL ? dispatch->decoder_count : 0u;
 }

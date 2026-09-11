@@ -190,6 +190,50 @@ which equals the CRC of the whole capture byte range.
   by DATA_END with the empty-buffer CRC; completion is sticky (`next()`
   stays -1).
 
+## P7 live decode pipeline cores (P7.1-P7.4)
+
+The P7 live path is built from pure, host-tested cores (`fw-zynq/app/src/live/`)
+plus task adapters:
+
+- **la_segment_pool** (promoted from the P7.1 host tests): 16 segments with
+  FREE/DMA_OWNED/CPU_OWNED states, generation and sequence counters,
+  publish-with-consumer-count and abort rules. The lock backend is selected at
+  compile time - Win32 critical section for the native tests, pthread for a
+  POSIX native build, FreeRTOS critical section for the app - and every pool
+  operation runs in a task, never an ISR, so a critical section is sufficient
+  and the same source compiles for both builds.
+- **la_live_ring**: one slot per 256 KiB live segment (16 slots = 4 MiB at the
+  base of the non-cached capture pool). AcqTask is the single writer: start
+  acquires every slot (DMA-owned), complete publishes the actual length with
+  the enabled-decoder consumer count, release drops one consumer reference,
+  repost re-acquires the lowest FREE slot and abort frees DMA-owned slots
+  while leaving CPU-owned payloads to their consumers. A zero-consumer packet
+  recycles immediately; a queue-full for one decoder releases only that
+  reference; repost failure is the pool-exhaustion signal. The BD ID carries
+  the segment index, so the completed descriptor maps to its slot without a
+  side table.
+- **la_decoder_core**: one wrapper around `common/la_decode` per decoder slot,
+  fed with transition words `{run[23:0], sample[7:0]}`. A value change calls
+  feed_transition; UART additionally advances to the last sample of every run
+  so bit samples and end-of-frame events inside a long run are not missed. A
+  segment sequence that is not the expected successor emits DISCONTINUITY,
+  resets the decoder state and increments dropped_segments, so events after a
+  gap are never interpreted as contiguous samples. Event counts feed the
+  STATUS decoder records.
+- **la_event_batch**: builds EVT_DECODED payloads (11-byte record header plus
+  data) up to the 1024-byte payload cap. A record that does not fit is dropped
+  whole (drop-newest), never truncated.
+- **la_proto** gained the EVT_OVERRUN payload helper (`dropped:u32` LE,
+  `stage:u8`, reserved[3]).
+- **Dispatch/FSM**: DECODER_CFG latches a validated slot in IDLE (a slot is
+  enabled when its type is not OFF); LIVE_START requires a latched STREAM
+  CONFIG with a nonzero flush interval and transition encoding whenever a
+  decoder is enabled, ACKs and moves the view to CAPT; LIVE_STOP is accepted
+  from CAPT and is an idempotent ACK in IDLE. `la_acq_fsm` stream
+  configurations arm straight to CAPT (the PL streams from the arm edge);
+  burst behavior is unchanged, and ARM+STREAM stays NAK unsupported because
+  live streaming uses LIVE_START.
+
 ## P4 target wiring (P4.5-P4.9)
 
 The P4 firmware instantiates the design above in `fw-zynq/app/src`:
@@ -406,7 +450,10 @@ Concrete layout (P4.3, single source: `fw-zynq/app/src/la_mem_geom.h` and
 `0x4000_0000`; the top 16 MiB (`0x3F00_0000`, sixteen 1 MiB MMU sections) is
 carved out as the Normal Non-cacheable window. The burst capture pool is the
 first 8 MiB of the window and the SG descriptor pool the next 1 MiB; both are
-64-byte aligned with cache-line-rounded capacities. The linker script exports
+64-byte aligned with cache-line-rounded capacities. The P7 live pool reuses
+the first 4 MiB of the capture pool as sixteen 256 KiB segments
+(`la_live_ring`), which is legal because burst and live are mutually
+exclusive modes. The linker script exports
 `__la_nc_base/size/end` and `__la_fw_end`, asserts at link time that firmware
 never reaches the window, and `main()` re-checks the geometry at boot before
 programming each 1 MiB section Non-cacheable with `Xil_SetTlbAttributes(..,

@@ -34,16 +34,32 @@ static int test_happy_burst(void)
     return 0;
 }
 
-static int test_stream_rejected(void)
+static int test_stream_lifecycle(void)
 {
     la_acq_fsm_t fsm;
+    la_acq_event_t event;
 
     la_acq_fsm_init(&fsm);
-    CHECK(la_acq_fsm_configure(&fsm, 1) == 0, "stream config latches (P7.x scope)");
-    CHECK(la_acq_fsm_arm(&fsm) == -2, "stream arm rejected until P7.x");
-    CHECK(la_acq_fsm_state(&fsm) == LA_ACQ_IDLE, "still IDLE after rejected arm");
+    CHECK(la_acq_fsm_configure(&fsm, 1) == 0, "stream config latches");
+    CHECK(la_acq_fsm_stream(&fsm) == 1, "stream flag latched");
+    CHECK(la_acq_fsm_arm(&fsm) == 0, "stream arm accepted");
+    CHECK(la_acq_fsm_state(&fsm) == LA_ACQ_CAPT, "stream arms straight to CAPT");
+    CHECK(la_acq_fsm_trigger(&fsm, 7u, &event) == -1, "no trigger transition in CAPT");
+    CHECK(la_acq_fsm_timeout(&fsm, &event) == -1, "no timeout in CAPT");
+    CHECK(la_acq_fsm_complete(&fsm, 0u, 0x10u, &event) == 0, "stream completion");
+    CHECK(event.kind == LA_ACQ_EVT_JOB, "stream completion is a job event");
+    CHECK(la_acq_fsm_state(&fsm) == LA_ACQ_IDLE, "IDLE after stream completion");
+
+    CHECK(la_acq_fsm_configure(&fsm, 1) == 0, "reconfigure stream");
+    CHECK(la_acq_fsm_arm(&fsm) == 0, "stream arm again");
+    CHECK(la_acq_fsm_abort(&fsm, &event) == 0, "abort streaming");
+    CHECK(event.kind == LA_ACQ_EVT_ABORTED, "stream abort event kind");
+    CHECK(la_acq_fsm_state(&fsm) == LA_ACQ_IDLE, "IDLE after stream abort");
+
     CHECK(la_acq_fsm_configure(&fsm, 0) == 0, "reconfigure burst");
-    CHECK(la_acq_fsm_arm(&fsm) == 0, "burst arm after reconfigure");
+    CHECK(la_acq_fsm_stream(&fsm) == 0, "stream flag cleared");
+    CHECK(la_acq_fsm_arm(&fsm) == 0, "burst arm after stream");
+    CHECK(la_acq_fsm_state(&fsm) == LA_ACQ_ARMED, "burst arm is ARMED");
     return 0;
 }
 
@@ -124,7 +140,7 @@ static int test_init_clears(void)
 
 int main(void)
 {
-    if (test_happy_burst() != 0 || test_stream_rejected() != 0 ||
+    if (test_happy_burst() != 0 || test_stream_lifecycle() != 0 ||
         test_illegal_transitions() != 0 || test_abort_paths() != 0 ||
         test_overflow_flag_passthrough() != 0 || test_init_clears() != 0) {
         return 1;
