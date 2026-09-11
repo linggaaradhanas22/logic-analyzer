@@ -195,6 +195,7 @@ registers:
           3: UART_115200
           4: SPI_1MHZ
           5: I2C_400KHZ
+          6: UART_SINGLE
       - name: DIV
         lsb: 16
         width: 16

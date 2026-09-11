@@ -97,7 +97,8 @@ An additive v1 extension used by the serial HIL and E2E self-test flows; the
 burst CONFIG payload has no pattern-generator field. The payload is exactly 4
 bytes: the raw `PATGEN_CTRL` register value (`docs/regmap.yaml`), little-endian.
 Reserved bits must be zero and `MODE` must be a defined value (0 counter, 1
-walking-1, 2 PRBS8, 3 UART 115200, 4 SPI 1 MHz, 5 I2C 400 kHz); invalid
+walking-1, 2 PRBS8, 3 UART 115200, 4 SPI 1 MHz, 5 I2C 400 kHz, 6 UART single
+frame then idle high); invalid
 values are rejected with NAK bad-field. The receiver acknowledges the frame
 and latches the value immediately; the pattern generator latches mode and DIV
 at its enable edge. Peers that do not implement the type reject it with NAK

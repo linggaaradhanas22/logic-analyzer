@@ -63,6 +63,7 @@ ID value: `0x4C410002`
 | | `PATGEN_CTRL.MODE=3` | enum | UART_115200 | |
 | | `PATGEN_CTRL.MODE=4` | enum | SPI_1MHZ | |
 | | `PATGEN_CTRL.MODE=5` | enum | I2C_400KHZ | |
+| | `PATGEN_CTRL.MODE=6` | enum | UART_SINGLE | |
 | | `PATGEN_CTRL.DIV` | field | bits 16:31 | mask `0xFFFF0000` |
 | | `PATGEN_CTRL` | constraint | | allowed_mask `0xFFFF00F1` |
 | `0x00000048` | `TIMEOUT` | RW | `0x00000000` | Trigger timeout in sample clocks. |

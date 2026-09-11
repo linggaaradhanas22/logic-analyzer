@@ -2,6 +2,7 @@
 
 #include "la_tx_pack.h"
 #include "la_tx_win.h"
+#include "xiltimer.h"
 
 #include <string.h>
 
@@ -263,6 +264,45 @@ static void tx_report_decoder_overruns(la_tx_ctx_t *ctx)
     }
 }
 
+/* P8.2: worst UART-byte-to-send latency for the live stream. The last record
+ * in the block is the newest event; its t_sample is the wire time in
+ * (sample_div+1) sample clocks and the ARM XTime is the epoch. */
+static void tx_track_latency(la_tx_ctx_t *ctx, const la_event_batch_t *block)
+{
+    uint64_t arm = ctx->app->live_arm_time;
+    uint32_t offset = 0u;
+    uint64_t t_sample = 0u;
+    uint64_t elapsed_us;
+    uint64_t sample_us;
+    uint32_t latency_us;
+    XTime now;
+
+    if (arm == 0u || block == NULL || block->length == 0u) {
+        return;
+    }
+    while (offset + 11u <= block->length) {
+        uint64_t t = 0u;
+        uint32_t index;
+        uint8_t length;
+
+        for (index = 0u; index < 8u; ++index) {
+            t |= (uint64_t)block->data[offset + 2u + index] << (8u * index);
+        }
+        length = block->data[offset + 10u];
+        t_sample = t;
+        offset += 11u + (uint32_t)length;
+    }
+    XTime_GetTime(&now);
+    elapsed_us = ((uint64_t)(now - arm) * 1000000u) / (uint64_t)COUNTS_PER_SECOND;
+    sample_us = t_sample * (uint64_t)(ctx->app->live_sample_div + 1u) / 100u;
+    if (elapsed_us > sample_us) {
+        latency_us = (uint32_t)(elapsed_us - sample_us);
+        if (latency_us > ctx->app->live_max_latency_us) {
+            ctx->app->live_max_latency_us = latency_us;
+        }
+    }
+}
+
 static void tx_drain_events(la_tx_ctx_t *ctx)
 {
     la_event_batch_t *block;
@@ -288,6 +328,7 @@ static void tx_drain_events(la_tx_ctx_t *ctx)
                 }
                 return;
             }
+            tx_track_latency(ctx, block);
             (void)tx_write(ctx, LA_PROTO_EVT_DECODED,
                            la_app_next_sequence(ctx->app), block->data,
                            block->length);

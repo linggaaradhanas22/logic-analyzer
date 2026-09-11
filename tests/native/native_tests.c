@@ -332,6 +332,10 @@ static int test_typed_protocol_payloads(void)
                                        payload, sizeof(payload)) == 0u,
               "PATGEN_CFG reserved bits rejected");
         CHECK(la_proto_pack_patgen_cfg(UINT32_C(0x00000061), payload,
+                                       sizeof(payload)) ==
+                  LA_PROTO_PATGEN_CFG_WIRE_SIZE,
+              "PATGEN_CFG mode 6 (UART single) accepted");
+        CHECK(la_proto_pack_patgen_cfg(UINT32_C(0x00000071), payload,
                                        sizeof(payload)) == 0u,
               "PATGEN_CFG undefined mode rejected");
         CHECK(la_proto_pack_patgen_cfg(patgen_ctrl, payload,

@@ -48,10 +48,11 @@ void la_status_task(void *parameters)
         xil_printf("LA status: stacks acq=%u cmd=%u tx=%u status=%u words\r\n",
                    (unsigned)acq, (unsigned)cmd, (unsigned)tx,
                    (unsigned)status);
-        xil_printf("LA status: rx=%u tx=%u retx=%u drops=%u pl=%u dma=%u\r\n",
+        xil_printf("LA status: rx=%u tx=%u retx=%u drops=%u pl=%u dma=%u live_max_us=%u\r\n",
                    (unsigned)app->rx_frames, (unsigned)app->tx_frames,
                    (unsigned)app->tx_retransmits, (unsigned)app->tx_drops,
-                   (unsigned)app->irq.pl_count, (unsigned)app->irq.dma_count);
+                   (unsigned)app->irq.pl_count, (unsigned)app->irq.dma_count,
+                   (unsigned)app->live_max_latency_us);
         xil_printf("LA status: isr us %u/%u/%u wake us %u/%u/%u\r\n",
                    (unsigned)la_irq_stats_min_us(&app->irq.isr_stats),
                    (unsigned)la_irq_stats_avg_us(&app->irq.isr_stats),

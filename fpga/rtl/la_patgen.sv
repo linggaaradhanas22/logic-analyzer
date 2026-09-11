@@ -9,6 +9,8 @@
 //   4 SPI 1 MHz     ch0 SCK, ch1 MOSI, ch2 CS_N; frame 0x4C 0x41 MSB first
 //   5 I2C 400 kHz   ch3 SCL, ch4 SDA; repeated write: START, 0xA0, ACK,
 //                   0x4C, ACK, 0x41, ACK, STOP
+//   6 UART single   ch0 = one "LA-TEST\n" frame per enable edge, then idle
+//                   high (P7.6 isolated-final-byte latency source)
 //
 // Rates derive from the CLK_HZ parameter (default 100 MHz) and are scaled
 // by (DIV+1) with DIV = PATGEN_CTRL[31:16]; DIV = 0 gives the nominal
@@ -111,6 +113,7 @@ module la_patgen #(
   logic [31:0] uart_byte;     // frame byte index 0..7
   logic [31:0] uart_bit;      // 0 start, 1..8 data, 9 stop, then frame gap
   logic        uart_tx;
+  logic        uart_done;     // mode 6: frame sent, hold idle high
 
   function automatic logic [7:0] uart_frame_byte(input logic [31:0] idx);
     case (idx)
@@ -143,12 +146,14 @@ module la_patgen #(
       uart_byte <= '0;
       uart_bit  <= '0;
       uart_tx   <= 1'b1;
+      uart_done <= 1'b0;
     end else if (en_rise) begin
       uart_cnt  <= '0;
       uart_byte <= '0;
       uart_bit  <= '0;
       uart_tx   <= 1'b1;
-    end else if (running && (mode_q == 4'd3)) begin
+      uart_done <= 1'b0;
+    end else if (running && (mode_q == 4'd3 || mode_q == 4'd6) && !uart_done) begin
       if (uart_cnt >= uart_period_m1) begin
         uart_cnt <= '0;
         if (uart_byte < 32'd8) begin
@@ -169,10 +174,13 @@ module la_patgen #(
             end
           end
         end else begin
-          // Inter-frame gap of 10 bit times, then repeat the frame.
+          // Inter-frame gap of 10 bit times, then repeat the frame; mode 6
+          // stops here and holds the line idle high.
           if (uart_bit < 32'd10) begin
             uart_tx <= 1'b1;
             uart_bit <= uart_bit + 32'd1;
+          end else if (mode_q == 4'd6) begin
+            uart_done <= 1'b1;
           end else begin
             uart_byte <= '0;
             uart_bit  <= '0;
@@ -341,6 +349,7 @@ module la_patgen #(
       4'd3: ch_mux = {7'h00, uart_tx};
       4'd4: ch_mux = {5'h00, spi_cs, spi_mosi, spi_sck};
       4'd5: ch_mux = {3'b000, i2c_sda, i2c_scl, 3'b000};
+      4'd6: ch_mux = {7'h00, uart_tx};
       default: ch_mux = '0;
     endcase
   end

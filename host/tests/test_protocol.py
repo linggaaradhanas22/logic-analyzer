@@ -109,7 +109,9 @@ def test_patgen_cfg_layout() -> None:
     with pytest.raises(ValueError):
         p.pack_patgen_cfg(ctrl | 0x02)  # reserved bit
     with pytest.raises(ValueError):
-        p.pack_patgen_cfg(p.PATGEN_EN_MASK | (6 << p.PATGEN_MODE_SHIFT))
+        p.pack_patgen_cfg(p.PATGEN_EN_MASK | (7 << p.PATGEN_MODE_SHIFT))
+    single = p.PATGEN_EN_MASK | (p.PATGEN_MODE_UART_SINGLE << p.PATGEN_MODE_SHIFT)
+    assert p.unpack_patgen_cfg(p.pack_patgen_cfg(single)) == single
     with pytest.raises(p.FrameError):
         p.unpack_patgen_cfg(b"\x00\x00\x00")
 

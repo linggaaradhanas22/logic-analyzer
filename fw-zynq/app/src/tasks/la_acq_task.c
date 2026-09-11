@@ -4,6 +4,7 @@
 #include "la_burst_plan.h"
 #include "la_mem_geom.h"
 #include "la_regs.h"
+#include "xiltimer.h"
 
 #include <string.h>
 
@@ -247,6 +248,10 @@ static void acq_start_live(la_acq_ctx_t *ctx, const la_ctrl_msg_t *message)
     app->live_active = 1u;
     app->word_count = 0u;
     app->trig_index = 0u;
+    /* The latency maximum accumulates across live sessions until reboot so
+     * repeated shots can be bounded without console sampling races. */
+    app->live_sample_div = message->config.sample_div;
+    XTime_GetTime(&app->live_arm_time);
     la_regs_write32(&app->regs, LA_REG_CTRL_OFFSET,
                     LA_REG_CTRL_ARM_MASK |
                         (message->config.ctrl_flags &

@@ -59,6 +59,7 @@ PATGEN_MODE_PRBS8 = 2
 PATGEN_MODE_UART_115200 = 3
 PATGEN_MODE_SPI_1MHZ = 4
 PATGEN_MODE_I2C_400KHZ = 5
+PATGEN_MODE_UART_SINGLE = 6  # one "LA-TEST\n" frame per enable, then idle
 
 _CRC16_TABLE = None
 _CRC32_TABLE = None
@@ -189,7 +190,7 @@ def pack_patgen_cfg(patgen_ctrl: int) -> bytes:
     """PATGEN_CFG payload: raw PATGEN_CTRL value (additive v1 extension)."""
     if patgen_ctrl & ~PATGEN_ALLOWED_MASK:
         raise ValueError(f"PATGEN_CTRL reserved bits set: 0x{patgen_ctrl:08X}")
-    if (patgen_ctrl & PATGEN_MODE_MASK) >> PATGEN_MODE_SHIFT > PATGEN_MODE_I2C_400KHZ:
+    if (patgen_ctrl & PATGEN_MODE_MASK) >> PATGEN_MODE_SHIFT > PATGEN_MODE_UART_SINGLE:
         raise ValueError(f"undefined patgen mode: 0x{patgen_ctrl:08X}")
     return struct.pack("<I", patgen_ctrl)
 

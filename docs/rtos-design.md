@@ -593,6 +593,22 @@ The old 32 KiB ring dropped at the isolated-gate workload; 64 KiB absorbs it.
 Remaining levers for more margin: a larger UART driver RX buffer, host
 read-path efficiency, and the P9.2 compact event format.
 
+**ESP32 response latency (P8.2).** The `link_to_net` ring is not a `select()`
+descriptor, so NetServerTask only drained it after its select timeout: a
+sparse host command (PING, PATGEN_CFG) waited up to 100 ms for its reply.
+Reducing `LA_NET_SELECT_TIMEOUT_US` to 5 ms cut the measured command round
+trip from 93-125 ms to ~15 ms with no measurable cost.
+
+**Isolated final byte (P7.6).** The patgen mode 6 single shot (one
+`LA-TEST\n` frame per enable, then idle high) plus the Zynq-side
+`live_max_us` counter measure the true UART-byte-to-send latency: over 20
+shots the worst value was 428 us against the 25 ms p99 budget (the host
+round trip is 46-235 ms but includes the command path and is not the gate
+metric). The host-side test asserts the frame decodes and the final byte's
+event is delivered with the in-stream baseline. A wake-latency outlier of
+625 ms was recorded in the same ISR stats run; it is a P8.2 follow-up
+(probably a boot/first-use artifact, not reproduced in the live path).
+
 ## Windows Adapter Boundary
 
 The native adapter models static segment handles, synchronized reference

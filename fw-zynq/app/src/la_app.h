@@ -208,6 +208,12 @@ typedef struct la_app {
     volatile uint32_t decoder_queue_drops[LA_DECODER_COUNT];
     volatile uint32_t live_overflows;
     volatile uint8_t live_active;
+    /* P8.2 live latency: XTime counts at the live ARM, the latched sample
+     * divider and the worst byte-to-send latency in microseconds (published
+     * by StatusTask). */
+    volatile uint64_t live_arm_time;
+    volatile uint32_t live_sample_div;
+    volatile uint32_t live_max_latency_us;
 
     /* STATUS snapshot shared with CmdTask (single writer per field). */
     volatile uint32_t status_reg;

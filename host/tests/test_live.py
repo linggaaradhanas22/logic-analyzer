@@ -66,6 +66,7 @@ def test_live_client_collects_events_and_overrun(analyzer) -> None:
     assert len(decoded) == 24  # three batches of b"LA-TEST\n"
     assert b"".join(e["data"] for e in decoded) == b"LA-TEST\n" * 3
     assert all(e["slot"] == 0 and e["kind"] == 1 for e in decoded)
+    assert all("arrival" in e for e in decoded)
     assert decoded[0]["t_sample"] == 10_000
     assert decoded[-1]["t_sample"] == 10_000 + 2 * 10_000 + 7 * 100
     assert len(overruns) == 1

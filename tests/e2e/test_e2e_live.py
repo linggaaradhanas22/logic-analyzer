@@ -18,6 +18,8 @@ decoders-off smoke) and checks a clean return to IDLE.
 `test_live_link_overrun_reported_on_stall` is the P8.4 fault injection: it
 stalls the host read for 3 s and requires the gateway to report the resulting
 best-effort frame drops as EVT_OVERRUN(stage=2 link).
+`test_live_uart_isolated_byte_latency` uses the patgen single-shot mode and
+requires the final byte's event within 25 ms of the in-stream baseline.
 `test_live_spi_overload_reports_loss` drives the 1 MHz SPI source (far above
 the live link capacity) and requires reported loss, no crash and a clean
 state reset.
@@ -150,6 +152,39 @@ def test_live_uart_continuous_zero_drop(client: AnalyzerClient, request) -> None
     assert status["state"] == 0, "firmware did not return to IDLE after LIVE_STOP"
     assert status["decoders"][0]["dropped_segments"] == 0
     assert status["decoders"][0]["events"] >= len(decoded)
+
+
+def test_live_uart_isolated_byte_latency(client: AnalyzerClient) -> None:
+    """P7.6 isolated final byte: the patgen mode-6 single shot (triggered by
+    the `on_started` hook after the LIVE_START ACK) sends one "LA-TEST\\n"
+    frame and holds the line idle. The final byte's event must not arrive
+    more than 25 ms after the in-stream baseline (the first byte), which is
+    what the PL idle flush bounds."""
+    client.configure_patgen(0)
+    time.sleep(0.01)
+    triggered: list[float] = []
+
+    def trigger() -> None:
+        triggered.append(time.monotonic())
+        client.raw_send(p.encode(
+            p.PATGEN_CFG, 0x42,
+            p.pack_patgen_cfg(p.PATGEN_EN_MASK
+                              | (p.PATGEN_MODE_UART_SINGLE << p.PATGEN_MODE_SHIFT))))
+
+    events = client.live(_uart_decoder(115200), config=_stream_config(1),
+                         count=None, timeout_s=5.0, on_started=trigger)
+    assert triggered, "LIVE_START ACK never seen"
+    decoded = [event for event in events
+               if not event.get("overrun") and event["kind"] == EVENT_BYTE]
+    start = next((index for index, event in enumerate(decoded)
+                  if event["data"] == b"L"), None)
+    assert start is not None, [event["data"] for event in decoded[:16]]
+    frame = decoded[start:start + len(UART_FRAME)]
+    assert bytes(b"".join(event["data"] for event in frame)) == UART_FRAME
+    first, last = frame[0], frame[-1]
+    wire_gap = (last["t_sample"] - first["t_sample"]) / FCLK_HZ
+    extra = (last["arrival"] - first["arrival"]) - wire_gap
+    assert extra <= 0.025, (extra, first, last)
 
 
 def test_live_spi_decode_events(client: AnalyzerClient) -> None:

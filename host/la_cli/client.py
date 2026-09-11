@@ -285,7 +285,8 @@ class AnalyzerClient:
 
     def live(self, decoder_config: bytes, config: bytes | None = None,
              count: int | None = None, timeout_s: float | None = None,
-             read_stall_s: float = 0.0) -> list[dict]:
+             read_stall_s: float = 0.0,
+             on_started=None) -> list[dict]:
         """Configures the live stream and collects decoded events (P7.5).
 
         `config` is an optional 37-byte STREAM CONFIG payload sent before the
@@ -295,7 +296,9 @@ class AnalyzerClient:
         to the command. `read_stall_s` is the P8.4 fault-injection hook: it
         stops reading for that many seconds right after the LIVE_START ACK so
         the gateway relay buffers fill and the link-overrun report is
-        exercised."""
+        exercised. `on_started` is called once when the LIVE_START ACK is
+        seen (P7.6 isolated-byte trigger). Every decoded event carries an
+        `arrival` monotonic timestamp for P8.2 latency measurements."""
         if timeout_s is None:
             deadline = float("inf")
         else:
@@ -318,11 +321,15 @@ class AnalyzerClient:
                     start_acknowledged = True
                     if read_stall_s > 0.0:
                         time.sleep(read_stall_s)
+                    if on_started is not None:
+                        on_started()
                 return False
             if message_type == p.EVT_DECODED:
+                arrival = time.monotonic()
                 for slot, kind, t_sample, data in p.iter_decoded_events(payload):
                     collected.append(
-                        {"slot": slot, "kind": kind, "t_sample": t_sample, "data": data}
+                        {"slot": slot, "kind": kind, "t_sample": t_sample,
+                         "data": data, "arrival": arrival}
                     )
                     if count is not None and len(collected) >= count:
                         stop_requested = True
@@ -364,9 +371,11 @@ class AnalyzerClient:
             if message_type == p.ACK:
                 return payload[0] == p.LIVE_STOP
             if message_type == p.EVT_DECODED:
+                arrival = time.monotonic()
                 for slot, kind, t_sample, data in p.iter_decoded_events(payload):
                     collected.append(
-                        {"slot": slot, "kind": kind, "t_sample": t_sample, "data": data}
+                        {"slot": slot, "kind": kind, "t_sample": t_sample,
+                         "data": data, "arrival": arrival}
                     )
                 return False
             if message_type == p.EVT_OVERRUN:

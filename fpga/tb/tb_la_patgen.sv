@@ -162,6 +162,57 @@ module tb_la_patgen;
     fail_check({tag, " frame repeats"}, s0 >= 0);
   endtask
 
+  // Decode one UART frame (mode 6) and require the line to stay idle high:
+  // no second start edge may follow the single frame.
+  task automatic decode_uart_single(string tag);
+    int s0;
+    int b;
+    int k;
+    logic [7:0] bytes [0:7];
+    logic [7:0] expected [0:7];
+    logic ok;
+    expected[0] = "L";
+    expected[1] = "A";
+    expected[2] = "-";
+    expected[3] = "T";
+    expected[4] = "E";
+    expected[5] = "S";
+    expected[6] = "T";
+    expected[7] = 8'h0A;
+    find_fall(0, 0, s0);
+    fail_check({tag, " start edge found"}, s0 >= 0);
+    if (s0 < 0) return;
+    for (k = 0; k < 8; k++) begin
+      bytes[k] = 8'h00;
+      for (b = 0; b < 8; b++) begin
+        if (hist[s0 + UART_BIT*(10*k + b + 1) + UART_BIT/2][0]) begin
+          bytes[k][b] = 1'b1;
+        end
+      end
+    end
+    ok = 1'b1;
+    for (k = 0; k < 8; k++) begin
+      if (bytes[k] != expected[k]) ok = 1'b0;
+    end
+    if (!ok) begin
+      $display("FAIL [%s] single UART decode: %02h %02h %02h %02h %02h %02h %02h %02h",
+               tag, bytes[0], bytes[1], bytes[2], bytes[3], bytes[4],
+               bytes[5], bytes[6], bytes[7]);
+      errors = errors + 1;
+    end
+    fail_check({tag, " stop bit high"},
+               hist[s0 + UART_BIT*79 + UART_BIT/2][0]);
+    begin
+      int i;
+      logic second_start;
+      second_start = 1'b0;
+      for (i = s0 + UART_BIT*90; i + 1 < hist_n; i++) begin
+        if (hist[i][0] && !hist[i+1][0]) second_start = 1'b1;
+      end
+      fail_check({tag, " no repeat after single frame"}, !second_start);
+    end
+  endtask
+
   // Decode two SPI frames: MOSI on SCK rise while CS_N low.
   task automatic decode_spi(string tag, input int frames);
     int s0;
@@ -349,6 +400,18 @@ module tb_la_patgen;
     end
     scenario_stop();
     decode_uart("uart");
+
+    // ----------------------------------------------------------------
+    // Mode 6: UART single frame, then idle high (P7.6 isolated byte).
+    // ----------------------------------------------------------------
+    scenario_start(4'd6, 0);
+    begin
+      for (i = 0; i < 200000; i++) begin
+        @(posedge clk);
+      end
+    end
+    scenario_stop();
+    decode_uart_single("uart-single");
 
     // ----------------------------------------------------------------
     // Mode 4: SPI frames.

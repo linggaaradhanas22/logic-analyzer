@@ -336,7 +336,8 @@ size_t la_proto_pack_patgen_cfg(uint32_t patgen_ctrl,
     if (output == NULL || output_capacity < LA_PROTO_PATGEN_CFG_WIRE_SIZE ||
         (patgen_ctrl & ~LA_REG_PATGEN_CTRL_ALLOWED_MASK) != 0u ||
         (patgen_ctrl & LA_REG_PATGEN_CTRL_MODE_MASK) >>
-                LA_REG_PATGEN_CTRL_MODE_LSB > 5u) {
+                LA_REG_PATGEN_CTRL_MODE_LSB >
+            LA_REG_PATGEN_CTRL_MODE_VALUE_UART_SINGLE) {
         return 0u;
     }
     put_u32_le(&output[0], patgen_ctrl);
@@ -355,7 +356,8 @@ int la_proto_unpack_patgen_cfg(uint32_t *patgen_ctrl,
     }
     value = get_u32_le(input);
     if ((value & ~LA_REG_PATGEN_CTRL_ALLOWED_MASK) != 0u ||
-        ((value & LA_REG_PATGEN_CTRL_MODE_MASK) >> LA_REG_PATGEN_CTRL_MODE_LSB) > 5u) {
+        ((value & LA_REG_PATGEN_CTRL_MODE_MASK) >> LA_REG_PATGEN_CTRL_MODE_LSB) >
+            LA_REG_PATGEN_CTRL_MODE_VALUE_UART_SINGLE) {
         return -1;
     }
     *patgen_ctrl = value;

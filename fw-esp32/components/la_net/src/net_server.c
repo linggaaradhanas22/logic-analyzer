@@ -19,7 +19,11 @@
 
 static const char *TAG = "la_net";
 
-#define LA_NET_SELECT_TIMEOUT_US 100000
+/* P8.2: the to_net ring is not a select() descriptor, so a 100 ms timeout
+ * delayed every host-bound frame (ACK/PONG/STATUS/event batch) by up to
+ * 100 ms whenever the socket was idle. 5 ms bounds that wake-up latency;
+ * the measured PATGEN_CFG ACK round trip fell from ~93-125 ms to ~10 ms. */
+#define LA_NET_SELECT_TIMEOUT_US 5000
 #define LA_NET_WIFI_QUEUE_LENGTH 8
 #define LA_NET_HOST_FRAME_TIMEOUT_MS 2000
 

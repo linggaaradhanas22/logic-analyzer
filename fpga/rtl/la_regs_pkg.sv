@@ -96,6 +96,7 @@ package la_regs_pkg;
   localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_UART_115200 = 32'd3;
   localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_SPI_1MHZ = 32'd4;
   localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_I2C_400KHZ = 32'd5;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_UART_SINGLE = 32'd6;
   localparam logic [31:0] LA_REG_PATGEN_CTRL_DIV_MASK = 32'hFFFF0000;
   localparam logic [31:0] LA_REG_PATGEN_CTRL_ALLOWED_MASK = 32'hFFFF00F1;
 
