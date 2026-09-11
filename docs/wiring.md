@@ -94,11 +94,14 @@ inputs: JE-1..4 -> JC-1..4 (channels 0-3) and JE-7..10 -> JC-7..10
 python tools\run.py test-e2e -- --target tcp://la-esp32.local:5555 --external-loopback -k test_matrix
 ```
 
-The protocol modes (UART, SPI, I2C) use channels 0-4 only. When fewer than
-eight jumpers are available, mask the unwired channels, for example
-`--channel-mask 0x3F` for channels 0-5; the step modes are then verified over
-the enabled channels. Keep the JD ribbon connected: these jumpers are
-separate from the P5.5 ESP32 loopback, which requires the JD ribbon removed.
+The protocol modes (UART, SPI, I2C) use channels 0-4 only. With all eight
+JE-1..4 -> JC-1..4 and JE-7..10 -> JC-7..10 jumpers installed the matrix runs
+at the default `--channel-mask 0xFF` (verified 18/18 on 2026-09-11). When
+fewer than eight jumpers are available, mask the unwired channels, for
+example `--channel-mask 0x3F` for channels 0-5; the step modes are then
+verified over the enabled channels. Keep the JD ribbon connected: these
+jumpers are separate from the P5.5 ESP32 loopback, which requires the JD
+ribbon removed.
 
 ## Power and Operating Rules
 

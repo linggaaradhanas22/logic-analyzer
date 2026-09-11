@@ -115,7 +115,11 @@ static void decoder_drain_segments(la_decoder_ctx_t *ctx)
                                                message.sequence, decoder_event,
                                                ctx);
         }
-        (void)la_segment_pool_release(&ctx->app->pool, message.handle);
+        /* The ring owns the slot state; the pool lock inside is taken under
+         * this critical section so AcqTask's repost never interleaves. */
+        taskENTER_CRITICAL();
+        (void)la_live_ring_release(&ctx->app->live_ring, message.slot);
+        taskEXIT_CRITICAL();
         (void)xTaskNotify(ctx->app->acq_task, LA_NOTIFY_SEGMENT_FREE, eSetBits);
         ctx->app->decoder_events[ctx->slot] = ctx->core.stats.events;
         ctx->app->decoder_dropped_segments[ctx->slot] =

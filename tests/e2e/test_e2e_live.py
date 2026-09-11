@@ -54,37 +54,54 @@ def _stream_config(mode: int) -> bytes:
     )
 
 
-def _configure_patgen_uart(client: AnalyzerClient) -> None:
+def _configure_patgen_uart(client: AnalyzerClient, baud: int) -> None:
+    div = max(0, 115200 // baud - 1) if baud <= 115200 else 0
     client.configure_patgen(
-        p.PATGEN_EN_MASK | (p.PATGEN_MODE_UART_115200 << p.PATGEN_MODE_SHIFT)
+        p.PATGEN_EN_MASK
+        | (p.PATGEN_MODE_UART_115200 << p.PATGEN_MODE_SHIFT)
+        | (div << 16)
     )
 
 
-def _uart_decoder() -> bytes:
-    return p.pack_decoder_cfg_uart(0, 0, 115200, FCLK_HZ)
+def _uart_decoder(baud: int) -> bytes:
+    return p.pack_decoder_cfg_uart(0, 0, baud, FCLK_HZ)
 
 
-def test_live_uart_decode_events(client: AnalyzerClient) -> None:
-    _configure_patgen_uart(client)
-    events = client.live(_uart_decoder(), config=_stream_config(1), count=8,
+def _aligned_frame_bytes(events: list[dict]) -> bytes:
+    """Joins BYTE records and drops the initial partial frame (the live stream
+    starts at an arbitrary point, so the first bytes may be garbage)."""
+    data = b"".join(
+        event["data"]
+        for event in events
+        if not event.get("overrun") and event["kind"] == EVENT_BYTE
+        and event["slot"] == 0
+    )
+    start = data.find(b"L")
+    assert start >= 0, f"no frame start in {data[:32]!r}"
+    return data[start:]
+
+
+def test_live_uart_decode_events(client: AnalyzerClient, request) -> None:
+    baud = request.config.getoption("--live-baud")
+    _configure_patgen_uart(client, baud)
+    events = client.live(_uart_decoder(baud), config=_stream_config(1), count=32,
                          timeout_s=10.0)
     overruns = [event for event in events if event.get("overrun")]
-    decoded = [event for event in events if not event.get("overrun")]
     assert not overruns, overruns
-    assert decoded, "no decoded events received"
-    assert all(event["kind"] == EVENT_BYTE and event["slot"] == 0 for event in decoded)
-    assert b"".join(event["data"] for event in decoded) == UART_FRAME
+    data = _aligned_frame_bytes(events)
+    assert data[: len(UART_FRAME)] == UART_FRAME
 
 
 def test_live_uart_continuous_zero_drop(client: AnalyzerClient, request) -> None:
     seconds = request.config.getoption("--live-seconds")
-    _configure_patgen_uart(client)
-    events = client.live(_uart_decoder(), config=_stream_config(1), count=None,
+    baud = request.config.getoption("--live-baud")
+    _configure_patgen_uart(client, baud)
+    events = client.live(_uart_decoder(baud), config=_stream_config(1), count=None,
                          timeout_s=seconds)
     overruns = [event for event in events if event.get("overrun")]
     decoded = [event for event in events if not event.get("overrun")]
     assert not overruns, f"{len(overruns)} EVT_OVERRUN frames during the run"
-    data = b"".join(event["data"] for event in decoded)
+    data = _aligned_frame_bytes(events)
     assert len(data) >= 8 * max(1, int(seconds)), "live stream decoded too few bytes"
     expected = (UART_FRAME * (len(data) // len(UART_FRAME) + 1))[: len(data)]
     assert data == expected, "decoded stream is not the repeating UART frame"

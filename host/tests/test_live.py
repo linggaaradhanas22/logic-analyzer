@@ -59,7 +59,9 @@ def test_live_command_text(analyzer) -> None:
         "live", "--target", mock.uri, "--decoder", "uart:rx=0,baud=115200", "--count", "8",
     ])
     assert result.exit_code == 0, result.output
-    assert "live: 8 decoded events, 0 overruns" in result.output
+    # The count stop leaves the mock's trailing EVT_OVERRUN in flight; the
+    # stop-wait now collects it, so the summary reports one overrun.
+    assert "live: 8 decoded events, 1 overruns" in result.output
     assert "BYTE 0x4c 'L'" in result.output
     assert "BYTE 0x41 'A'" in result.output
 

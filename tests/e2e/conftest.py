@@ -70,3 +70,11 @@ def pytest_addoption(parser) -> None:
         help="P7.6 continuous UART live stream duration in seconds "
         "(default 10; the plan zero-drop gate uses 60)",
     )
+    parser.addoption(
+        "--live-baud",
+        type=int,
+        default=115200,
+        help="P7.6 live UART baud; the patgen 115200 source is scaled down by "
+        "DIV so slower rates exercise the same pipeline within link headroom "
+        "(default 115200)",
+    )

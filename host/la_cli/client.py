@@ -97,9 +97,11 @@ class AnalyzerClient:
             "dropped_bytes": self._parser.dropped_bytes,
         }
 
-    def _pump(self, deadline: float, handler) -> None:
+    def _pump(self, deadline: float, handler, deadline_ok: bool = False) -> None:
         """Feeds the parser until handler() returns True, the deadline passes
-        or the transport fails. handler receives (type, sequence, payload)."""
+        or the transport fails. handler receives (type, sequence, payload).
+        With deadline_ok the deadline is a normal stop (live streaming);
+        otherwise it raises TransportError."""
         stopped = False
 
         def on_frame(message_type, sequence, payload) -> None:
@@ -110,6 +112,8 @@ class AnalyzerClient:
         while not stopped:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
+                if deadline_ok:
+                    return
                 raise TransportError(f"timeout waiting for the analyzer on {self.description}")
             data = self._transport.recv(4096, min(remaining, 0.5))
             if not data:
@@ -326,12 +330,41 @@ class AnalyzerClient:
                 self._log_lines.append(payload.decode("utf-8", errors="replace"))
             return False
 
-        self._pump(deadline, on_live)
+        self._pump(deadline, on_live, deadline_ok=True)
+        self._send(p.LIVE_STOP)
+        stop_deadline = time.monotonic() + 5.0
+
+        def on_stop(message_type, sequence, payload):
+            """Keeps collecting while waiting for the LIVE_STOP ACK: the final
+            batches and any EVT_OVERRUN report may still be in flight."""
+            if message_type == p.ACK:
+                return payload[0] == p.LIVE_STOP
+            if message_type == p.EVT_DECODED:
+                for slot, kind, t_sample, data in p.iter_decoded_events(payload):
+                    collected.append(
+                        {"slot": slot, "kind": kind, "t_sample": t_sample, "data": data}
+                    )
+                return False
+            if message_type == p.EVT_OVERRUN:
+                dropped = int.from_bytes(payload[:4], "little")
+                stage = payload[4]
+                collected.append({"overrun": True, "dropped": dropped, "stage": stage})
+                return False
+            return False
+
         try:
-            self._send(p.LIVE_STOP)
-            self._expect_ack(p.LIVE_STOP, "LIVE_STOP", deadline)
+            self._pump(stop_deadline, on_stop)
         except TransportError:
             pass  # the device may already have torn the stream down
+        if count is not None:
+            trimmed: list[dict] = []
+            decoded_count = 0
+            for event in collected:
+                if event.get("overrun") or decoded_count < count:
+                    trimmed.append(event)
+                    if not event.get("overrun"):
+                        decoded_count += 1
+            collected = trimmed
         return collected
 
     def stop_live(self) -> None:

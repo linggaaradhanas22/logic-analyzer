@@ -267,6 +267,10 @@ static void tx_drain_events(la_tx_ctx_t *ctx)
 {
     la_event_batch_t *block;
 
+    /* Report drops before draining the backlog: under overload the ev_q is
+     * never empty, so a report placed after the drain would only be sent once
+     * the stream ends - too late for the host to see it live. */
+    tx_report_decoder_overruns(ctx);
     while (xQueueReceive(ctx->app->ev_q, &block, 0) == pdTRUE) {
         if (block != NULL && block->length != 0u) {
             (void)tx_write(ctx, LA_PROTO_EVT_DECODED,
@@ -278,7 +282,6 @@ static void tx_drain_events(la_tx_ctx_t *ctx)
             ctx->app->tx_drops++;
         }
     }
-    tx_report_decoder_overruns(ctx);
 }
 
 static la_tx_ctx_t s_tx_ctx;

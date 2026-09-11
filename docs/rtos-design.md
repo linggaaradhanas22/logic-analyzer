@@ -382,8 +382,12 @@ free-block queue. A full block or the 2 ms flush timer sends the block
 pointer to the multi-producer `ev_q`; a missing free block or a full `ev_q`
 drops whole events and increments the per-slot dropped counter. After every
 segment it copies the core counters into the app arrays that STATUS reads.
-`TxTask` drains `ev_q` into `EVT_DECODED` frames, recycles the block, and
-reports any decoder drop increase as `EVT_OVERRUN(stage=1)`.
+Consumer releases go through `la_live_ring_release` (not the pool directly),
+under a short critical section shared with AcqTask's repost loop, so the ring
+slot state, `published` count and `dma_posted` count stay exact.
+`TxTask` reports a decoder drop increase as `EVT_OVERRUN(stage=1)` **before**
+draining the event backlog: under overload `ev_q` is never empty, so a report
+placed after the drain would only reach the host at teardown.
 
 | Queue | Producer | Consumer | Full policy |
 |---|---|---|---|

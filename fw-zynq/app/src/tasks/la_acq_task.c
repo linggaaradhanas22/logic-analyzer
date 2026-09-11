@@ -166,7 +166,9 @@ static void acq_complete(la_acq_ctx_t *ctx)
 static int acq_live_repost(la_acq_ctx_t *ctx)
 {
     la_app_t *app = ctx->app;
+    int result = 0;
 
+    taskENTER_CRITICAL();
     while (la_dma_free_bd_count(&app->dma) > 0u) {
         uint32_t slot = 0u;
 
@@ -176,10 +178,12 @@ static int acq_live_repost(la_acq_ctx_t *ctx)
         if (la_dma_post_live(&app->dma, slot,
                              la_live_ring_slot_address(&app->live_ring, slot),
                              LA_LIVE_SEGMENT_BYTES) != 0) {
-            return -1;
+            result = -1;
+            break;
         }
     }
-    return 0;
+    taskEXIT_CRITICAL();
+    return result;
 }
 
 static void acq_start_live(la_acq_ctx_t *ctx, const la_ctrl_msg_t *message)
@@ -270,12 +274,19 @@ static void acq_stop_live(la_acq_ctx_t *ctx, int report_overrun, uint32_t droppe
     /* Consumers release their references as they drain; abort frees every
      * DMA-owned slot at once and reports the CPU-owned remainder. */
     for (guard = 0u; guard < 200u; ++guard) {
-        if ((uint32_t)la_live_ring_abort(&app->live_ring) == 0u) {
+        uint32_t pending;
+
+        taskENTER_CRITICAL();
+        pending = (uint32_t)la_live_ring_abort(&app->live_ring);
+        taskEXIT_CRITICAL();
+        if (pending == 0u) {
             break;
         }
         vTaskDelay(pdMS_TO_TICKS(1));
     }
+    taskENTER_CRITICAL();
     (void)la_live_ring_abort(&app->live_ring);
+    taskEXIT_CRITICAL();
 
     ctx->word_count =
         (uint64_t)la_regs_read32(&app->regs, LA_REG_WORD_COUNT_HI_OFFSET) << 32 |
@@ -299,6 +310,7 @@ static void acq_handle_live_irq(la_acq_ctx_t *ctx)
     la_dma_live_bd_t entries[LA_LIVE_SEGMENT_COUNT];
     int count;
     int index;
+    int status;
 
     count = la_dma_collect_live(&app->dma, entries, LA_LIVE_SEGMENT_COUNT);
     if (count < 0 || app->dma.error != 0u) {
@@ -322,12 +334,18 @@ static void acq_handle_live_irq(la_acq_ctx_t *ctx)
         message.length = entries[index].length > LA_LIVE_SEGMENT_BYTES
                              ? LA_LIVE_SEGMENT_BYTES
                              : entries[index].length;
-        if (la_live_ring_complete(&app->live_ring, message.slot, message.length,
-                                  ctx->enabled_decoders) != 0) {
+        taskENTER_CRITICAL();
+        status = la_live_ring_complete(&app->live_ring, message.slot,
+                                       message.length, ctx->enabled_decoders);
+        if (status == 0) {
+            message.handle = app->live_ring.slots[message.slot].handle;
+            message.sequence = la_live_ring_slot_sequence(&app->live_ring,
+                                                          message.slot);
+        }
+        taskEXIT_CRITICAL();
+        if (status != 0) {
             continue;
         }
-        message.handle = app->live_ring.slots[message.slot].handle;
-        message.sequence = la_live_ring_slot_sequence(&app->live_ring, message.slot);
         for (d = 0u; d < LA_PROTO_DECODER_MAX_SLOTS; ++d) {
             if (ctx->decoder_enabled[d] == 0u) {
                 continue;
@@ -344,13 +362,12 @@ static void acq_handle_live_irq(la_acq_ctx_t *ctx)
 
     if (acq_live_repost(ctx) != 0) {
         acq_stop_live(ctx, 1, 0u);
-        return;
     }
-    if (la_live_ring_dma_posted(&app->live_ring) == 0u) {
-        /* No descriptor posted and no free segment: consumers are behind and
-         * the PL FIFO would overflow. Stop before losing data silently. */
-        acq_stop_live(ctx, 1, ctx->enabled_decoders);
-    }
+    /* A ring with no posted descriptor is not itself an error: consumers
+     * release their references within a few milliseconds and the next
+     * SEGMENT_FREE notification reposts. If they fall too far behind, the
+     * PL FIFO overflows, stops and reports DONE - that path carries the
+     * accurate overflow event. */
 }
 
 static void acq_handle_pl(la_acq_ctx_t *ctx)
