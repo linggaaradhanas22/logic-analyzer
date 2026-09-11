@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 import socket
+import struct
 import time
 from abc import ABC, abstractmethod
 
@@ -37,6 +38,11 @@ class Transport(ABC):
 
     @abstractmethod
     def close(self) -> None: ...
+
+    def kill(self) -> None:
+        """P8.4 fault injection: abort the transport so the peer sees an
+        abrupt disconnect (TCP RST for TcpTransport). Defaults to close()."""
+        self.close()
 
     @property
     @abstractmethod
@@ -77,6 +83,16 @@ class TcpTransport(Transport):
             self._sock.close()
         except OSError:
             pass
+
+    def kill(self) -> None:
+        """Aborts with a TCP RST (SO_LINGER 0) so the peer sees an abrupt
+        disconnect instead of a clean FIN."""
+        try:
+            self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
+                                  struct.pack("ii", 1, 0))
+        except OSError:
+            pass
+        self.close()
 
     @property
     def eof(self) -> bool:

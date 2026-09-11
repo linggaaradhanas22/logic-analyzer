@@ -79,6 +79,11 @@ class AnalyzerClient:
     def close(self) -> None:
         self._transport.close()
 
+    def kill(self) -> None:
+        """P8.4 fault injection: aborts the transport (TCP RST) so the peer
+        sees an abrupt disconnect instead of a clean FIN."""
+        self._transport.kill()
+
     def _next_sequence(self) -> int:
         sequence = self._sequence
         self._sequence = (self._sequence + 1) & 0xFF
@@ -317,12 +322,20 @@ class AnalyzerClient:
                     if count is not None and len(collected) >= count:
                         stop_requested = True
                         break
-                if stop_requested and count is not None:
-                    del collected[count:]  # a batch may overshoot the count
+                if stop_requested and count is not None and len(collected) > count:
+                    # A batch may overshoot the count: keep the first `count`
+                    # decoded events and every overrun report (an overrun can
+                    # share the read with the event that reached the count).
+                    keep: list[dict] = []
+                    decoded = 0
+                    for event in collected:
+                        if event.get("overrun") or decoded < count:
+                            keep.append(event)
+                            if not event.get("overrun"):
+                                decoded += 1
+                    collected[:] = keep
                 return stop_requested
             if message_type == p.EVT_OVERRUN:
-                if count is not None and stop_requested:
-                    return True
                 dropped = int.from_bytes(payload[:4], "little")
                 stage = payload[4]
                 collected.append({"overrun": True, "dropped": dropped, "stage": stage})

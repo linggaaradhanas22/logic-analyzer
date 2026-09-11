@@ -18,6 +18,8 @@ decoders-off smoke) and checks a clean return to IDLE.
 `test_live_link_overrun_reported_on_stall` is the P8.4 fault injection: it
 stalls the host read for 3 s and requires the gateway to report the resulting
 best-effort frame drops as EVT_OVERRUN(stage=2 link).
+`test_live_tcp_kill_reconnect` RSTs the client mid-live and requires a fresh
+connection to be served (stale-client regression guard).
 
 Remaining P7.6 gates that need a controllable source or a longer run are
 tracked in docs/status.md (isolated-final-byte 25 ms p99, SPI/I2C overload,
@@ -26,6 +28,7 @@ simultaneous decoders).
 
 from __future__ import annotations
 
+import threading
 import time
 
 import pytest
@@ -229,3 +232,34 @@ def test_live_raw_stream_decoders_off(client: AnalyzerClient) -> None:
     assert all(event.get("overrun") for event in events) or not events
     status = client.status()
     assert status["state"] == 0, "decoder-free live stream did not stop cleanly"
+
+
+def test_live_tcp_kill_reconnect(client: AnalyzerClient, request) -> None:
+    """P8.4 TCP kill: abort the client connection (RST) during a live flood
+    and require the gateway to accept and serve a fresh connection without a
+    reset. This is the stale-client failure mode observed after heap
+    exhaustion; it must not recur with a healthy heap. Runs last because it
+    destroys the module-scoped client connection."""
+    target = request.config.getoption("--target")
+    _configure_patgen_uart(client, 115200)
+    errors: list[Exception] = []
+
+    def stream() -> None:
+        try:
+            client.live(_uart_decoder(115200), config=_stream_config(1),
+                        timeout_s=10.0)
+        except Exception as exc:  # the RST is expected to break the pump
+            errors.append(exc)
+
+    thread = threading.Thread(target=stream, daemon=True)
+    thread.start()
+    time.sleep(2.0)
+    client.kill()
+    thread.join(timeout=5.0)
+    assert not thread.is_alive(), "live pump did not stop after the RST"
+    fresh = AnalyzerClient(open_uri(target))
+    try:
+        pong = fresh.ping(timeout_s=10.0)
+        assert pong["fw_version"] != 0, pong
+    finally:
+        fresh.close()

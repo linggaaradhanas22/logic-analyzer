@@ -8,7 +8,7 @@ from click.testing import CliRunner
 from host.la_cli import protocol as p
 from host.la_cli.client import AnalyzerClient
 from host.la_cli.commands import cli
-from host.la_cli.transport import open_uri
+from host.la_cli.transport import TransportError, open_uri
 
 
 def _collect_all(uri: str) -> list[dict]:
@@ -92,6 +92,14 @@ def test_live_client_read_stall_hook(analyzer) -> None:
         client.close()
     decoded = [e for e in events if not e.get("overrun")]
     assert len(decoded) == 8
+
+
+def test_live_client_kill_hook(analyzer) -> None:
+    mock = analyzer("live")
+    client = AnalyzerClient(open_uri(mock.uri))
+    client.kill()
+    with pytest.raises(TransportError):
+        client.ping()
 
 
 def test_live_client_count_stops_early(analyzer) -> None:
