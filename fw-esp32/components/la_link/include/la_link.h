@@ -33,6 +33,8 @@ typedef struct la_link_counters {
     uint32_t line_error_events;
     uint32_t to_host_discarded;
     uint32_t control_send_failures;
+    uint32_t to_net_max_used;  /* P8.2: peak link_to_net occupancy in bytes */
+    uint32_t overrun_reports;  /* P8.4: EVT_OVERRUN(stage=2) frames sent */
     uint32_t rx_stack_hwm;
     uint32_t tx_stack_hwm;
 } la_link_counters_t;

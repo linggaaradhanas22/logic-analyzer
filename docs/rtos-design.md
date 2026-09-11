@@ -402,9 +402,11 @@ placed after the drain would only reach the host at teardown.
 `la_relay.{h,c}` (in the `la_link` IDF component, include/link API; pure C,
 compiled by MSVC for `test-esp32-mocks` and by the ESP-IDF toolchain for
 `fw-esp32`) is the routing policy for one directed relay leg. The tasks own
-the UART/TCP drivers and the byte rings (`link_to_net` 32 KiB NOSPLIT,
-`net_to_link`, the P10 live ring); the core owns classification, decisions
-and counters.
+the UART/TCP drivers and the byte rings (`link_to_net` 64 KiB NOSPLIT since
+the P8.2 tuning, `net_to_link`, the P10 live ring); the core owns
+classification, decisions and counters. P8.2 measurements are surfaced by
+UiTask: `to_net_max_used` is the peak `link_to_net` occupancy in bytes and
+`overrun_reports` counts the emitted `EVT_OVERRUN(stage=2)` frames.
 
 - **Type tables are caller-supplied.** The Zynq -> host leg (LinkRxTask)
   installs `EVT_DECODED` as its only best-effort and mirror type; the
@@ -446,7 +448,7 @@ implements this on the confirmed classic-ESP32 board: UART2 at
 `CONFIG_LA_LINK_BAUD` (2 Mbps since the P7.6 gate) 8N1 with
 hardware RTS/CTS, a 16 KiB RX driver buffer, ~64-byte RX FIFO threshold and a
 20-entry event queue; LinkRxTask (core 1, prio 20) parses with `la_proto`,
-re-encodes accepted frames verbatim into a static 32 KiB NOSPLIT `link_to_net`
+re-encodes accepted frames verbatim into a static 64 KiB NOSPLIT `link_to_net`
 ring and reports accumulated drops as `EVT_OVERRUN(stage=2)`, mirroring
 `EVT_DECODED` into an 8 KiB live ring (the P10 consumer is
 still open, so a full ring is counted in `mirror_dropped`); LinkTxTask (core 1,
@@ -551,6 +553,26 @@ partial packets provide approximately 32 ms of descriptor runway. P8 must
 measure queue high-water marks, stack high-water marks, CPU load, dropped
 segments, event drops, DMA errors, cache maintenance and latency distributions
 on target hardware.
+
+### P8.2 results so far (ESP32 relay, 2026-09-11)
+
+Measured on the bench with the P7 firmware, the 2 Mbps link and the 115200
+UART live stream (~10 k events/s, ~120 kB/s of `EVT_DECODED` frames):
+
+| Metric | Observed |
+|---|---|
+| One-way live forwarding | ~1000 frames/s, ~120 kB/s, zero drops in the clean 60 s runs |
+| Peak `link_to_net` occupancy, isolated 60 s gate | 40,144 B of 65,536 B (61%) |
+| Peak `link_to_net` occupancy, full `test-e2e` run (burst matrix first) | 65,536 B (full) |
+| Drops, full suite run | 785 frames, 24 `EVT_OVERRUN(stage=2)` reports |
+| RSSI during the runs | -61 to -67 dBm |
+
+The old 32 KiB ring dropped at the same workload; 64 KiB absorbed the
+isolated-run stall but the combined burst-matrix-then-live suite still hit
+the ceiling once, so the stall can exceed the ~64 KiB ring plus the 32 KiB
+lwIP windows and 16 KiB UART driver buffer. The drops are reported
+(`stage=2`), never silent. Remaining levers: a larger UART driver buffer,
+host read-path efficiency, and the P9.2 compact event format.
 
 ## Windows Adapter Boundary
 

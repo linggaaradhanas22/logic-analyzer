@@ -73,13 +73,14 @@ static void ui_task(void *argument)
         }
         ESP_LOGI(TAG,
                  "link fwd=%u drop=%u press=%u mirror=%u/%u fifo_ovf=%u line_err=%u "
-                 "rx_bytes=%u tx_bytes=%u | net %s clients=%u/%u disc=%u wifidrop=%u "
-                 "rx_frames=%u tx_frames=%u to_host_discard=%u | rssi=%d heap=%u "
-                 "stacks rx=%u tx=%u net=%u ui=%u",
+                 "touse=%u rep=%u rx_bytes=%u tx_bytes=%u | net %s clients=%u/%u "
+                 "disc=%u wifidrop=%u rx_frames=%u tx_frames=%u to_host_discard=%u | "
+                 "rssi=%d heap=%u stacks rx=%u tx=%u net=%u ui=%u",
                  (unsigned)up.frames_forwarded, (unsigned)up.best_effort_dropped,
                  (unsigned)up.control_pressure_events, (unsigned)up.frames_mirrored,
                  (unsigned)up.mirror_dropped, (unsigned)link.fifo_ovf_events,
-                 (unsigned)link.line_error_events, (unsigned)link.uart_rx_bytes,
+                 (unsigned)link.line_error_events, (unsigned)link.to_net_max_used,
+                 (unsigned)link.overrun_reports, (unsigned)link.uart_rx_bytes,
                  (unsigned)link.uart_tx_bytes, policy_state_name(state),
                  (unsigned)policy.clients_accepted, (unsigned)policy.clients_rejected,
                  (unsigned)policy.client_disconnects, (unsigned)net.wifi_event_drops,

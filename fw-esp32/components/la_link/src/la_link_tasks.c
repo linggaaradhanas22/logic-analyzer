@@ -15,7 +15,9 @@
 
 static const char *TAG = "la_link";
 
-#define LA_LINK_TO_NET_BYTES (32u * 1024u)
+/* P8.2: 64 KiB absorbs ~530 ms of a 120 kB/s event stream (the old 32 KiB
+ * absorbed ~270 ms and the 60 s gate dropped frames under Wi-Fi stalls). */
+#define LA_LINK_TO_NET_BYTES (64u * 1024u)
 #define LA_LINK_NET_TO_LINK_BYTES (16u * 1024u)
 #define LA_LINK_LIVE_BYTES (8u * 1024u)
 
@@ -94,6 +96,19 @@ static void report_link_overrun(la_link_state_t *link)
     if (xRingbufferSend(link->to_net, link->overrun_frame, frame_bytes, 0) == pdTRUE) {
         la_relay_clear_pending_drops(&link->relay_uart_to_net);
         link->overrun_sequence = (uint8_t)(link->overrun_sequence + 1u);
+        link->counters.overrun_reports += 1u;
+    }
+}
+
+/* P8.2: track the peak link_to_net occupancy so UiTask can report how close
+ * the relay ran to the drop threshold. */
+static void track_ring_usage(la_link_state_t *link)
+{
+    size_t free_bytes = xRingbufferGetCurFreeSize(link->to_net);
+    uint32_t used = (uint32_t)(LA_LINK_TO_NET_BYTES - free_bytes);
+
+    if (used > link->counters.to_net_max_used) {
+        link->counters.to_net_max_used = used;
     }
 }
 
@@ -117,6 +132,7 @@ static void on_uart_frame(void *context,
         return;
     }
     if (decision == LA_RELAY_DROP_BEST_EFFORT) {
+        track_ring_usage(link);
         report_link_overrun(link);
         return;
     }
@@ -134,6 +150,7 @@ static void on_uart_frame(void *context,
     }
     (void)la_relay_report(&link->relay_uart_to_net, type, LA_RELAY_FWD_OK);
     mirror_frame(link, type, frame_bytes);
+    track_ring_usage(link);
     report_link_overrun(link);
 }
 
