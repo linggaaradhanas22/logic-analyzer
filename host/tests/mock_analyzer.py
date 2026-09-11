@@ -62,6 +62,7 @@ class MockAnalyzer:
         self.received_acks: list[tuple[int, int]] = []
         self.last_config: bytes | None = None
         self.last_patgen: bytes | None = None
+        self.last_decoder: bytes | None = None
         self.parser = p.FrameParser()
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -152,6 +153,7 @@ class MockAnalyzer:
                 self.last_patgen = payload
                 self._send(connection, p.ACK, p.pack_ack(p.PATGEN_CFG, sequence))
             elif message_type == p.DECODER_CFG:
+                self.last_decoder = payload
                 if self.scenario == "live":
                     self._send(connection, p.ACK, p.pack_ack(p.DECODER_CFG, sequence))
             elif message_type == p.LIVE_START:

@@ -9,12 +9,16 @@ jumper installed (patgen UART on CH0):
 live path. `test_live_uart_continuous_zero_drop` streams for
 `--live-seconds` (default 10; the plan gate uses 60) and requires zero
 EVT_OVERRUN frames, a clean repeating byte stream and `dropped_segments == 0`
-in the final STATUS. `test_live_raw_stream_decoders_off` runs the decoder-free
-raw stream (P7.2 decoders-off smoke) and checks a clean return to IDLE.
+in the final STATUS. `test_live_spi_decode_events` and
+`test_live_i2c_decode_events` run the patgen SPI and I2C sources at 10 kHz
+through the live decoders (one slot at a time) and check the decoded
+MOSI/address/ACK/control pattern plus link headroom.
+`test_live_raw_stream_decoders_off` runs the decoder-free raw stream (P7.2
+decoders-off smoke) and checks a clean return to IDLE.
 
 Remaining P7.6 gates that need a controllable source or a longer run are
-tracked in docs/status.md (isolated-final-byte 25 ms p99, SPI/I2C zero-drop
-and overload, simultaneous decoders).
+tracked in docs/status.md (isolated-final-byte 25 ms p99, SPI/I2C overload,
+simultaneous decoders).
 """
 
 from __future__ import annotations
@@ -30,6 +34,11 @@ from host.la_cli.transport import open_uri
 FCLK_HZ = 100_000_000
 UART_FRAME = b"LA-TEST\n"
 EVENT_BYTE = 1
+SPI_WORDS = (0x4C, 0x41)
+I2C_ADDRESS = 0x50
+I2C_BYTES = (0x4C, 0x41)
+# 2 Mbps 8N1 payload ceiling; the plan requires >=20% headroom.
+LINK_PAYLOAD_BYTES_PER_S = 200_000
 
 
 @pytest.fixture(scope="module")
@@ -56,20 +65,32 @@ def _stream_config(mode: int) -> bytes:
     )
 
 
-def _configure_patgen_uart(client: AnalyzerClient, baud: int) -> None:
-    """Selects the UART patgen with the DIV that scales 115200 down to `baud`.
-
-    la_patgen latches mode and DIV on the EN rising edge, so a previous test
-    that left the generator enabled in another mode is not re-configured by a
-    plain enable write; disable first (the burst matrix does the same)."""
-    div = max(0, 115200 // baud - 1) if baud <= 115200 else 0
+def _configure_patgen(client: AnalyzerClient, mode: int, div: int) -> None:
+    """Selects a patgen mode and DIV. la_patgen latches mode and DIV on the
+    EN rising edge, so a previous test that left the generator enabled in
+    another mode is not re-configured by a plain enable write; disable first
+    (the burst matrix does the same)."""
     client.configure_patgen(0)
     time.sleep(0.01)
     client.configure_patgen(
-        p.PATGEN_EN_MASK
-        | (p.PATGEN_MODE_UART_115200 << p.PATGEN_MODE_SHIFT)
-        | (div << 16)
+        p.PATGEN_EN_MASK | (mode << p.PATGEN_MODE_SHIFT) | (div << 16)
     )
+
+
+def _configure_patgen_uart(client: AnalyzerClient, baud: int) -> None:
+    """UART patgen with the DIV that scales the nominal 115200 down to `baud`."""
+    div = max(0, 115200 // baud - 1) if baud <= 115200 else 0
+    _configure_patgen(client, p.PATGEN_MODE_UART_115200, div)
+
+
+def _assert_headroom(events: list[dict], elapsed_s: float) -> None:
+    """Counts a conservative encoded-wire estimate (record header plus one
+    frame header/CRC per event; real batching is smaller) and requires at
+    least 20% headroom against the 2 Mbps 8N1 payload ceiling."""
+    decoded = [event for event in events if not event.get("overrun")]
+    wire_bytes = sum(11 + len(event["data"]) + 7 for event in decoded)
+    rate = wire_bytes / max(elapsed_s, 1e-6)
+    assert rate <= 0.8 * LINK_PAYLOAD_BYTES_PER_S, (rate, len(decoded), elapsed_s)
 
 
 def _uart_decoder(baud: int) -> bytes:
@@ -118,6 +139,68 @@ def test_live_uart_continuous_zero_drop(client: AnalyzerClient, request) -> None
     assert status["state"] == 0, "firmware did not return to IDLE after LIVE_STOP"
     assert status["decoders"][0]["dropped_segments"] == 0
     assert status["decoders"][0]["events"] >= len(decoded)
+
+
+def test_live_spi_decode_events(client: AnalyzerClient) -> None:
+    """P7.6 SPI live gate at 10 kHz: the patgen SPI source (nominal 1 MHz /
+    (99+1)) drives SCK=CH0, MOSI=CH1 and CS_N=CH2 over the JE->JC loopback.
+    The patgen drives MOSI only; MISO needs a second data source (P9 link)."""
+    _configure_patgen(client, 4, 99)
+    started = time.monotonic()
+    events = client.live(
+        p.pack_decoder_cfg_spi(0, 0, mosi_channel=1, cs_channel=2, cs_active=0),
+        config=_stream_config(1), count=None, timeout_s=2.0)
+    elapsed = time.monotonic() - started
+    overruns = [event for event in events if event.get("overrun")]
+    assert not overruns, overruns
+    kinds = [event["kind"] for event in events]
+    assert 10 in kinds and 11 in kinds, f"missing CS events in {kinds}"
+    # The stream starts mid-frame: skip the first partial frame (its
+    # CS_ASSERT..CS_RELEASE group) and align on the next CS_ASSERT.
+    start = kinds.index(11) + 1
+    assert kinds[start] == 10, f"no CS assert after the partial frame: {kinds[start:start + 4]}"
+    aligned = events[start:]
+    assert 2 not in [event["kind"] for event in aligned], "SPI frame error after alignment"
+    words = [event["data"][0] for event in aligned if event["kind"] == 1]
+    assert len(words) >= 4, words
+    expected = (list(SPI_WORDS) * (len(words) // 2 + 1))[: len(words)]
+    assert words == expected, (words, expected)
+    _assert_headroom(events, elapsed)
+    status = client.status()
+    assert status["state"] == 0, "firmware did not return to IDLE after LIVE_STOP"
+    assert status["decoders"][1]["dropped_segments"] == 0
+
+
+def test_live_i2c_decode_events(client: AnalyzerClient) -> None:
+    """P7.6 I2C live gate at 10 kHz: the patgen I2C source (nominal 400 kHz /
+    (39+1)) drives SCL=CH3 and SDA=CH4 over the JE->JC loopback; the patgen
+    drives the ACK bits low, so the decoded pattern is START, address 0x50,
+    ACK, 0x4C, ACK, 0x41, ACK, STOP repeating."""
+    _configure_patgen(client, 5, 39)
+    started = time.monotonic()
+    events = client.live(p.pack_decoder_cfg_i2c(0, 3, 4),
+                         config=_stream_config(1), count=None, timeout_s=2.0)
+    elapsed = time.monotonic() - started
+    overruns = [event for event in events if event.get("overrun")]
+    assert not overruns, overruns
+    kinds = [event["kind"] for event in events]
+    assert 9 not in kinds, "I2C NACK"
+    assert 4 in kinds, f"no START in {kinds}"
+    start = kinds.index(4)  # first START aligns the stream
+    aligned = kinds[start:]
+    pattern = (4, 7, 8, 1, 8, 1, 8, 5)  # START, ADDR, ACK, BYTE, ACK, BYTE, ACK, STOP
+    complete = len(aligned) // len(pattern)
+    assert complete >= 2, (complete, aligned)
+    assert tuple(aligned[: complete * len(pattern)]) == pattern * complete, aligned
+    for event in events[start:start + complete * len(pattern)]:
+        if event["kind"] == 7:
+            assert event["data"] == bytes([I2C_ADDRESS]), event
+        elif event["kind"] == 1:
+            assert event["data"][0] in I2C_BYTES, event
+    _assert_headroom(events, elapsed)
+    status = client.status()
+    assert status["state"] == 0, "firmware did not return to IDLE after LIVE_STOP"
+    assert status["decoders"][2]["dropped_segments"] == 0
 
 
 def test_live_raw_stream_decoders_off(client: AnalyzerClient) -> None:

@@ -210,10 +210,50 @@ def abort(target: str, timeout_s: float) -> None:
     click.echo("aborted")
 
 
+def _parse_decoder_spec(spec: str, sample_rate_hz: int) -> bytes:
+    """Parses the live decoder spec (P7.6): `uart:rx=CH,baud=BAUD`,
+    `spi:sck=CH[,mosi=CH][,miso=CH][,cs=CH][,cpol=0][,cpha=0][,word=8]`
+    `[,lsb=0][,cs_active=0]` or `i2c:scl=CH,sda=CH`."""
+    name, sep, params_text = spec.strip().partition(":")
+    if not sep:
+        raise click.BadParameter("decoder must be uart:..., spi:... or i2c:...")
+    params: dict[str, int] = {}
+    for item in params_text.split(","):
+        item = item.strip()
+        if not item:
+            continue
+        key, eq, value = item.partition("=")
+        if not eq or not re.fullmatch(r"-?\d+", value.strip()):
+            raise click.BadParameter(f"invalid decoder parameter {item!r}")
+        params[key.strip()] = int(value)
+    try:
+        if name == "uart":
+            if set(params) != {"rx", "baud"}:
+                raise ValueError("uart needs rx and baud")
+            if params["baud"] <= 0:
+                raise ValueError("baud must be positive")
+            return p.pack_decoder_cfg_uart(0, params["rx"], params["baud"], sample_rate_hz)
+        if name == "spi":
+            known = {"sck", "mosi", "miso", "cs", "cpol", "cpha", "word", "lsb", "cs_active"}
+            if "sck" not in params or set(params) - known:
+                raise ValueError("spi needs sck and only known keys")
+            return p.pack_decoder_cfg_spi(
+                0, params["sck"], params.get("mosi", -1), params.get("miso", -1),
+                params.get("cs", -1), params.get("cpol", 0), params.get("cpha", 0),
+                params.get("word", 8), params.get("lsb", 0), params.get("cs_active", 0))
+        if name == "i2c":
+            if set(params) != {"scl", "sda"}:
+                raise ValueError("i2c needs scl and sda")
+            return p.pack_decoder_cfg_i2c(0, params["scl"], params["sda"])
+    except (KeyError, ValueError) as exc:
+        raise click.BadParameter(str(exc)) from exc
+    raise click.BadParameter("decoder must be uart:..., spi:... or i2c:...")
+
+
 @cli.command(help="Decoded live events: --decoder uart:rx=0,baud=115200 (P7.5).")
 @click.option("--target", "-t", required=True, help="analyzer link target URI")
 @click.option("--decoder", "decoder_spec", default="uart:rx=0,baud=115200", show_default=True,
-              help="decoder configuration, currently uart:rx=CH,baud=BAUD")
+              help="uart:rx=CH,baud=BAUD | spi:sck=CH,mosi=CH,cs=CH,... | i2c:scl=CH,sda=CH")
 @click.option("--rate", default="100M", show_default=True,
               help="sample rate used to derive samples/bit for the decoder")
 @click.option("--patgen", "patgen_mode",
@@ -226,17 +266,10 @@ def abort(target: str, timeout_s: float) -> None:
               help="overall deadline in seconds (default: until --count or Ctrl+C)")
 def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int | None,
          csv: bool, timeout_s: float | None) -> None:
-    match = re.fullmatch(r"uart:rx=(\d+),baud=(\d+)", decoder_spec.strip())
-    if not match:
-        raise click.BadParameter("decoder must be uart:rx=CH,baud=BAUD in this phase")
-    rx_channel = int(match.group(1))
-    baud = int(match.group(2))
-    if not 0 <= rx_channel < CHANNELS or baud <= 0:
-        raise click.BadParameter("invalid UART decoder parameters")
     rate_hz = _parse_size(rate)
     sample_div = _sample_div(rate_hz)
     actual_rate = FS_HZ // (sample_div + 1)
-    decoder_cfg = p.pack_decoder_cfg_uart(0, rx_channel, baud, actual_rate)
+    decoder_cfg = _parse_decoder_spec(decoder_spec, actual_rate)
     # Live decode consumes transition words; the 2 ms flush interval matches
     # the PL default (LIVE_FLUSH_CYCLES at 100 MHz).
     stream_config = p.pack_config(

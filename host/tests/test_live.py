@@ -1,7 +1,8 @@
-"""P7.5 host-side live decoding against the mock analyzer."""
+"""P7.5/P7.6 host-side live decoding against the mock analyzer."""
 
 from __future__ import annotations
 
+import pytest
 from click.testing import CliRunner
 
 from host.la_cli import protocol as p
@@ -26,6 +27,35 @@ def test_decoder_config_pack_layout() -> None:
     assert payload[4] == 3 and payload[5] == 8
     assert int.from_bytes(payload[12:16], "little") == 115200
     assert int.from_bytes(payload[16:20], "little") == 100_000_000
+
+
+def test_decoder_config_spi_pack_layout() -> None:
+    payload = p.pack_decoder_cfg_spi(1, 0, mosi_channel=1, cs_channel=2, cs_active=0)
+    assert len(payload) == 20
+    assert payload[0] == 1 and payload[1] == p.DECODER_SPI
+    assert list(payload[4:8]) == [0, 1, 0xFF, 2]  # sck, mosi, miso=-1, cs
+    assert payload[8:13] == bytes([0, 0, 8, 0, 0])  # cpol, cpha, word, lsb, cs_active
+    assert payload[13:] == bytes(7)
+    with pytest.raises(ValueError):
+        p.pack_decoder_cfg_spi(0, -1, mosi_channel=1)  # SCK required
+    with pytest.raises(ValueError):
+        p.pack_decoder_cfg_spi(0, 0)  # at least one data channel
+    with pytest.raises(ValueError):
+        p.pack_decoder_cfg_spi(0, 0, mosi_channel=1, word_size=7)
+    with pytest.raises(ValueError):
+        p.pack_decoder_cfg_spi(0, 0, mosi_channel=1, cpha=2)
+
+
+def test_decoder_config_i2c_pack_layout() -> None:
+    payload = p.pack_decoder_cfg_i2c(2, 3, 4)
+    assert len(payload) == 20
+    assert payload[0] == 2 and payload[1] == p.DECODER_I2C
+    assert payload[4] == 3 and payload[5] == 4
+    assert payload[6:] == bytes(14)
+    with pytest.raises(ValueError):
+        p.pack_decoder_cfg_i2c(0, 3, 3)  # SCL and SDA must differ
+    with pytest.raises(ValueError):
+        p.pack_decoder_cfg_i2c(0, 3, 8)  # channel range
 
 
 def test_live_client_collects_events_and_overrun(analyzer) -> None:
@@ -94,9 +124,42 @@ def test_live_command_sends_stream_config_and_patgen(analyzer) -> None:
     assert (ctrl & p.PATGEN_MODE_MASK) >> p.PATGEN_MODE_SHIFT == p.PATGEN_MODE_UART_115200
 
 
+def test_live_command_spi_decoder_spec(analyzer) -> None:
+    mock = analyzer("live")
+    result = CliRunner().invoke(cli, [
+        "live", "--target", mock.uri, "--count", "4", "--patgen", "spi",
+        "--decoder", "spi:sck=0,mosi=1,cs=2,cs_active=0",
+    ])
+    assert result.exit_code == 0, result.output
+    assert mock.last_decoder is not None
+    assert mock.last_decoder[1] == p.DECODER_SPI
+    assert list(mock.last_decoder[4:8]) == [0, 1, 0xFF, 2]
+    assert mock.last_decoder[8:13] == bytes([0, 0, 8, 0, 0])
+
+
+def test_live_command_i2c_decoder_spec(analyzer) -> None:
+    mock = analyzer("live")
+    result = CliRunner().invoke(cli, [
+        "live", "--target", mock.uri, "--count", "4", "--patgen", "i2c",
+        "--decoder", "i2c:scl=3,sda=4",
+    ])
+    assert result.exit_code == 0, result.output
+    assert mock.last_decoder is not None
+    assert mock.last_decoder[1] == p.DECODER_I2C
+    assert mock.last_decoder[4] == 3 and mock.last_decoder[5] == 4
+
+
 def test_live_command_bad_decoder_spec() -> None:
     result = CliRunner().invoke(cli, [
         "live", "--target", "tcp://127.0.0.1:1", "--decoder", "spi:mosi=1",
     ])
     assert result.exit_code != 0
-    assert "decoder must be uart:" in result.output
+    assert "spi needs sck" in result.output
+
+
+def test_live_command_unknown_decoder_name() -> None:
+    result = CliRunner().invoke(cli, [
+        "live", "--target", "tcp://127.0.0.1:1", "--decoder", "jtag:x=1",
+    ])
+    assert result.exit_code != 0
+    assert "decoder must be" in result.output

@@ -242,6 +242,61 @@ def pack_decoder_cfg_uart(slot: int, rx_channel: int, baud_hz: int,
     return bytes(payload)
 
 
+def _decoder_channel(value: int, *, optional: bool = False) -> int:
+    if optional and value == -1:
+        return 0xFF
+    if not 0 <= value <= 7:
+        raise ValueError("decoder channel must be 0..7" + (" or -1" if optional else ""))
+    return value
+
+
+def pack_decoder_cfg_spi(slot: int, sck_channel: int, mosi_channel: int = -1,
+                         miso_channel: int = -1, cs_channel: int = -1,
+                         cpol: int = 0, cpha: int = 0, word_size: int = 8,
+                         lsb_first: int = 0, cs_active: int = 0) -> bytes:
+    """SPI DECODER_CFG (protocol.md 0x14): signed channel bytes, -1 = absent."""
+    if not 0 <= slot <= 2:
+        raise ValueError("decoder slot must be 0..2")
+    channels = (
+        _decoder_channel(sck_channel),
+        _decoder_channel(mosi_channel, optional=True),
+        _decoder_channel(miso_channel, optional=True),
+        _decoder_channel(cs_channel, optional=True),
+    )
+    if mosi_channel == -1 and miso_channel == -1:
+        raise ValueError("SPI needs at least one data channel")
+    if cpol not in (0, 1) or cpha not in (0, 1) or lsb_first not in (0, 1) or cs_active not in (0, 1):
+        raise ValueError("invalid SPI decoder flags")
+    if word_size not in (8, 16):
+        raise ValueError("SPI word size must be 8 or 16")
+    payload = bytearray(DECODER_CFG_SIZE)
+    payload[0] = slot
+    payload[1] = DECODER_SPI
+    payload[4:8] = bytes(channels)
+    payload[8] = cpol
+    payload[9] = cpha
+    payload[10] = word_size
+    payload[11] = lsb_first
+    payload[12] = cs_active
+    return bytes(payload)
+
+
+def pack_decoder_cfg_i2c(slot: int, scl_channel: int, sda_channel: int) -> bytes:
+    """I2C DECODER_CFG (protocol.md 0x14)."""
+    if not 0 <= slot <= 2:
+        raise ValueError("decoder slot must be 0..2")
+    if not 0 <= scl_channel <= 7 or not 0 <= sda_channel <= 7:
+        raise ValueError("I2C channels must be 0..7")
+    if scl_channel == sda_channel:
+        raise ValueError("I2C SCL and SDA must differ")
+    payload = bytearray(DECODER_CFG_SIZE)
+    payload[0] = slot
+    payload[1] = DECODER_I2C
+    payload[4] = scl_channel
+    payload[5] = sda_channel
+    return bytes(payload)
+
+
 def iter_decoded_events(payload: bytes):
     """Parses an EVT_DECODED batch into (slot, kind, t_sample, data)."""
     offset = 0
