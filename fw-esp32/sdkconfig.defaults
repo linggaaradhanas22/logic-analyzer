@@ -19,9 +19,11 @@ CONFIG_ESP_TASK_WDT_TIMEOUT_S=5
 
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=4096
 
-# lwIP windows for the TCP relay. P8.2 tuning 2026-09-11: raised from 16 KiB
-# to absorb Wi-Fi stalls (with the 64 KiB link_to_net ring).
-CONFIG_LWIP_TCP_SND_BUF_DEFAULT=32768
-CONFIG_LWIP_TCP_WND_DEFAULT=32768
+# lwIP windows for the TCP relay. P8.2 tuning 2026-09-11: the 64 KiB
+# link_to_net ring is the stall absorber; 32 KiB windows exhausted the heap
+# during live streaming (3.5 KB free, silent drops, stale client), so the
+# windows stay at 16 KiB.
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=16384
+CONFIG_LWIP_TCP_WND_DEFAULT=16384
 
 CONFIG_MDNS_MAX_SERVICES=4

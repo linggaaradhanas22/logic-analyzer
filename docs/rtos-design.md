@@ -554,25 +554,30 @@ measure queue high-water marks, stack high-water marks, CPU load, dropped
 segments, event drops, DMA errors, cache maintenance and latency distributions
 on target hardware.
 
-### P8.2 results so far (ESP32 relay, 2026-09-11)
+### P8.2 results (ESP32 relay, 2026-09-11)
 
 Measured on the bench with the P7 firmware, the 2 Mbps link and the 115200
-UART live stream (~10 k events/s, ~120 kB/s of `EVT_DECODED` frames):
+UART live stream (~10 k events/s, ~120 kB/s of `EVT_DECODED` frames), final
+configuration (64 KiB `link_to_net` ring, 16 KiB lwIP windows):
 
 | Metric | Observed |
 |---|---|
 | One-way live forwarding | ~1000 frames/s, ~120 kB/s, zero drops in the clean 60 s runs |
 | Peak `link_to_net` occupancy, isolated 60 s gate | 40,144 B of 65,536 B (61%) |
-| Peak `link_to_net` occupancy, full `test-e2e` run (burst matrix first) | 65,536 B (full) |
-| Drops, full suite run | 785 frames, 24 `EVT_OVERRUN(stage=2)` reports |
-| RSSI during the runs | -61 to -67 dBm |
+| Peak `link_to_net` occupancy, full `test-e2e` suite | 65,536 B, reached only by the deliberate 3 s host read-stall fault injection |
+| Drops, full suite | 721 frames / 11 `EVT_OVERRUN(stage=2)` reports, all from the stall fault injection; the 60 s gate had zero |
+| Minimum free heap during the full suite | 65,508 B |
+| RSSI during the runs | -61 to -69 dBm |
 
-The old 32 KiB ring dropped at the same workload; 64 KiB absorbed the
-isolated-run stall but the combined burst-matrix-then-live suite still hit
-the ceiling once, so the stall can exceed the ~64 KiB ring plus the 32 KiB
-lwIP windows and 16 KiB UART driver buffer. The drops are reported
-(`stage=2`), never silent. Remaining levers: a larger UART driver buffer,
-host read-path efficiency, and the P9.2 compact event format.
+The first tuning attempt also raised the lwIP TCP windows to 32 KiB. That
+exhausted the heap during live streaming (3.5 KB free): lwIP could not
+allocate send pbufs, TCP stalled, the relay dropped 29 k frames without being
+able to enqueue the stage=2 reports, and the session ended in the stale-client
+state. Reverting the windows to 16 KiB while keeping the 64 KiB static ring
+(no heap cost) restored a 65 KB heap floor and made the full suite green.
+The old 32 KiB ring dropped at the isolated-gate workload; 64 KiB absorbs it.
+Remaining levers for more margin: a larger UART driver RX buffer, host
+read-path efficiency, and the P9.2 compact event format.
 
 ## Windows Adapter Boundary
 
