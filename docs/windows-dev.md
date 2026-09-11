@@ -30,6 +30,18 @@ $BasePython = "C:\path\to\base\python.exe"
 & $BasePython $env:IDF_PATH\tools\idf_tools.py --non-interactive install-python-env --features=core
 ```
 
+Wi-Fi credentials for the gateway live only in the generated, git-ignored
+`build\esp32\sdkconfig`. Set or change them with the tracked helper, then
+rebuild and reflash:
+
+```powershell
+.\.venv\Scripts\python.exe tools\set_wifi.py
+python tools\run.py fw-esp32
+```
+
+The helper prompts for the SSID, hides the password input and writes only the
+two `CONFIG_LA_WIFI_*` lines; credentials never enter tracked files.
+
 For the optional project-local PulseView install, use the official 64-bit
 0.4.2 installer:
 
@@ -108,6 +120,64 @@ RTS->JD-4, CTS->JD-3 and GND->JD-5 or JD-11; set `LA_HIL_PORT=COMx` or pass
 `--port COMx`. Without a port the HIL tests are skipped, and the unconnected
 JD RX input floats and storms the UART0 interrupt, so do not judge the
 firmware from a link-less run.
+
+## Changing Wi-Fi networks
+
+Only the ESP32 credentials and the host target change when the bench moves to a
+different Wi-Fi network; the Zynq link is unaffected.
+
+### PC
+
+1. Join the same network as the gateway. The classic ESP32 is 2.4 GHz only, so
+   a hotspot must offer 2.4 GHz.
+2. Verify with `netsh wlan show interfaces` (connected, correct SSID, 2.4 GHz).
+3. No address configuration: reach the gateway through its mDNS name
+   `la-esp32.local`. The DHCP address changes per network; never hardcode it.
+
+### ESP32 gateway
+
+1. Set the credentials (the helper prompts and hides the password):
+   `.venv\Scripts\python.exe tools\set_wifi.py`
+2. Rebuild: `python tools\run.py fw-esp32`
+3. Export the project-local ESP-IDF environment once per shell:
+   `$env:IDF_PATH = (Resolve-Path .deps\esp-idf).Path`,
+   `$env:IDF_TOOLS_PATH = (Resolve-Path .tools\espressif).Path`,
+   `. .\.deps\esp-idf\export.ps1`
+4. Flash and watch the console (run from the project directory because the
+   build directory is configured for it):
+   `Set-Location fw-esp32` then
+   `idf.py -B ..\build\esp32 -p COM5 flash monitor`
+   If the flash stalls or reports "Failed to connect / wrong boot mode", this
+   DOIT board's auto-reset did not assert GPIO0: hold BOOT, tap EN, release
+   BOOT, then flash with reset disabled and attach the console:
+
+```powershell
+Set-Location build\esp32
+python $env:IDF_PATH\components\esptool_py\esptool\esptool.py --chip esp32 -p COM5 -b 460800 --before no_reset --after hard_reset write_flash @flash_args
+Set-Location ..\..
+Set-Location fw-esp32
+idf.py -B ..\build\esp32 -p COM5 monitor
+```
+
+5. Success signs: `station started (ssid "...")`, a `got ip` line,
+   `net CONNECTED` and `fifo_ovf=0`. Exit the monitor with `Ctrl+]` and
+   `Set-Location ..`.
+
+### Zynq
+
+Not affected by the network. Power the board with JP5=JTAG and run
+`python tools\run.py jtag-zynq`; COM6 shows the P4 boot line and status ticks.
+
+### Readiness check
+
+```powershell
+.venv\Scripts\la-cli.exe ping -t tcp://la-esp32.local:5555
+```
+
+Expected `pong: fw ... pl ... uptime ...`. On a timeout, tap EN on the ESP32
+once and retry (the known stale-client state); if it still fails, check the
+monitor log and `ping la-esp32.local`. The burst E2E gate then runs as
+`python tools\run.py test-e2e -- --target tcp://la-esp32.local:5555`.
 
 ## Troubleshooting
 
