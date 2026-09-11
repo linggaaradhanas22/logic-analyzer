@@ -135,6 +135,17 @@ static int test_congestion_policy(void)
     CHECK(stats.best_effort_dropped == 1u, "drop counter");
     CHECK(stats.control_pressure_events == 2u, "pressure counter");
     CHECK(stats.frames_forwarded == 1u, "only the finally-placed frame counts");
+    CHECK(la_relay_pending_drops(&relay) == 1u, "drop is pending a link report");
+    la_relay_clear_pending_drops(&relay);
+    CHECK(la_relay_pending_drops(&relay) == 0u, "pending drops cleared after report");
+    ring.free_bytes = 0u;
+    CHECK(la_relay_accept(&relay, LA_PROTO_EVT_DECODED, 200u, ring_capacity, &ring,
+                          &decision) == 0 &&
+              decision == LA_RELAY_DROP_BEST_EFFORT,
+          "second drop accumulates");
+    CHECK(la_relay_pending_drops(&relay) == 1u, "pending drops accumulate again");
+    la_relay_reset_counters(&relay);
+    CHECK(la_relay_pending_drops(&relay) == 0u, "reset clears pending drops");
     return 0;
 }
 

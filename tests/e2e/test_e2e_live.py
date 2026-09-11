@@ -15,6 +15,9 @@ through the live decoders (one slot at a time) and check the decoded
 MOSI/address/ACK/control pattern plus link headroom.
 `test_live_raw_stream_decoders_off` runs the decoder-free raw stream (P7.2
 decoders-off smoke) and checks a clean return to IDLE.
+`test_live_link_overrun_reported_on_stall` is the P8.4 fault injection: it
+stalls the host read for 3 s and requires the gateway to report the resulting
+best-effort frame drops as EVT_OVERRUN(stage=2 link).
 
 Remaining P7.6 gates that need a controllable source or a longer run are
 tracked in docs/status.md (isolated-final-byte 25 ms p99, SPI/I2C overload,
@@ -201,6 +204,22 @@ def test_live_i2c_decode_events(client: AnalyzerClient) -> None:
     status = client.status()
     assert status["state"] == 0, "firmware did not return to IDLE after LIVE_STOP"
     assert status["decoders"][2]["dropped_segments"] == 0
+
+
+def test_live_link_overrun_reported_on_stall(client: AnalyzerClient) -> None:
+    """P8.4 fault injection: stop reading the TCP socket for 3 s while the
+    live UART stream runs. The ESP32 relay's to_net ring fills and drops
+    best-effort EVT_DECODED frames; the link report must surface them as
+    EVT_OVERRUN(stage=2) once the host resumes reading."""
+    _configure_patgen_uart(client, 115200)
+    events = client.live(_uart_decoder(115200), config=_stream_config(1),
+                         count=None, timeout_s=15.0, read_stall_s=3.0)
+    overruns = [event for event in events if event.get("overrun")]
+    assert overruns, "no EVT_OVERRUN after the host read stall"
+    assert overruns[0]["stage"] == 2, overruns
+    assert overruns[0]["dropped"] >= 1, overruns
+    status = client.status()
+    assert status["state"] == 0, "firmware did not return to IDLE after LIVE_STOP"
 
 
 def test_live_raw_stream_decoders_off(client: AnalyzerClient) -> None:

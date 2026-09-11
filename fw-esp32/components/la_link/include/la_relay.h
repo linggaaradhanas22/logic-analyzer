@@ -79,6 +79,7 @@ typedef struct la_relay {
     uint8_t best_effort_count;
     uint8_t mirror_types[LA_RELAY_MAX_TYPES];
     uint8_t mirror_count;
+    uint32_t pending_drops; /* best-effort drops not yet reported (P8.4) */
     la_relay_stats_t stats;
 } la_relay_t;
 
@@ -122,7 +123,15 @@ LA_RELAY_API int la_relay_report(la_relay_t *relay,
 
 LA_RELAY_API void la_relay_snapshot(const la_relay_t *relay, la_relay_stats_t *stats);
 
-/* Zeroes the counters without touching the configuration. */
+/* P8.4 link-overrun reporting: best-effort drops are accumulated here so the
+ * caller can emit one EVT_OVERRUN(stage=link) for them. Pending drops are
+ * cleared only by la_relay_clear_pending_drops() (after a successful report)
+ * or la_relay_reset_counters(). */
+LA_RELAY_API uint32_t la_relay_pending_drops(const la_relay_t *relay);
+LA_RELAY_API void la_relay_clear_pending_drops(la_relay_t *relay);
+
+/* Zeroes the counters (including pending drops) without touching the
+ * configuration. */
 LA_RELAY_API void la_relay_reset_counters(la_relay_t *relay);
 
 #endif /* LA_RELAY_H */

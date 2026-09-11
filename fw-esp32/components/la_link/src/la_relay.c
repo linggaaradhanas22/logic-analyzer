@@ -78,6 +78,7 @@ int la_relay_accept(la_relay_t *relay,
         }
         *decision = LA_RELAY_DROP_BEST_EFFORT;
         relay->stats.best_effort_dropped += 1u;
+        relay->pending_drops += 1u;
         return 0;
     }
     if (room != 0) {
@@ -128,10 +129,23 @@ void la_relay_snapshot(const la_relay_t *relay, la_relay_stats_t *stats)
     memcpy(stats, &relay->stats, sizeof(*stats));
 }
 
+uint32_t la_relay_pending_drops(const la_relay_t *relay)
+{
+    return relay != NULL ? relay->pending_drops : 0u;
+}
+
+void la_relay_clear_pending_drops(la_relay_t *relay)
+{
+    if (relay != NULL) {
+        relay->pending_drops = 0u;
+    }
+}
+
 void la_relay_reset_counters(la_relay_t *relay)
 {
     if (relay == NULL) {
         return;
     }
+    relay->pending_drops = 0u;
     memset(&relay->stats, 0, sizeof(relay->stats));
 }

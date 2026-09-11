@@ -42,6 +42,9 @@ STATUS_PAYLOAD = (
 assert len(STATUS_PAYLOAD) == 52
 
 
+_LIVE_SCENARIOS = ("live", "live_link_overrun")
+
+
 def counter_samples(total: int) -> bytes:
     """Deterministic raw capture: consecutive 8-bit counter values."""
     return bytes(value & 0xFF for value in range(total))
@@ -154,14 +157,14 @@ class MockAnalyzer:
                 self._send(connection, p.ACK, p.pack_ack(p.PATGEN_CFG, sequence))
             elif message_type == p.DECODER_CFG:
                 self.last_decoder = payload
-                if self.scenario == "live":
+                if self.scenario in _LIVE_SCENARIOS:
                     self._send(connection, p.ACK, p.pack_ack(p.DECODER_CFG, sequence))
             elif message_type == p.LIVE_START:
-                if self.scenario == "live":
+                if self.scenario in _LIVE_SCENARIOS:
                     self._send(connection, p.ACK, p.pack_ack(p.LIVE_START, sequence))
                     self._stream_live(connection)
             elif message_type == p.LIVE_STOP:
-                if self.scenario == "live":
+                if self.scenario in _LIVE_SCENARIOS:
                     self._send(connection, p.ACK, p.pack_ack(p.LIVE_STOP, sequence))
             # Other frame types (NAK, unknown): ignored by the mock.
 
@@ -237,7 +240,9 @@ class MockAnalyzer:
         return sequence
 
     def _stream_live(self, connection: socket.socket) -> None:
-        """Streams three EVT_DECODED batches of decoded 'LA-TEST\\n' bytes."""
+        """Streams three EVT_DECODED batches of decoded 'LA-TEST\\n' bytes.
+        `live` ends with a stage-1 decoder overrun; `live_link_overrun` ends
+        with a stage-2 link overrun (the P8.4 relay report)."""
         text = b"LA-TEST\n"
         base = 10_000
         for batch in range(3):
@@ -250,5 +255,9 @@ class MockAnalyzer:
                 payload += bytes([1])  # data length
                 payload += bytes([byte])
             self._send(connection, p.EVT_DECODED, bytes(payload))
+        if self.scenario == "live_link_overrun":
+            dropped, stage = 7, 2
+        else:
+            dropped, stage = 3, 1
         self._send(connection, p.EVT_OVERRUN,
-                   struct.pack("<I", 3) + bytes([1]) + b"\x00\x00\x00")
+                   struct.pack("<I", dropped) + bytes([stage]) + b"\x00\x00\x00")

@@ -72,6 +72,28 @@ def test_live_client_collects_events_and_overrun(analyzer) -> None:
     assert overruns[0]["dropped"] == 3 and overruns[0]["stage"] == 1
 
 
+def test_live_client_reports_link_overrun(analyzer) -> None:
+    mock = analyzer("live_link_overrun")
+    events = _collect_all(mock.uri)
+    decoded = [e for e in events if not e.get("overrun")]
+    overruns = [e for e in events if e.get("overrun")]
+    assert len(decoded) == 24
+    assert len(overruns) == 1
+    assert overruns[0]["dropped"] == 7 and overruns[0]["stage"] == 2
+
+
+def test_live_client_read_stall_hook(analyzer) -> None:
+    mock = analyzer("live")
+    client = AnalyzerClient(open_uri(mock.uri))
+    try:
+        events = client.live(p.pack_decoder_cfg_uart(0, 0, 115200, 10_000_000),
+                             count=8, read_stall_s=0.05)
+    finally:
+        client.close()
+    decoded = [e for e in events if not e.get("overrun")]
+    assert len(decoded) == 8
+
+
 def test_live_client_count_stops_early(analyzer) -> None:
     mock = analyzer("live")
     client = AnalyzerClient(open_uri(mock.uri))

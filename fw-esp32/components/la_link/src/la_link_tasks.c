@@ -29,8 +29,10 @@ typedef struct la_link_state {
     la_proto_parser_t parser;
     la_link_counters_t counters;
     uint8_t control_sequence;
+    uint8_t overrun_sequence;
     uint8_t frame[LA_PROTO_MAX_PAYLOAD + LA_PROTO_FRAME_OVERHEAD];
     uint8_t control_frame[LA_PROTO_MAX_PAYLOAD + LA_PROTO_FRAME_OVERHEAD];
+    uint8_t overrun_frame[LA_PROTO_FRAME_OVERHEAD + LA_PROTO_EVT_OVERRUN_WIRE_SIZE];
 } la_link_state_t;
 
 static la_link_state_t s_link;
@@ -67,6 +69,34 @@ static void mirror_frame(la_link_state_t *link, uint8_t type, size_t frame_bytes
                           mirrored == pdTRUE ? LA_RELAY_MIRROR_OK : LA_RELAY_MIRROR_FAIL);
 }
 
+/* P8.4: turn accumulated best-effort drops into one EVT_OVERRUN(stage=link)
+ * for the host. The report is best-effort too: when the ring is still full it
+ * stays pending and is retried on the next accepted frame. */
+static void report_link_overrun(la_link_state_t *link)
+{
+    uint32_t dropped = la_relay_pending_drops(&link->relay_uart_to_net);
+    uint8_t payload[LA_PROTO_EVT_OVERRUN_WIRE_SIZE];
+    size_t frame_bytes;
+
+    if (dropped == 0u) {
+        return;
+    }
+    if (la_proto_pack_evt_overrun(dropped, 2u /* link stage */, payload,
+                                  sizeof(payload)) != sizeof(payload)) {
+        return;
+    }
+    frame_bytes = la_proto_encode(LA_PROTO_EVT_OVERRUN, link->overrun_sequence,
+                                  payload, (uint16_t)sizeof(payload),
+                                  link->overrun_frame, sizeof(link->overrun_frame));
+    if (frame_bytes == 0u) {
+        return;
+    }
+    if (xRingbufferSend(link->to_net, link->overrun_frame, frame_bytes, 0) == pdTRUE) {
+        la_relay_clear_pending_drops(&link->relay_uart_to_net);
+        link->overrun_sequence = (uint8_t)(link->overrun_sequence + 1u);
+    }
+}
+
 static void on_uart_frame(void *context,
                           uint8_t type,
                           uint8_t sequence,
@@ -87,6 +117,7 @@ static void on_uart_frame(void *context,
         return;
     }
     if (decision == LA_RELAY_DROP_BEST_EFFORT) {
+        report_link_overrun(link);
         return;
     }
     if (decision == LA_RELAY_PRESSURE) {
@@ -103,6 +134,7 @@ static void on_uart_frame(void *context,
     }
     (void)la_relay_report(&link->relay_uart_to_net, type, LA_RELAY_FWD_OK);
     mirror_frame(link, type, frame_bytes);
+    report_link_overrun(link);
 }
 
 static void link_rx_task(void *argument)

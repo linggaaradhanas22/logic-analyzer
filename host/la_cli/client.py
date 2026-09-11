@@ -274,14 +274,18 @@ class AnalyzerClient:
         return CaptureData(meta, bytes(collected), chunks, self._parser_stats())
 
     def live(self, decoder_config: bytes, config: bytes | None = None,
-             count: int | None = None, timeout_s: float | None = None) -> list[dict]:
+             count: int | None = None, timeout_s: float | None = None,
+             read_stall_s: float = 0.0) -> list[dict]:
         """Configures the live stream and collects decoded events (P7.5).
 
         `config` is an optional 37-byte STREAM CONFIG payload sent before the
         decoder slot; the P7 firmware requires it (LIVE_START without a
         latched STREAM CONFIG is NAKed). Stops after `count` events, after an
         EVT_OVERRUN, or on the deadline; a caller interrupt leaves LIVE_STOP
-        to the command."""
+        to the command. `read_stall_s` is the P8.4 fault-injection hook: it
+        stops reading for that many seconds right after the LIVE_START ACK so
+        the gateway relay buffers fill and the link-overrun report is
+        exercised."""
         if timeout_s is None:
             deadline = float("inf")
         else:
@@ -302,6 +306,8 @@ class AnalyzerClient:
                 acked_type, _acked_sequence = payload[0], payload[1]
                 if acked_type == p.LIVE_START:
                     start_acknowledged = True
+                    if read_stall_s > 0.0:
+                        time.sleep(read_stall_s)
                 return False
             if message_type == p.EVT_DECODED:
                 for slot, kind, t_sample, data in p.iter_decoded_events(payload):

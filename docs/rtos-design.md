@@ -422,6 +422,16 @@ and counters.
   outcome (`frames_forwarded` / `frames_forward_failed`), because the
   NOSPLIT ring can still refuse a put when free space is fragmented even
   though the capacity callback said yes.
+- **P8.4 link-overrun report.** Each best-effort drop also increments
+  `pending_drops`; LinkRxTask turns the accumulated count into one
+  `EVT_OVERRUN(stage=2 link)` frame for the host and clears the count only
+  after the ring accepts the report (`la_relay_pending_drops()` /
+  `la_relay_clear_pending_drops()`). The report is best-effort too: while
+  the ring is still full it stays pending and is retried after the next
+  forwarded frame, so the host learns about every silent-loss window
+  instead of seeing a corrupted event stream. The deterministic host
+  read-stall test (`test_live_link_overrun_reported_on_stall`) and the
+  natural 60 s runs both exercise this path.
 - **Live-view mirror.** After a successful forward of a mirror type,
   LinkRxTask also mirrors the frame into the P10 live ring and reports the
   outcome (`frames_mirrored` / `mirror_dropped`). A net-leg drop skips the
@@ -435,9 +445,10 @@ The P5.2 adapter layer (`la_link_uart.c`, `la_link_tasks.c`, `la_link.h`)
 implements this on the confirmed classic-ESP32 board: UART2 at
 `CONFIG_LA_LINK_BAUD` (2 Mbps since the P7.6 gate) 8N1 with
 hardware RTS/CTS, a 16 KiB RX driver buffer, ~64-byte RX FIFO threshold and a
-20-entry event queue; LinkRxTask (core 1, prio 20) parses with `la_proto` and
+20-entry event queue; LinkRxTask (core 1, prio 20) parses with `la_proto`,
 re-encodes accepted frames verbatim into a static 32 KiB NOSPLIT `link_to_net`
-ring, mirroring `EVT_DECODED` into an 8 KiB live ring (the P10 consumer is
+ring and reports accumulated drops as `EVT_OVERRUN(stage=2)`, mirroring
+`EVT_DECODED` into an 8 KiB live ring (the P10 consumer is
 still open, so a full ring is counted in `mirror_dropped`); LinkTxTask (core 1,
 prio 18) drains a static 16 KiB NOSPLIT `net_to_link` ring to the UART with a
 bounded, watchdog-safe wait for TX room. NetServerTask is the only producer of
