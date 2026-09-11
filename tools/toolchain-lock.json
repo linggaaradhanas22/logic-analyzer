@@ -9,7 +9,7 @@
     "path": "C:\\Users\\lingg\\Projects\\KCCI_technical\\Embedded\\Logic-Analyzer\\Source_Code\\.deps\\esp-idf",
     "version": "ESP-IDF v5.5.2"
   },
-  "generated_at": "2026-09-05T14:36:11.058390+00:00",
+  "generated_at": "2026-09-11T13:37:25.174159+00:00",
   "missing_prerequisites": [],
   "platform": {
     "python": "3.11.15",
@@ -31,9 +31,9 @@
     "esp_idf": "pass",
     "native_cmake": "pass",
     "questa": "pass",
-    "vitis_application": "blocked",
+    "vitis_application": "pass",
     "vitis_cli": "pass",
-    "vivado": "blocked"
+    "vivado": "pass"
   },
   "status": "environment-observed",
   "tools": {
@@ -46,7 +46,7 @@
     },
     "bootgen": {
       "error": null,
-      "path": "C:\\AMDDesignTools\\2026.1\\Vivado\\bin\\bootgen.bat",
+      "path": "C:\\AMDDesignTools\\2026.1\\Vitis\\bin\\bootgen.bat",
       "required_for_p0": true,
       "status": "found",
       "version": "****** Bootgen v2026.1"
