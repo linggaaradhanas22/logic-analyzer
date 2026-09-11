@@ -162,6 +162,14 @@ static void link_rx_task(void *argument)
 
     (void)argument;
     esp_task_wdt_add(NULL);
+#if CONFIG_LA_LINK_WDT_TEST_HOOK
+    /* P8.4 fault injection: stop servicing the watchdog so the 5 s task WDT
+     * panics and resets the gateway. Never enabled in a normal build. */
+    ESP_LOGE(TAG, "P8.4 WDT test hook active: hanging LinkRxTask");
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+#endif
     for (;;) {
         if (xQueueReceive(link->uart_queue, &event, pdMS_TO_TICKS(100)) == pdTRUE) {
             switch (event.type) {

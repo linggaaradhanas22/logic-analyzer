@@ -58,6 +58,13 @@ def pytest_addoption(parser) -> None:
         "(0x3F when only JE/JC channels 0-5 are jumpered; default 0xFF)",
     )
     parser.addoption(
+        "--soak-count",
+        type=int,
+        default=0,
+        help="P8.4 burst soak: number of back-to-back captures (0 = skipped; "
+        "the plan gate uses 500)",
+    )
+    parser.addoption(
         "--live",
         action="store_true",
         help="P7.6: run the live decode gates (requires the P7 firmware, the "

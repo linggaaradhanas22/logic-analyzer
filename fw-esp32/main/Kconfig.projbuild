@@ -14,6 +14,13 @@ menu "Logic analyzer gateway"
         help
             Station password. Empty selects an open network.
 
+    config LA_LINK_WDT_TEST_HOOK
+        bool "P8.4 test hook: hang LinkRxTask at start (watchdog fault injection)"
+        default n
+        help
+            Test-only. LinkRxTask stops servicing the task watchdog so the 5 s
+            WDT resets the chip. Never enable in a normal build.
+
     config LA_LINK_BAUD
         int "UART2 analyzer link baud rate"
         default 2000000

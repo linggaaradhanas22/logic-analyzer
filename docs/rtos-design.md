@@ -60,10 +60,16 @@ parts require a reviewed adaptation rather than silently reusing it.
 | `WifiMgr` | 0 | event loop | Wi-Fi/IP events | Station connection, backoff and mDNS |
 | `UiTask` | 0 | 5 | 250 ms delay | LED and statistics output |
 
-LinkRxTask and NetServerTask are subscribed to the 5 s task watchdog. Ring
-buffers use static capacities: 32 KiB NOSPLIT for link-to-network, a separately
-budgeted live ring, and a 16 KiB UART RX buffer. TCP is single-client until a
-later design change adds explicit fan-out ownership.
+LinkRxTask and NetServerTask are subscribed to the 5 s task watchdog, which
+runs in panic mode (`CONFIG_ESP_TASK_WDT_PANIC=y`): a hung watched task resets
+the gateway instead of only logging. The P8.4 fault injection verified this
+with the `CONFIG_LA_LINK_WDT_TEST_HOOK` build option, which hangs LinkRxTask
+at start and produced `Task watchdog got triggered - LinkRx (CPU 1)` followed
+by `Rebooting... rst:0xc (SW_CPU_RESET)`; the option defaults to off and is
+never set in a normal build. Ring buffers use static capacities: 64 KiB
+NOSPLIT for link-to-network (P8.2), a separately budgeted live ring, and a
+16 KiB UART RX buffer. TCP is single-client until a later design change adds
+explicit fan-out ownership.
 
 ## Ownership and Queue Policies
 

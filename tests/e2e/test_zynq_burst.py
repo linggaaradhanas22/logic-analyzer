@@ -96,6 +96,25 @@ def test_ping_and_idle(client: AnalyzerClient) -> None:
     assert not (status["status_reg"] & 0x2), "must not be ARMED"
 
 
+def test_soak_back_to_back(client: AnalyzerClient, request) -> None:
+    """P8.4 soak: N back-to-back captures (0 = skipped; the plan gate uses
+    500). Every capture must be exact and parser-clean, and the sticky FIFO
+    overflow bit must stay clear through the whole run."""
+    count = request.config.getoption("--soak-count")
+    if count <= 0:
+        pytest.skip("soak requires --soak-count N (the plan gate uses 500)")
+    _enable_counter(client)
+    for run in range(count):
+        result = client.capture(_selftest_config(4096, p.MODE_RAW, 99), timeout_s=30)
+        assert len(result.data) == 4096, (run, len(result.data))
+        _assert_counter(result.data, sample_div=99)
+        assert result.parser_stats["crc_errors"] == 0, run
+        assert result.parser_stats["format_errors"] == 0, run
+    status = client.status()
+    assert status["state"] == 0, "firmware not IDLE after the soak"
+    assert not (status["status_reg"] & 0x10), "FIFO overflow set during the soak"
+
+
 def test_consecutive_runs(client: AnalyzerClient, request) -> None:
     """P4.6 reset/reuse: back-to-back captures stay exact and never reuse a
     buffer while the previous burst is still on the wire."""
