@@ -112,8 +112,8 @@ int main(void)
         for (;;) {
         }
     }
-    xil_printf("LA app ready: %u tasks, UART0 921600 RTS/CTS\r\n",
-               (unsigned)uxTaskGetNumberOfTasks());
+    xil_printf("LA app ready: %u tasks, UART0 %u RTS/CTS\r\n",
+               (unsigned)uxTaskGetNumberOfTasks(), (unsigned)LA_LINK_BAUD);
     vTaskStartScheduler();
     for (;;) {
     }

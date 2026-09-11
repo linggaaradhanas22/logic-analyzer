@@ -32,8 +32,9 @@ connect JC or JE to a 5 V source without an appropriate level shifter.
 
 ## Zynq to ESP32 UART
 
-The MVP link is PS UART0 through EMIO on JD at 921600 baud initially, with
-RTS/CTS enabled. Direction is named from the ESP32 perspective. The confirmed
+The MVP link is PS UART0 through EMIO on JD at 2 Mbps with RTS/CTS enabled
+(bring-up started at 921600; the P7.6 live gate verified 2 Mbps on both sides
+on 2026-09-11). Direction is named from the ESP32 perspective. The confirmed
 gateway module is a classic ESP32 (DOIT ESP32 DevKit V1, ESP32-WROOM-32,
 CP2102 USB-UART, 4 MB flash, no PSRAM); the approved pin map keeps the JD
 ribbon and breadboard wiring on the right-hand header row:
@@ -71,10 +72,11 @@ ESP32 TX would otherwise contend) and jumper the ESP32 alone:
 
 Then run `python tools/run.py test-e2e -- --target tcp://HOST:5555 --loopback
 --console COMx --loopback-bytes 10000000` (the console is the ESP32 USB port;
-without `--loopback` the gate is skipped so the Zynq E2E run stays safe). Run
-it once at the default 921600 and once after rebuilding the gateway with
-`CONFIG_LA_LINK_BAUD=2000000` in the ignored `build/esp32/sdkconfig` and
-reflashing. The `fifo_ovf=` counter on the console must stay 0.
+without `--loopback` the gate is skipped so the Zynq E2E run stays safe). The
+P5.5 gate ran it at 921600 and then at 2 Mbps by setting
+`CONFIG_LA_LINK_BAUD` in the ignored `build/esp32/sdkconfig` and reflashing;
+the tracked default is now 2000000 (matching the Zynq `LA_LINK_BAUD`). The
+`fifo_ovf=` counter on the console must stay 0.
 
 ### P5.2 target Unity tests
 

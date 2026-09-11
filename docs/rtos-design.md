@@ -303,8 +303,8 @@ ABORTED notice.
 
 ### UART0 link (P4.8)
 
-`la_link_uart` drives PS UART0 through EMIO at 921600 8N1 with automatic
-RTS/CTS (`MODEMCR.FCM`). The XUartPs interrupt handler reports RX
+`la_link_uart` drives PS UART0 through EMIO at `LA_LINK_BAUD` (2 Mbps since
+the P7.6 gate; 921600 during bring-up) 8N1 with automatic RTS/CTS (`MODEMCR.FCM`). The XUartPs interrupt handler reports RX
 data/timeout/error events; the event handler copies the received bytes into
 the RX StreamBuffer with `xStreamBufferSendFromISR` and re-arms the
 receive, counting overflow and error events. TX is a single in-flight
@@ -432,7 +432,8 @@ and counters.
   scheduling or Wi-Fi timing - those remain P5.5/P8 target gates.
 
 The P5.2 adapter layer (`la_link_uart.c`, `la_link_tasks.c`, `la_link.h`)
-implements this on the confirmed classic-ESP32 board: UART2 at 921600 8N1 with
+implements this on the confirmed classic-ESP32 board: UART2 at
+`CONFIG_LA_LINK_BAUD` (2 Mbps since the P7.6 gate) 8N1 with
 hardware RTS/CTS, a 16 KiB RX driver buffer, ~64-byte RX FIFO threshold and a
 20-entry event queue; LinkRxTask (core 1, prio 20) parses with `la_proto` and
 re-encodes accepted frames verbatim into a static 32 KiB NOSPLIT `link_to_net`

@@ -28,12 +28,13 @@
 #define LA_BOARD_LINK_RTS_GPIO 22
 #define LA_BOARD_LINK_CTS_GPIO 21
 
-/* Link rate; the P5.5 loopback gate runs 921600 first and then rebuilds at
- * 2 Mbps through the LA_LINK_BAUD Kconfig option (sdkconfig, never committed). */
+/* Link rate; must match the Zynq LA_LINK_BAUD. P5.5 ran the loopback gate at
+ * 921600 and then 2 Mbps through the LA_LINK_BAUD Kconfig option (sdkconfig,
+ * never committed); the P7.6 live gate moved the default to 2 Mbps. */
 #ifdef CONFIG_LA_LINK_BAUD
 #define LA_BOARD_LINK_BAUD CONFIG_LA_LINK_BAUD
 #else
-#define LA_BOARD_LINK_BAUD 921600
+#define LA_BOARD_LINK_BAUD 2000000
 #endif
 
 /* Driver buffers and thresholds (P5.1: 16 KiB UART RX buffer, ~64-byte RX

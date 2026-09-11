@@ -16,10 +16,11 @@ menu "Logic analyzer gateway"
 
     config LA_LINK_BAUD
         int "UART2 analyzer link baud rate"
-        default 921600
+        default 2000000
         help
-            Link rate to the Zynq analyzer. P5.5 runs the loopback gate at
-            921600 first and then at 2000000; the value lives in the generated,
-            git-ignored build/esp32/sdkconfig.
+            Link rate to the Zynq analyzer; must match the Zynq LA_LINK_BAUD
+            (2000000 since the P7.6 gate). P5.5 ran the loopback gate at 921600
+            and 2000000. The value lives in the generated, git-ignored
+            build/esp32/sdkconfig.
 
 endmenu

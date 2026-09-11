@@ -19,6 +19,8 @@ and overload, simultaneous decoders).
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from host.la_cli import protocol as p
@@ -55,7 +57,14 @@ def _stream_config(mode: int) -> bytes:
 
 
 def _configure_patgen_uart(client: AnalyzerClient, baud: int) -> None:
+    """Selects the UART patgen with the DIV that scales 115200 down to `baud`.
+
+    la_patgen latches mode and DIV on the EN rising edge, so a previous test
+    that left the generator enabled in another mode is not re-configured by a
+    plain enable write; disable first (the burst matrix does the same)."""
     div = max(0, 115200 // baud - 1) if baud <= 115200 else 0
+    client.configure_patgen(0)
+    time.sleep(0.01)
     client.configure_patgen(
         p.PATGEN_EN_MASK
         | (p.PATGEN_MODE_UART_115200 << p.PATGEN_MODE_SHIFT)

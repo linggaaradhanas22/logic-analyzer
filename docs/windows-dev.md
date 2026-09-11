@@ -114,7 +114,8 @@ bench is unavailable. A Zybo console COM port is not the UART0 analyzer data
 endpoint. Select COM ports explicitly when more than one candidate exists.
 
 The `hil` target runs `tests/hil/test_zynq_serial.py` against the analyzer
-link: PS UART0 through EMIO on the JD header, 921600 8N1 with RTS/CTS. It
+link: PS UART0 through EMIO on the JD header, 2 Mbps 8N1 with RTS/CTS
+(`LA_LINK_BAUD`; 921600 during bring-up). It
 needs a separate 3.3 V USB-UART adapter wired as TX->JD-2, RX->JD-1,
 RTS->JD-4, CTS->JD-3 and GND->JD-5 or JD-11; set `LA_HIL_PORT=COMx` or pass
 `--port COMx`. Without a port the HIL tests are skipped, and the unconnected

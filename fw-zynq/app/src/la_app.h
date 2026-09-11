@@ -39,6 +39,11 @@
 
 #include <stdint.h>
 
+/* Zynq UART0 analyzer link rate (plan: 921600 -> 2 Mbps with RTS/CTS). The
+ * PS UART0 reference clock is 100 MHz, so 2 Mbps divides exactly (divisor 50).
+ * Must match the gateway's CONFIG_LA_LINK_BAUD. */
+#define LA_LINK_BAUD 2000000u
+
 #define LA_RX_STREAM_SIZE 8192u
 #define LA_TX_STREAM_SIZE 4096u
 #define LA_CTRL_Q_DEPTH 4u

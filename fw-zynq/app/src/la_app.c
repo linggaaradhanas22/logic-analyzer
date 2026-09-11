@@ -160,7 +160,7 @@ int la_app_init(la_app_t *app)
         }
     }
 
-    if (la_link_uart_init(&app->link, XPAR_XUARTPS_0_BASEADDR, 921600u,
+    if (la_link_uart_init(&app->link, XPAR_XUARTPS_0_BASEADDR, LA_LINK_BAUD,
                           app->rx_sb, app->tx_sb) != 0) {
         return -2;
     }
