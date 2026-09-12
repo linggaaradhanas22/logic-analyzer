@@ -569,6 +569,46 @@ static int test_patgen_cfg(void)
     return 0;
 }
 
+static int test_trace_ctrl(void)
+{
+    la_cmd_dispatch_t dispatch;
+    la_cmd_result_t result;
+    uint8_t payload[LA_PROTO_TRACE_CTRL_WIRE_SIZE];
+
+    la_cmd_dispatch_init(&dispatch, TEST_FW_VERSION, TEST_PL_ID);
+    CHECK(la_proto_pack_trace_ctrl(LA_PROTO_TRACE_START, payload,
+                                   sizeof(payload)) == LA_PROTO_TRACE_CTRL_WIRE_SIZE,
+          "trace payload packs");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_TRACE_CTRL, 0x21u, payload,
+                                LA_PROTO_TRACE_CTRL_WIRE_SIZE, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_TRACE &&
+              result.type == LA_PROTO_TRACE_CTRL && result.sequence == 0x21u &&
+              result.action == LA_PROTO_TRACE_START,
+          "TRACE_CTRL start acknowledged and routed");
+    CHECK(la_cmd_dispatch_view(&dispatch) == LA_CMD_VIEW_IDLE,
+          "TRACE_CTRL does not change the acquisition view");
+
+    payload[0] = LA_PROTO_TRACE_DUMP;
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_TRACE_CTRL, 0x22u, payload,
+                                LA_PROTO_TRACE_CTRL_WIRE_SIZE, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_TRACE &&
+              result.action == LA_PROTO_TRACE_DUMP,
+          "TRACE_CTRL dump routed");
+
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_TRACE_CTRL, 0x23u, payload, 3u,
+                                0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_LENGTH,
+          "TRACE_CTRL bad length NAK");
+    payload[0] = 9u;
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_TRACE_CTRL, 0x24u, payload, 4u,
+                                0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_FIELD,
+          "TRACE_CTRL undefined action NAK bad field");
+    return 0;
+}
+
 static int test_arm_pool_capacity(void)
 {
     la_cmd_dispatch_t dispatch;
@@ -631,7 +671,8 @@ int main(void)
         test_config_errors() != 0 || test_arm_errors() != 0 || test_abort() != 0 ||
         test_get_status() != 0 || test_decoder_cfg() != 0 ||
         test_live_lifecycle() != 0 ||
-        test_patgen_cfg() != 0 || test_arm_pool_capacity() != 0 ||
+        test_patgen_cfg() != 0 || test_trace_ctrl() != 0 ||
+        test_arm_pool_capacity() != 0 ||
         test_ack_nak_routing() != 0 || test_argument_guards() != 0) {
         return 1;
     }

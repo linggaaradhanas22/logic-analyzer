@@ -202,6 +202,27 @@ static int handle_patgen(la_cmd_dispatch_t *dispatch,
     return 0;
 }
 
+static int handle_trace(uint8_t sequence,
+                        const uint8_t *payload,
+                        uint16_t length,
+                        la_cmd_result_t *result)
+{
+    uint8_t action;
+
+    if (length != LA_PROTO_TRACE_CTRL_WIRE_SIZE) {
+        result_nak(result, LA_PROTO_TRACE_CTRL, sequence, LA_PROTO_ERROR_BAD_LENGTH);
+        return 0;
+    }
+    if (la_proto_unpack_trace_ctrl(&action, payload, length) != 0) {
+        result_nak(result, LA_PROTO_TRACE_CTRL, sequence, LA_PROTO_ERROR_BAD_FIELD);
+        return 0;
+    }
+    result_ack(result, LA_PROTO_TRACE_CTRL, sequence);
+    result->outcome = LA_CMD_OUT_TRACE;
+    result->action = action;
+    return 0;
+}
+
 static uint8_t decoder_enabled_count(const la_cmd_dispatch_t *dispatch)
 {
     uint8_t count = 0u;
@@ -380,6 +401,9 @@ int la_cmd_dispatch_step(la_cmd_dispatch_t *dispatch,
 
     case LA_PROTO_PATGEN_CFG:
         return handle_patgen(dispatch, sequence, payload, length, result);
+
+    case LA_PROTO_TRACE_CTRL:
+        return handle_trace(sequence, payload, length, result);
 
     case LA_PROTO_GET_STATUS:
         if (length != 0u) {

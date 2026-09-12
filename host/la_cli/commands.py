@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import re
 import sys
+from pathlib import Path
 
 import click
 
 from . import protocol as p
+from . import trace as trace_mod
 from .client import AnalyzerClient, AnalyzerError
 from .convert import export_capture
 from .transport import TransportError, list_candidates, open_uri
@@ -318,6 +320,59 @@ def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int
             f"overrun: {event['dropped']} events dropped at stage {event['stage']}"
         )
     click.echo(f"live: {len(decoded)} decoded events, {len(overruns)} overruns")
+
+
+@cli.command(name="trace", help="P8.3 task/queue trace: --start, --stop or --dump (default).")
+@click.option("--target", "-t", required=True, help="analyzer link target URI")
+@click.option("--start", "do_start", is_flag=True, help="clear the ring and start recording")
+@click.option("--stop", "do_stop", is_flag=True, help="stop recording without dumping")
+@click.option("--dump", "do_dump", is_flag=True, help="stop and dump the ring (default)")
+@click.option("--out", "output", default=None, help="write the raw dump lines to this file")
+@click.option("--png", "png_output", default=None, help="render a task/queue timeline PNG")
+@click.option("--title", default=None, help="timeline title")
+@click.option("--timeout", "timeout_s", default=30.0, show_default=True, type=float)
+def trace_cmd(target: str, do_start: bool, do_stop: bool, do_dump: bool,
+              output: str | None, png_output: str | None, title: str | None,
+              timeout_s: float) -> None:
+    if sum((do_start, do_stop, do_dump)) > 1:
+        raise click.BadParameter("choose only one of --start, --stop or --dump")
+    client = _make_client(target)
+    try:
+        if do_start:
+            client.trace_control(p.TRACE_START, timeout_s=timeout_s)
+            click.echo("trace started")
+            return
+        if do_stop:
+            client.trace_control(p.TRACE_STOP, timeout_s=timeout_s)
+            click.echo("trace stopped")
+            return
+        lines = client.trace_dump(timeout_s=timeout_s)
+    except (AnalyzerError, TransportError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    finally:
+        client.close()
+    try:
+        dump = trace_mod.parse_trace(lines)
+    except trace_mod.TraceParseError as exc:
+        raise click.ClickException(f"trace dump parse failed: {exc}") from exc
+    summary = trace_mod.summarize(dump)
+    if output:
+        Path(output).write_text("\n".join(lines) + "\n", encoding="utf-8")
+        click.echo(f"wrote {summary['records']} dump lines to {output}")
+    if png_output:
+        try:
+            trace_mod.render_timeline(dump, png_output, title=title or "P8.3 trace")
+        except trace_mod.TraceParseError as exc:
+            raise click.ClickException(f"trace render failed: {exc}") from exc
+        click.echo(f"rendered timeline to {png_output}")
+    counts = ", ".join(f"{token}={count}" for token, count in sorted(summary["counts"].items()))
+    click.echo(
+        f"trace: {summary['records']} records, {summary['dropped']} dropped, "
+        f"{summary['duration_s'] * 1000:.1f} ms, "
+        f"{summary['tasks']} tasks, {summary['queues']} queues"
+    )
+    if counts:
+        click.echo(f"trace tokens: {counts}")
 
 
 def main() -> int:

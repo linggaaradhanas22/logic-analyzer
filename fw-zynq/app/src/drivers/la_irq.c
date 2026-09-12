@@ -1,6 +1,7 @@
 #include "la_irq.h"
 
 #include "la_regs.h"
+#include "la_trace.h"
 #include "xaxidma.h"
 #include "xinterrupt_wrap.h"
 #include "xparameters.h"
@@ -25,6 +26,7 @@ static void la_pl_isr(void *reference)
     uint32_t status;
 
     XTime_GetTime(&start);
+    la_trace_mark(LA_TRACE_EVENT_ISR_PL, 0u);
     status = irq->regs.read32(irq->regs.base + LA_REG_IRQ_STAT_OFFSET);
     if (status != 0u) {
         irq->regs.write32(irq->regs.base + LA_REG_IRQ_STAT_OFFSET,
@@ -48,6 +50,7 @@ static void la_dma_irq_handler(void *reference)
     XTime start;
 
     XTime_GetTime(&start);
+    la_trace_mark(LA_TRACE_EVENT_ISR_DMA, 0u);
     la_dma_isr(irq->dma);
     irq->dma_count++;
     if (irq->acq_task != NULL) {

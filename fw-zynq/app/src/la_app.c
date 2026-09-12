@@ -2,6 +2,7 @@
 
 #include "la_mem_geom.h"
 #include "la_regs.h"
+#include "la_trace.h"
 
 #include "xil_io.h"
 #include "xparameters.h"
@@ -63,6 +64,12 @@ static StackType_t s_decoder_stack[LA_DECODER_COUNT][LA_STACK_DECODER];
 
 static const char *const s_decoder_names[LA_DECODER_COUNT] = {
     "la_dec0", "la_dec1", "la_dec2"};
+static const char *const s_trace_decoder_names[LA_DECODER_COUNT] = {
+    "dec0", "dec1", "dec2"};
+static const char *const s_trace_cfg_names[LA_DECODER_COUNT] = {
+    "cfg0", "cfg1", "cfg2"};
+static const char *const s_trace_seg_names[LA_DECODER_COUNT] = {
+    "seg0", "seg1", "seg2"};
 
 uint8_t la_app_next_sequence(la_app_t *app)
 {
@@ -165,6 +172,31 @@ int la_app_init(la_app_t *app)
             return -1;
         }
     }
+
+    /* P8.3 trace object table: 7 tasks + 3 config queues + 3 segment queues
+     * + 9 shared queues/stream buffers, within LA_TRACE_OBJECT_MAX. */
+    la_trace_register_task(app->acq_task, LA_TRACE_TASK_ACQ, "acq");
+    la_trace_register_task(app->cmd_task, LA_TRACE_TASK_CMD, "cmd");
+    la_trace_register_task(app->tx_task, LA_TRACE_TASK_TX, "tx");
+    la_trace_register_task(app->status_task, LA_TRACE_TASK_STATUS, "status");
+    for (slot = 0u; slot < LA_DECODER_COUNT; ++slot) {
+        la_trace_register_task(app->decoders[slot].task,
+                               (uint8_t)(LA_TRACE_TASK_DECODER_BASE + slot),
+                               s_trace_decoder_names[slot]);
+        la_trace_register_queue(app->decoders[slot].cfg_q,
+                                s_trace_cfg_names[slot]);
+        la_trace_register_queue(app->decoders[slot].seg_q,
+                                s_trace_seg_names[slot]);
+    }
+    la_trace_register_queue(app->ctrl_q, "ctrl");
+    la_trace_register_queue(app->notice_q, "notice");
+    la_trace_register_queue(app->tx_q, "txq");
+    la_trace_register_queue(app->ack_q, "ackq");
+    la_trace_register_queue(app->job_q, "jobq");
+    la_trace_register_queue(app->block_q, "block");
+    la_trace_register_queue(app->ev_q, "evq");
+    la_trace_register_queue(app->rx_sb, "rxsb");
+    la_trace_register_queue(app->tx_sb, "txsb");
 
     if (la_link_uart_init(&app->link, XPAR_XUARTPS_0_BASEADDR, LA_LINK_BAUD,
                           app->rx_sb, app->tx_sb) != 0) {

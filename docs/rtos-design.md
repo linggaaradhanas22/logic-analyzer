@@ -677,6 +677,56 @@ precedes, and the cached region is the same physical 4 MiB the live ring
 already used, so no memory layout changed. The `la_mem_apply_range` helper and
 the geometry constants are host-tested (`la_native_mem`).
 
+### P8.3 results (task/queue tracing, 2026-09-12)
+
+The plan asks for custom `traceTASK_SWITCHED_IN/OUT` and queue trace macros
+into a ring dumped via `LOG`, rendered as a timeline, including one annotated
+trace of a live UART decode. The implementation has three layers:
+
+- `la_trace_core` (pure, host-tested): a 4096-record overwriting ring of
+  16-byte records (`time`, handle, event, object, value) plus a 24-entry
+  object table mapping raw TCB/queue handles to names.
+- `la_trace` (firmware glue): the FreeRTOSConfig.h macros call
+  `la_trace_task_switch`, `la_trace_queue` and `la_trace_stream`; application
+  markers cover the PL/DMA interrupt entry, live segment publication, decoder
+  feed and UART frame transmission. Task switches lazily register the idle
+  and timer TCBs with their kernel names. Recording is off by default.
+- `TRACE_CTRL` (0x18, additive v1): START clears and enables, STOP disables,
+  DUMP disables and emits the ring as `LOG` lines (`LA TRACE` header, object
+  table, one `REC` line per record oldest-first, `END` marker). The host
+  `la-cli trace --dump` collects them, and `host/la_cli/trace.py` parses and
+  renders a per-task timeline PNG (`--png`, optional millisecond zoom).
+
+The `*_FAILED` queue/stream hooks are deliberately not wired: tasks poll
+queues with zero timeouts, so failed polls would flood the ring with idle
+noise.
+
+**Critical fix.** The first implementation serialized ring writes with the
+port's `ulPortSetInterruptMask()`/`vPortClearInterruptMask()` pair. That pair
+manages the GIC priority mask and `vPortClearInterruptMask()` executes
+`cpsie i` unconditionally when the mask changed. Called from the SWI/IRQ
+context-switch path (where the CPU masks interrupts with CPSR.I but ICCPMR
+is 0), it re-enabled interrupts *inside* `vTaskSwitchContext`, allowing a
+nested tick IRQ to save the handler's context into the newly selected task's
+TCB. The observed failure was a corrupted idle `pxTopOfStack` whose restored
+PC pointed into `vPortClearInterruptMask` and whose LR/SPSR held trace-ring
+addresses; the CPU then executed ring data and took a data abort. The fix
+saves and restores CPSR.I itself (`mrs cpsr` + `cpsid i`, `cpsie i` only when
+it was enabled), so an exception context stays masked and a task's interrupt
+state and any enclosing critical section are untouched. This is documented in
+`la_trace.c` next to `trace_irq_lock()`.
+
+Bench evidence (2026-09-12, `fw 0x00080000`, 2 Mbps link): the P8.3 E2E test
+(`tests/e2e/test_p83_trace.py`) passes 18 consecutive runs (12 before and 6
+after the lazy idle registration), three 3 s trace sessions during the 1 MHz
+SPI overload kept balanced IN/OUT records and the full DMA→segment→decode→TX
+chain, and the full `test-e2e` suite passes 37 + 2 skipped. The published
+annotated trace is `docs/images/p83-live-uart-trace.png`: a 5 ms zoom on the
+first DMA IRQ of a 115200 UART decode showing `DM` (DMA IRQ) → `acq` segment
+marker and queue send → `dec0` decoder-feed marker → `tx` stream send and
+`TX` frame marker, with the idle lane labelled. The raw dump is regenerated
+by the test under the ignored `build/traces/`.
+
 ## Windows Adapter Boundary
 
 The native adapter models static segment handles, synchronized reference

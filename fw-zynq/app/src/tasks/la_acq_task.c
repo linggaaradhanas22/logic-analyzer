@@ -4,6 +4,7 @@
 #include "la_burst_plan.h"
 #include "la_mem_geom.h"
 #include "la_regs.h"
+#include "la_trace.h"
 #include "xil_cache.h"
 #include "xiltimer.h"
 
@@ -352,6 +353,7 @@ static void acq_handle_live_irq(la_acq_ctx_t *ctx)
         if (status != 0) {
             continue;
         }
+        la_trace_mark(LA_TRACE_EVENT_MARK_SEGMENT, (uint16_t)message.slot);
 #if LA_MEM_LIVE_CACHED
         /* P8.5: drop the stale cache lines DMA just overwrote before any
          * decoder reads the segment. The range is 64-byte aligned and capped

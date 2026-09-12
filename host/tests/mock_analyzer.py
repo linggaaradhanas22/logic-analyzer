@@ -66,6 +66,7 @@ class MockAnalyzer:
         self.last_config: bytes | None = None
         self.last_patgen: bytes | None = None
         self.last_decoder: bytes | None = None
+        self.last_trace_action: int | None = None
         self.parser = p.FrameParser()
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -155,6 +156,11 @@ class MockAnalyzer:
             elif message_type == p.PATGEN_CFG:
                 self.last_patgen = payload
                 self._send(connection, p.ACK, p.pack_ack(p.PATGEN_CFG, sequence))
+            elif message_type == p.TRACE_CTRL:
+                self.last_trace_action = p.unpack_trace_ctrl(payload)
+                self._send(connection, p.ACK, p.pack_ack(p.TRACE_CTRL, sequence))
+                if self.last_trace_action == p.TRACE_DUMP:
+                    self._stream_trace_dump(connection)
             elif message_type == p.DECODER_CFG:
                 self.last_decoder = payload
                 if self.scenario in _LIVE_SCENARIOS:
@@ -238,6 +244,23 @@ class MockAnalyzer:
         sequence = self._sequence
         self._sequence = (self._sequence + 1) & 0xFF
         return sequence
+
+    def _stream_trace_dump(self, connection: socket.socket) -> None:
+        """P8.3: a small deterministic dump (one task, one queue, four
+        records) so the client and the renderer are exercised without
+        hardware."""
+        lines = [
+            "LA TRACE 1 333333333",
+            "TASK 1 00100000 acq",
+            "QUEUE 00200000 seg0",
+            "REC 1000 IN 1 0 00100000",
+            "REC 1100 QS 0 0 00200000",
+            "REC 1200 OUT 1 0 00100000",
+            "REC 1300 TX 0 53 00000000",
+            "END 4 4 0",
+        ]
+        for line in lines:
+            self._send(connection, p.LOG, line.encode("utf-8"))
 
     def _stream_live(self, connection: socket.socket) -> None:
         """Streams three EVT_DECODED batches of decoded 'LA-TEST\\n' bytes.

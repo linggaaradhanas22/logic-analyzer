@@ -1,6 +1,7 @@
 #include "la_app.h"
 
 #include "la_irq.h"
+#include "la_trace.h"
 
 #include "xiltimer.h"
 
@@ -132,6 +133,7 @@ static void decoder_drain_segments(la_decoder_ctx_t *ctx)
             ctx->app->decoder_words[ctx->slot] += word_count;
             ctx->app->decoder_busy_us[ctx->slot] +=
                 (uint32_t)((end - start) / (COUNTS_PER_SECOND / 1000000u));
+            la_trace_mark(LA_TRACE_EVENT_MARK_DECODE, (uint16_t)ctx->slot);
         }
         /* The ring owns the slot state; the pool lock inside is taken under
          * this critical section so AcqTask's repost never interleaves. */

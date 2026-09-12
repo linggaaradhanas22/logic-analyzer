@@ -123,6 +123,7 @@ int la_proto_message_type_valid(uint8_t type)
     case LA_PROTO_LIVE_START:
     case LA_PROTO_LIVE_STOP:
     case LA_PROTO_PATGEN_CFG:
+    case LA_PROTO_TRACE_CTRL:
     case LA_PROTO_STATUS:
     case LA_PROTO_EVT_TRIGGERED:
     case LA_PROTO_EVT_DECODED:
@@ -361,6 +362,34 @@ int la_proto_unpack_patgen_cfg(uint32_t *patgen_ctrl,
         return -1;
     }
     *patgen_ctrl = value;
+    return 0;
+}
+
+size_t la_proto_pack_trace_ctrl(uint8_t action,
+                                uint8_t *output,
+                                size_t output_capacity)
+{
+    if (output == NULL || output_capacity < LA_PROTO_TRACE_CTRL_WIRE_SIZE ||
+        action < LA_PROTO_TRACE_STOP || action > LA_PROTO_TRACE_DUMP) {
+        return 0u;
+    }
+    output[0] = action;
+    output[1] = 0u;
+    output[2] = 0u;
+    output[3] = 0u;
+    return LA_PROTO_TRACE_CTRL_WIRE_SIZE;
+}
+
+int la_proto_unpack_trace_ctrl(uint8_t *action,
+                               const uint8_t *input,
+                               size_t input_length)
+{
+    if (action == NULL || input == NULL ||
+        input_length != LA_PROTO_TRACE_CTRL_WIRE_SIZE ||
+        input[0] < LA_PROTO_TRACE_STOP || input[0] > LA_PROTO_TRACE_DUMP) {
+        return -1;
+    }
+    *action = input[0];
     return 0;
 }
 

@@ -64,6 +64,13 @@
 #define LA_STACK_STATUS 512u
 #define LA_STACK_DECODER 1024u
 
+/* P8.3 trace task numbers (stable ids in the trace dump). */
+#define LA_TRACE_TASK_ACQ 1u
+#define LA_TRACE_TASK_CMD 2u
+#define LA_TRACE_TASK_TX 3u
+#define LA_TRACE_TASK_STATUS 4u
+#define LA_TRACE_TASK_DECODER_BASE 5u
+
 #define LA_PRIO_ACQ 6u
 #define LA_PRIO_CMD 5u
 #define LA_PRIO_DECODER 5u

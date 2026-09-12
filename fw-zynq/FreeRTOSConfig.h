@@ -40,4 +40,23 @@
 #define INCLUDE_uxTaskGetStackHighWaterMark 1
 #define configASSERT(x)                    do { if (!(x)) { for (;;) {} } } while (0)
 
+/* P8.3 tracing: the kernel compiles these macros into tasks.c/queue.c, so the
+ * BSP build cannot include the application header; the entry points are
+ * declared here and implemented in fw-zynq/app/src/la_trace.c. They are cheap
+ * no-ops while tracing is stopped. See docs/rtos-design.md "P8.3 results". */
+extern void la_trace_task_switch(void *tcb, unsigned int in);
+extern void la_trace_queue(void *queue, unsigned int event);
+extern void la_trace_stream(void *stream, unsigned int event, unsigned int bytes);
+#define traceTASK_SWITCHED_IN()    la_trace_task_switch((void *)pxCurrentTCB, 1u)
+#define traceTASK_SWITCHED_OUT()   la_trace_task_switch((void *)pxCurrentTCB, 0u)
+#define traceQUEUE_SEND(pxQueue)          la_trace_queue((void *)(pxQueue), 1u)
+#define traceQUEUE_RECEIVE(pxQueue)       la_trace_queue((void *)(pxQueue), 2u)
+#define traceSTREAM_BUFFER_SEND(xStreamBuffer, xBytesSent) \
+    la_trace_stream((void *)(xStreamBuffer), 1u, (unsigned int)(xBytesSent))
+#define traceSTREAM_BUFFER_RECEIVE(xStreamBuffer, xReceivedLength) \
+    la_trace_stream((void *)(xStreamBuffer), 2u, (unsigned int)(xReceivedLength))
+/* The *_FAILED hooks are intentionally not wired: tasks poll queues with
+ * zero timeouts, so failed polls would flood the ring with idle noise. The
+ * glue still supports the tokens if a future build needs them. */
+
 #endif /* LA_FREERTOS_CONFIG_H */

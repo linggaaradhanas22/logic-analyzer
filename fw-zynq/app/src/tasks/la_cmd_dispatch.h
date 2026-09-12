@@ -47,7 +47,10 @@
  * IDLE is rejected as busy. PATGEN_CFG (the additive v1 extension for the
  * pattern generator) is accepted in any state and latched for CmdTask to
  * write; an ARM whose worst-case capture cannot fit the configured capture
- * pool is rejected with NAK overflow.
+ * pool is rejected with NAK overflow. TRACE_CTRL (0x18, P8.3) is a 4-byte
+ * action (STOP/START/DUMP) accepted in any state: the dispatch validates and
+ * routes it, and CmdTask acknowledges it before starting/stopping the trace
+ * ring or running the dump.
  */
 
 #include "la_proto.h"
@@ -91,7 +94,8 @@ typedef enum la_cmd_outcome {
     LA_CMD_OUT_BURST_NAK,
     LA_CMD_OUT_DECODER_CFG,
     LA_CMD_OUT_LIVE_START,
-    LA_CMD_OUT_LIVE_STOP
+    LA_CMD_OUT_LIVE_STOP,
+    LA_CMD_OUT_TRACE
 } la_cmd_outcome_t;
 
 typedef struct la_cmd_result {
@@ -102,6 +106,7 @@ typedef struct la_cmd_result {
                        * ACK/NAK routing outcomes */
     uint8_t error;    /* LA_PROTO_ERROR_* code for NAK outcomes */
     uint8_t slot;     /* decoder slot for OUT_DECODER_CFG */
+    uint8_t action;   /* LA_PROTO_TRACE_* action for OUT_TRACE */
     uint8_t payload[LA_PROTO_PONG_WIRE_SIZE]; /* valid for OUT_PONG */
 } la_cmd_result_t;
 

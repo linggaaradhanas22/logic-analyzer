@@ -18,6 +18,7 @@ FRAME_OVERHEAD = 7
 PING, PONG, CONFIG, ARM, ABORT, GET_STATUS = 0x01, 0x02, 0x10, 0x11, 0x12, 0x13
 DECODER_CFG, LIVE_START, LIVE_STOP = 0x14, 0x15, 0x16
 PATGEN_CFG = 0x17
+TRACE_CTRL = 0x18
 STATUS, EVT_TRIGGERED, EVT_DECODED, EVT_OVERRUN = 0x20, 0x21, 0x22, 0x23
 DATA_BEGIN, DATA_CHUNK, DATA_END = 0x30, 0x31, 0x32
 ACK, NAK, LOG = 0x40, 0x41, 0x7F
@@ -46,6 +47,10 @@ ACK_SIZE = 2
 NAK_SIZE = 3
 DECODER_CFG_SIZE = 20
 PATGEN_CFG_SIZE = 4
+TRACE_CTRL_SIZE = 4
+
+# TRACE_CTRL actions (protocol.md, additive v1 extension).
+TRACE_STOP, TRACE_START, TRACE_DUMP = 1, 2, 3
 
 # PATGEN_CTRL field masks (la_regs.h / docs/regmap.yaml).
 PATGEN_EN_MASK = 0x00000001
@@ -199,6 +204,22 @@ def unpack_patgen_cfg(payload: bytes) -> int:
     if len(payload) != PATGEN_CFG_SIZE:
         raise FrameError(f"PATGEN_CFG payload length {len(payload)}")
     return struct.unpack_from("<I", payload, 0)[0]
+
+
+def pack_trace_ctrl(action: int) -> bytes:
+    """TRACE_CTRL payload: action:u8 plus three reserved zero bytes (P8.3)."""
+    if action not in (TRACE_STOP, TRACE_START, TRACE_DUMP):
+        raise ValueError(f"undefined trace action: {action}")
+    return struct.pack("<BBBB", action, 0, 0, 0)
+
+
+def unpack_trace_ctrl(payload: bytes) -> int:
+    if len(payload) != TRACE_CTRL_SIZE:
+        raise FrameError(f"TRACE_CTRL payload length {len(payload)}")
+    action = payload[0]
+    if action not in (TRACE_STOP, TRACE_START, TRACE_DUMP):
+        raise FrameError(f"undefined trace action: {action}")
+    return action
 
 
 def pack_ack(acknowledged_type: int, sequence: int) -> bytes:

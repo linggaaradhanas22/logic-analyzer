@@ -15,6 +15,7 @@
 #include "la_app.h"
 #include "la_mem_geom.h"
 #include "la_regs.h"
+#include "la_trace.h"
 
 #include "xil_io.h"
 #include "xil_mmu.h"
@@ -132,6 +133,7 @@ int main(void)
         }
     }
 
+    la_trace_init();
     if (la_app_init(&s_app) != 0) {
         xil_printf("LA fatal: application init failed\r\n");
         for (;;) {

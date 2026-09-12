@@ -153,6 +153,14 @@ target_include_directories(la_native_live PRIVATE
   fw-zynq/app/src/live
 )
 
+add_executable(la_native_trace
+  tests/native/trace_core_host_tests.c
+  fw-zynq/app/src/la_trace_core.c
+)
+target_include_directories(la_native_trace PRIVATE
+  fw-zynq/app/src
+)
+
 enable_testing()
 add_test(NAME la_native_tests COMMAND la_native_tests)
 add_test(NAME la_esp32_mocks COMMAND la_esp32_mocks)
@@ -167,6 +175,7 @@ add_test(NAME la_native_txpack COMMAND la_native_txpack)
 add_test(NAME la_native_plan COMMAND la_native_plan)
 add_test(NAME la_native_irqstats COMMAND la_native_irqstats)
 add_test(NAME la_native_live COMMAND la_native_live)
+add_test(NAME la_native_trace COMMAND la_native_trace)
 
 if(Python3_EXECUTABLE)
   add_test(NAME la_native_ctypes

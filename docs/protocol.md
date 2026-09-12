@@ -48,6 +48,7 @@ where the receiver documents forward-compatible handling.
 | `0x15` | `LIVE_START` | host -> Zynq | empty |
 | `0x16` | `LIVE_STOP` | host -> Zynq | empty |
 | `0x17` | `PATGEN_CFG` | host -> Zynq | `patgen_ctrl:u32` (additive v1 extension) |
+| `0x18` | `TRACE_CTRL` | host -> Zynq | `action:u8`, reserved[3] (additive v1 extension) |
 | `0x20` | `STATUS` | Zynq -> host | status snapshot, 52 bytes in v1 |
 | `0x21` | `EVT_TRIGGERED` | Zynq -> host | `trig_index:u64` |
 | `0x22` | `EVT_DECODED` | Zynq -> host | zero or more event records |
@@ -104,6 +105,31 @@ and latches the value immediately; the pattern generator latches mode and DIV
 at its enable edge. Peers that do not implement the type reject it with NAK
 unsupported, which is the P4 burst firmware's behaviour only if the command
 is unknown - this firmware implements it.
+
+### TRACE_CTRL, type `0x18`
+
+An additive v1 extension for the P8.3 task/queue trace. The payload is
+exactly 4 bytes: `action:u8` followed by 3 reserved bytes that must be zero.
+Action 1 (`STOP`) disables trace recording; action 2 (`START`) clears the
+trace ring and enables recording; action 3 (`DUMP`) disables recording and
+dumps the ring. Invalid actions are rejected with NAK bad-field. The receiver
+acknowledges the frame, and for `DUMP` follows the ACK with a sequence of
+`LOG` frames carrying the dump; the final line begins with `END `, so a host
+can detect the end without a second command. The dump lines are ASCII:
+
+| Line | Meaning |
+|---|---|
+| `LA TRACE 1 <counts_per_second>` | header; converts raw times to seconds |
+| `TASK <number> <id-hex> <name>` | task object (id is the TCB pointer) |
+| `QUEUE <id-hex> <name>` | queue or stream-buffer object |
+| `REC <time> <token> <object> <value> <id-hex>` | one record, oldest first |
+| `END <records> <total> <dropped>` | record count, accepted count, wrap loss |
+
+Record tokens: `IN`/`OUT` (task switched in/out), `QS`/`QR`/`QF`/`RX` (queue
+send, receive, send-failed, receive-failed), `SS`/`SR`/`SF`/`SE` (stream
+buffer send, receive, send-failed, receive-failed), `PL`/`DM` (PL and DMA
+interrupt entry), `SEG` (live segment published), `DEC` (decoder segment
+fed), `TX` (UART frame queued) and `OVR` (loss report queued).
 
 ### DECODER_CFG, type `0x14`
 

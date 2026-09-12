@@ -3,6 +3,7 @@
 #include "la_cmd_dispatch.h"
 #include "la_mem_geom.h"
 #include "la_regs.h"
+#include "la_trace.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -14,6 +15,7 @@ typedef struct la_cmd_ctx {
     la_app_t *app;
     la_proto_parser_t parser;
     la_cmd_dispatch_t dispatch;
+    uint8_t trace_dump_pending; /* set by OUT_TRACE(DUMP); run after the feed */
     uint8_t rx_chunk[LA_CMD_RX_CHUNK];
 } la_cmd_ctx_t;
 
@@ -96,6 +98,16 @@ static void cmd_post_log(la_cmd_ctx_t *ctx, const char *text)
     }
     cmd_post_frame(ctx, LA_PROTO_LOG, la_app_next_sequence(ctx->app),
                    (const uint8_t *)text, (uint16_t)length);
+}
+
+static void cmd_trace_emit(void *context, const char *line)
+{
+    cmd_post_log((la_cmd_ctx_t *)context, line);
+}
+
+static void cmd_dump_trace(la_cmd_ctx_t *ctx)
+{
+    (void)la_trace_dump(cmd_trace_emit, ctx);
 }
 
 static void cmd_forward_ctrl(la_cmd_ctx_t *ctx, la_ctrl_kind_t kind,
@@ -212,6 +224,23 @@ static void cmd_handle_outcome(la_cmd_ctx_t *ctx, const la_cmd_result_t *result)
         cmd_post_ack(ctx, result->type, result->sequence);
         cmd_forward_ctrl(ctx, LA_CTRL_LIVE_STOP, NULL);
         break;
+    case LA_CMD_OUT_TRACE:
+        /* Acknowledge first; the DUMP action runs after the parser callback
+         * returns so the frame callback stays short. */
+        cmd_post_ack(ctx, result->type, result->sequence);
+        switch (result->action) {
+        case LA_PROTO_TRACE_START:
+            la_trace_start();
+            break;
+        case LA_PROTO_TRACE_STOP:
+            la_trace_stop();
+            break;
+        case LA_PROTO_TRACE_DUMP:
+        default:
+            ctx->trace_dump_pending = 1u;
+            break;
+        }
+        break;
     case LA_CMD_OUT_CHUNK_ACK:
     case LA_CMD_OUT_CHUNK_NAK:
     case LA_CMD_OUT_BURST_NAK:
@@ -323,6 +352,10 @@ void la_cmd_task(void *parameters)
                 break;
             }
             cmd_handle_notice(ctx, &notice);
+        }
+        if (ctx->trace_dump_pending != 0u) {
+            ctx->trace_dump_pending = 0u;
+            cmd_dump_trace(ctx);
         }
     }
 }

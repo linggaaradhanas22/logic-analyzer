@@ -214,6 +214,43 @@ class AnalyzerClient:
         self._send(p.PATGEN_CFG, p.pack_patgen_cfg(patgen_ctrl))
         self._expect_ack(p.PATGEN_CFG, "PATGEN_CFG", deadline)
 
+    def trace_control(self, action: int, timeout_s: float = 5.0) -> None:
+        """Sends TRACE_CTRL STOP/START (P8.3 additive v1 extension)."""
+        deadline = time.monotonic() + timeout_s
+        self._send(p.TRACE_CTRL, p.pack_trace_ctrl(action))
+        self._expect_ack(p.TRACE_CTRL, "TRACE_CTRL", deadline)
+
+    def trace_dump(self, timeout_s: float = 30.0) -> list[str]:
+        """P8.3: stops tracing and collects the LOG dump until the END line.
+
+        Returns the raw dump lines (header, object table, records, END)."""
+        deadline = time.monotonic() + timeout_s
+        lines: list[str] = []
+        done = False
+
+        def on_dump(message_type, sequence, payload):
+            nonlocal done
+            if message_type == p.ACK:
+                # The dump follows the ACK; keep collecting until END.
+                return False
+            if message_type == p.LOG:
+                line = payload.decode("utf-8", errors="replace")
+                lines.append(line)
+                if line.startswith("END "):
+                    done = True
+                    return True
+                return False
+            if message_type == p.NAK:
+                _type, _seq, error = payload[0], payload[1], payload[2]
+                raise AnalyzerError(f"TRACE_CTRL rejected: {nak_text(error)}", error)
+            return False
+
+        self._send(p.TRACE_CTRL, p.pack_trace_ctrl(p.TRACE_DUMP))
+        self._pump(deadline, on_dump)
+        if not done:
+            raise TransportError("trace dump ended without an END marker")
+        return lines
+
     def capture(self, config: bytes, timeout_s: float = 30.0) -> CaptureData:
         """Arms a burst capture with a wire CONFIG payload and collects the
         DATA_BEGIN/CHUNK*/END transfer, ACKing in batches of 16."""

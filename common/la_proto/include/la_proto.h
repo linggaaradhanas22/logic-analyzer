@@ -17,6 +17,7 @@
 #define LA_PROTO_CONFIG_WIRE_SIZE ((uint16_t)37u)
 #define LA_PROTO_DECODER_CONFIG_WIRE_SIZE ((uint16_t)20u)
 #define LA_PROTO_PATGEN_CFG_WIRE_SIZE ((uint16_t)4u)
+#define LA_PROTO_TRACE_CTRL_WIRE_SIZE ((uint16_t)4u)
 #define LA_PROTO_PONG_WIRE_SIZE ((uint16_t)16u)
 #define LA_PROTO_ACK_WIRE_SIZE ((uint16_t)2u)
 #define LA_PROTO_NAK_WIRE_SIZE ((uint16_t)3u)
@@ -37,6 +38,7 @@ typedef enum la_proto_message_type {
     LA_PROTO_LIVE_START = 0x15,
     LA_PROTO_LIVE_STOP = 0x16,
     LA_PROTO_PATGEN_CFG = 0x17,
+    LA_PROTO_TRACE_CTRL = 0x18,
     LA_PROTO_STATUS = 0x20,
     LA_PROTO_EVT_TRIGGERED = 0x21,
     LA_PROTO_EVT_DECODED = 0x22,
@@ -231,6 +233,22 @@ LA_PROTO_API size_t la_proto_pack_patgen_cfg(uint32_t patgen_ctrl,
                                              uint8_t *output,
                                              size_t output_capacity);
 LA_PROTO_API int la_proto_unpack_patgen_cfg(uint32_t *patgen_ctrl,
+                                            const uint8_t *input,
+                                            size_t input_length);
+
+/* TRACE_CTRL payload: action:u8, reserved[3] zero (P8.3). START clears the
+ * trace ring and enables recording; STOP disables recording; DUMP disables
+ * recording and the Zynq answers with LOG frames carrying the ring dump. */
+typedef enum la_proto_trace_action {
+    LA_PROTO_TRACE_STOP = 1,
+    LA_PROTO_TRACE_START = 2,
+    LA_PROTO_TRACE_DUMP = 3
+} la_proto_trace_action_t;
+
+LA_PROTO_API size_t la_proto_pack_trace_ctrl(uint8_t action,
+                                             uint8_t *output,
+                                             size_t output_capacity);
+LA_PROTO_API int la_proto_unpack_trace_ctrl(uint8_t *action,
                                             const uint8_t *input,
                                             size_t input_length);
 

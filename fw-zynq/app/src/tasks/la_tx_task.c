@@ -1,6 +1,7 @@
 #include "la_app.h"
 
 #include "la_mem_geom.h"
+#include "la_trace.h"
 #include "la_tx_pack.h"
 #include "la_tx_win.h"
 #include "xil_cache.h"
@@ -99,6 +100,7 @@ static int tx_write(la_tx_ctx_t *ctx, uint8_t type, uint8_t sequence,
         ctx->app->tx_drops++;
         return -1;
     }
+    la_trace_mark(LA_TRACE_EVENT_MARK_TX_FRAME, type);
     la_link_uart_tx_kick(&ctx->app->link);
     return 0;
 }

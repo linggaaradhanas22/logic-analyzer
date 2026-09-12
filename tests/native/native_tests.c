@@ -345,6 +345,34 @@ static int test_typed_protocol_payloads(void)
         CHECK(la_proto_unpack_patgen_cfg(&unpacked_patgen, payload, 3u) == -1,
               "PATGEN_CFG unpack rejects wrong length");
     }
+
+    {
+        /* TRACE_CTRL additive extension: action plus three reserved zeros. */
+        static const uint8_t expected_trace[LA_PROTO_TRACE_CTRL_WIRE_SIZE] = {
+            0x03u, 0x00u, 0x00u, 0x00u};
+        uint8_t trace_action = 0u;
+
+        packed = la_proto_pack_trace_ctrl(LA_PROTO_TRACE_DUMP, payload,
+                                          sizeof(payload));
+        CHECK(packed == LA_PROTO_TRACE_CTRL_WIRE_SIZE, "TRACE_CTRL pack size");
+        CHECK(memcmp(payload, expected_trace, sizeof(expected_trace)) == 0,
+              "TRACE_CTRL byte vector");
+        CHECK(la_proto_unpack_trace_ctrl(&trace_action, payload, packed) == 0 &&
+                  trace_action == LA_PROTO_TRACE_DUMP,
+              "TRACE_CTRL round trip");
+        CHECK(la_proto_pack_trace_ctrl(0u, payload, sizeof(payload)) == 0u &&
+                  la_proto_pack_trace_ctrl(4u, payload, sizeof(payload)) == 0u,
+              "TRACE_CTRL undefined actions rejected");
+        CHECK(la_proto_pack_trace_ctrl(LA_PROTO_TRACE_START, payload,
+                                       LA_PROTO_TRACE_CTRL_WIRE_SIZE - 1u) == 0u &&
+                  la_proto_pack_trace_ctrl(LA_PROTO_TRACE_START, NULL,
+                                           sizeof(payload)) == 0u,
+              "TRACE_CTRL pack guards");
+        payload[0] = 9u;
+        CHECK(la_proto_unpack_trace_ctrl(&trace_action, payload, 4u) == -1 &&
+                  la_proto_unpack_trace_ctrl(&trace_action, payload, 3u) == -1,
+              "TRACE_CTRL unpack rejects bad action and length");
+    }
     return 0;
 }
 
