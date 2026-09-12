@@ -62,6 +62,16 @@ def test_status(analyzer) -> None:
     assert result["decoders"][2]["dropped_segments"] == 1
 
 
+def test_status_ignores_stale_nak(analyzer) -> None:
+    mock = analyzer("stale_nak_status")
+    client = _client(mock.uri)
+    try:
+        result = client.status()
+    finally:
+        client.close()
+    assert result["state"] == 3
+
+
 def test_patgen_cfg_acknowledged(analyzer) -> None:
     mock = analyzer("ping")
     client = _client(mock.uri)

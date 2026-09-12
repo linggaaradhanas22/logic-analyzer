@@ -150,42 +150,34 @@ def test_burst_raw_vs_transition_size(client: AnalyzerClient, request,
     assert txn.meta["total_words"] > 0
 
 
-@pytest.fixture(scope="module")
-def live_client(request):
-    if not request.config.getoption("--live"):
-        pytest.skip("P9.2 live comparison requires --live")
-    target = request.config.getoption("--target")
-    if not target:
-        pytest.skip("no --target: the live comparison requires the bench hardware")
-    analyzer = AnalyzerClient(open_uri(target))
-    yield analyzer
-    analyzer.close()
-
-
-def _run_live(live_client: AnalyzerClient, decoder: bytes, config: bytes,
+def _run_live(client: AnalyzerClient, decoder: bytes, config: bytes,
               event_format: int, count: int | None = None,
               seconds: float | None = None) -> tuple[list[dict], dict]:
     """One live session with a fresh patgen enable (the P7.6 helper toggles it
     because a session started on an already-running generator streams almost
     nothing)."""
-    _configure_patgen_uart(live_client, 115200)
-    events = live_client.live(
+    _configure_patgen_uart(client, 115200)
+    events = client.live(
         decoder, config=config, count=count,
         timeout_s=seconds if count is None else 15.0,
         stop_on_overrun=False, collect_events=count is not None,
         event_format=event_format,
     )
-    return events, dict(live_client.live_stats)
+    return events, dict(client.live_stats)
 
 
-def test_compact_events_reduce_live_wire_bytes(live_client: AnalyzerClient) -> None:
+def test_compact_events_reduce_live_wire_bytes(client: AnalyzerClient, request) -> None:
+    if not request.config.getoption("--live"):
+        pytest.skip("P9.2 live comparison requires --live")
     config = _stream_config(1)
     decoder = _uart_decoder(115200)
 
     # Correctness: the same event window must decode the same bytes.
-    v1_events, _ = _run_live(live_client, decoder, config,
+    # One connection only: the gateway enforces a single client, so this test
+    # shares the module client instead of opening a second socket.
+    v1_events, _ = _run_live(client, decoder, config,
                              p.EVT_FORMAT_RECORDS, count=COMPACT_EVENTS)
-    compact_events, _ = _run_live(live_client, decoder, config,
+    compact_events, _ = _run_live(client, decoder, config,
                                   p.EVT_FORMAT_BLOCK, count=COMPACT_EVENTS)
     v1_data = _aligned_frame_bytes(v1_events)
     compact_data = _aligned_frame_bytes(compact_events)
@@ -195,9 +187,9 @@ def test_compact_events_reduce_live_wire_bytes(live_client: AnalyzerClient) -> N
 
     # Bandwidth: fixed 2 s windows at the same offered rate; the in-flight
     # relay data at a count stop otherwise dilutes the comparison.
-    _, v1_stats = _run_live(live_client, decoder, config,
+    _, v1_stats = _run_live(client, decoder, config,
                             p.EVT_FORMAT_RECORDS, seconds=2.0)
-    _, compact_stats = _run_live(live_client, decoder, config,
+    _, compact_stats = _run_live(client, decoder, config,
                                  p.EVT_FORMAT_BLOCK, seconds=2.0)
     assert v1_stats["events"] > 1000 and compact_stats["events"] > 1000
     v1_per_event = v1_stats["wire_bytes"] / v1_stats["events"]

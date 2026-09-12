@@ -14,6 +14,7 @@ the CLI and client are exercised without hardware. Scenarios:
 - chunk_gap: omits one chunk in the middle of the transfer.
 - chunk_bad_crc: corrupts one chunk frame's CRC.
 - noise_then_pong: sends garbage before the PONG (parser resync tests).
+- stale_nak_status: sends a duplicate NAK for an older ARM before the STATUS.
 
 After a complete transfer the server waits for the host ACK drain and
 records the received ACK frames for assertion (every chunk must be
@@ -126,6 +127,11 @@ class MockAnalyzer:
                     self._send_raw(connection, b"\x00garbage\xff\xaa" * 4)
                 self._send(connection, p.PONG, struct.pack("<IIQ", 1, 0x4C410002, 42))
             elif message_type == p.GET_STATUS:
+                if self.scenario == "stale_nak_status":
+                    # A duplicate NAK for an older ARM request must be ignored
+                    # by the client instead of failing the STATUS wait.
+                    self._send(connection, p.NAK,
+                               p.pack_nak(p.ARM, 60, p.ERROR_OVERFLOW))
                 self._send(connection, p.STATUS, STATUS_PAYLOAD)
             elif message_type == p.ABORT:
                 self._send(connection, p.ACK, p.pack_ack(p.ABORT, sequence))

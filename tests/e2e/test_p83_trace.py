@@ -64,8 +64,13 @@ def test_p83_live_uart_trace(client: AnalyzerClient, request) -> None:
     client.trace_control(p.TRACE_STOP)
     lines = client.trace_dump(timeout_s=30.0)
 
-    dump = trace_mod.parse_trace(lines)
+    dump = trace_mod.parse_trace(lines, require_complete=False)
     summary = trace_mod.summarize(dump)
+    # The LOG dump rides the best-effort relay: under pressure a few records can
+    # be dropped in flight (reported as EVT_OVERRUN stage 2). Require the dump
+    # to be essentially complete, then verify the pipeline content.
+    lost = dump.declared_records - len(dump.records)
+    assert lost <= dump.declared_records // 50, (lost, dump.declared_records)
     decoded = [event for event in events if not event.get("overrun")]
     assert len(decoded) >= DECODE_EVENTS // 2, len(decoded)
 

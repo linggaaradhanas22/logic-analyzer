@@ -62,6 +62,18 @@ def test_trace_parse_rejects_bad_dumps() -> None:
         trace.parse_trace(["LA TRACE 2 1"])
 
 
+def test_trace_parse_short_dump_tolerance() -> None:
+    short = MOCK_LINES[:-1] + ["END 6 6 0"]
+    with pytest.raises(trace.TraceParseError):
+        trace.parse_trace(short)
+    dump = trace.parse_trace(short, require_complete=False)
+    assert dump.declared_records == 6
+    assert len(dump.records) == 4
+    over = MOCK_LINES[:-1] + ["END 2 2 0"]
+    with pytest.raises(trace.TraceParseError):
+        trace.parse_trace(over, require_complete=False)
+
+
 def test_trace_client_control_and_dump(analyzer) -> None:
     mock = analyzer("trace")
     client = AnalyzerClient(open_uri(mock.uri))

@@ -143,7 +143,9 @@ class AnalyzerClient:
                 result["pong"] = p.unpack_pong(payload)
                 return True
             if message_type == p.NAK:
-                _nak_type, _seq, error = payload[0], payload[1], payload[2]
+                nak_type, _seq, error = payload[0], payload[1], payload[2]
+                if nak_type != p.PING:
+                    return False  # stale NAK for an older request; ignore
                 raise AnalyzerError(f"PING rejected: {nak_text(error)}", error)
             if message_type == p.LOG:
                 self._log_lines.append(payload.decode("utf-8", errors="replace"))
@@ -162,7 +164,9 @@ class AnalyzerClient:
                 result["status"] = p.unpack_status(payload)
                 return True
             if message_type == p.NAK:
-                _nak_type, _seq, error = payload[0], payload[1], payload[2]
+                nak_type, _seq, error = payload[0], payload[1], payload[2]
+                if nak_type != p.GET_STATUS:
+                    return False  # stale NAK for an older request; ignore
                 raise AnalyzerError(f"GET_STATUS rejected: {nak_text(error)}", error)
             if message_type == p.LOG:
                 self._log_lines.append(payload.decode("utf-8", errors="replace"))
@@ -181,6 +185,8 @@ class AnalyzerClient:
                 return False  # stale ACK for an older request; ignore
             if message_type == p.NAK:
                 nak_type, _seq, error = payload[0], payload[1], payload[2]
+                if nak_type != requested_type:
+                    return False  # stale NAK for an older request; ignore
                 raise AnalyzerError(
                     f"{what} rejected ({nak_text(error)}) for type 0x{requested_type:02X}",
                     error,

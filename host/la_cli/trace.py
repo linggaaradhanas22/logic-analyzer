@@ -75,8 +75,14 @@ class TraceDump:
         return f"obj_{object_id:08x}"
 
 
-def parse_trace(lines) -> TraceDump:
-    """Parses LOG dump lines. Raises TraceParseError on malformed input."""
+def parse_trace(lines, require_complete: bool = True) -> TraceDump:
+    """Parses LOG dump lines. Raises TraceParseError on malformed input.
+
+    The LOG transport is best-effort: under relay pressure a few records can be
+    dropped in flight (reported as EVT_OVERRUN stage 2). With
+    require_complete=False a short dump is accepted; the caller checks the
+    deficit. A dump that declares fewer records than it contains is always
+    malformed."""
     dump = TraceDump()
     saw_header = False
     saw_end = False
@@ -151,7 +157,11 @@ def parse_trace(lines) -> TraceDump:
         raise TraceParseError("trace dump has no LA TRACE header")
     if not saw_end:
         raise TraceParseError("trace dump has no END marker")
-    if dump.declared_records != len(dump.records):
+    if len(dump.records) > dump.declared_records:
+        raise TraceParseError(
+            f"END declares {dump.declared_records} records, parsed {len(dump.records)}"
+        )
+    if require_complete and dump.declared_records != len(dump.records):
         raise TraceParseError(
             f"END declares {dump.declared_records} records, parsed {len(dump.records)}"
         )

@@ -20,6 +20,11 @@ static const char *TAG = "la_link";
 #define LA_LINK_TO_NET_BYTES (64u * 1024u)
 #define LA_LINK_NET_TO_LINK_BYTES (16u * 1024u)
 #define LA_LINK_LIVE_BYTES (8u * 1024u)
+/* P9.4: a control frame waits at most this long for relay-ring room before it
+ * is dropped and counted. An unbounded wait parked LinkRxTask when the host
+ * stopped reading; its full UART RX buffer then held RTS low, which stalled
+ * the Zynq TX path and deadlocked the whole link. */
+#define LA_LINK_PRESSURE_TIMEOUT_MS 2000u
 
 typedef struct la_link_state {
     RingbufHandle_t to_net;
@@ -137,10 +142,23 @@ static void on_uart_frame(void *context,
         return;
     }
     if (decision == LA_RELAY_PRESSURE) {
-        /* Control frame: block until the net leg has room instead of dropping. */
-        while (xRingbufferSend(link->to_net, link->frame, frame_bytes,
-                               pdMS_TO_TICKS(100)) != pdTRUE) {
+        /* Control frame: block until the net leg has room instead of dropping,
+         * but never forever (see LA_LINK_PRESSURE_TIMEOUT_MS). */
+        TickType_t start = xTaskGetTickCount();
+
+        for (;;) {
+            if (xRingbufferSend(link->to_net, link->frame, frame_bytes,
+                                pdMS_TO_TICKS(100)) == pdTRUE) {
+                break;
+            }
             esp_task_wdt_reset();
+            if ((xTaskGetTickCount() - start) >
+                pdMS_TO_TICKS(LA_LINK_PRESSURE_TIMEOUT_MS)) {
+                link->counters.pressure_timeouts += 1u;
+                (void)la_relay_report(&link->relay_uart_to_net, type,
+                                      LA_RELAY_FWD_FAIL);
+                return;
+            }
         }
     } else if (xRingbufferSend(link->to_net, link->frame, frame_bytes, 0) != pdTRUE) {
         /* The NOSPLIT ring can refuse a fragmented put after a positive
@@ -152,6 +170,28 @@ static void on_uart_frame(void *context,
     mirror_frame(link, type, frame_bytes);
     track_ring_usage(link);
     report_link_overrun(link);
+}
+
+static void drain_buffered(la_link_state_t *link, uint8_t *chunk, size_t chunk_size,
+                           int count_rescue)
+{
+    size_t available = la_link_uart_available();
+
+    while (available > 0u) {
+        size_t take = available < chunk_size ? available : chunk_size;
+        int read = la_link_uart_read(chunk, take, 0);
+
+        if (read <= 0) {
+            break;
+        }
+        link->counters.uart_rx_bytes += (uint32_t)read;
+        if (count_rescue != 0) {
+            link->counters.rx_rescue_bytes += (uint32_t)read;
+        }
+        (void)la_proto_parser_feed(&link->parser, chunk, (size_t)read,
+                                   on_uart_frame, link);
+        available = la_link_uart_available();
+    }
 }
 
 static void link_rx_task(void *argument)
@@ -171,10 +211,13 @@ static void link_rx_task(void *argument)
     }
 #endif
     for (;;) {
+        int handled_data = 0;
+
         if (xQueueReceive(link->uart_queue, &event, pdMS_TO_TICKS(100)) == pdTRUE) {
             switch (event.type) {
             case UART_DATA: {
                 size_t remaining = event.size;
+                handled_data = 1;
                 while (remaining > 0u) {
                     size_t take = remaining < sizeof(chunk) ? remaining : sizeof(chunk);
                     int read = la_link_uart_read(chunk, take, pdMS_TO_TICKS(100));
@@ -205,11 +248,15 @@ static void link_rx_task(void *argument)
             default:
                 break;
             }
-            link->counters.frames_parsed = link->parser.frames;
-            link->counters.parse_crc_errors = link->parser.crc_errors;
-            link->counters.parse_format_errors = link->parser.format_errors;
-            link->counters.parse_dropped_bytes = link->parser.dropped_bytes;
         }
+        /* The driver's event queue can lose a UART_DATA event when it overflows.
+         * Always drain the driver buffer so the RX path (and the RTS flow
+         * control that depends on it) cannot deadlock with a stalled host. */
+        drain_buffered(link, chunk, sizeof(chunk), handled_data == 0 ? 1 : 0);
+        link->counters.frames_parsed = link->parser.frames;
+        link->counters.parse_crc_errors = link->parser.crc_errors;
+        link->counters.parse_format_errors = link->parser.format_errors;
+        link->counters.parse_dropped_bytes = link->parser.dropped_bytes;
         link->counters.rx_stack_hwm = uxTaskGetStackHighWaterMark(NULL);
         esp_task_wdt_reset();
     }

@@ -85,6 +85,16 @@ int la_link_uart_read(uint8_t *buffer, size_t length, TickType_t timeout)
     return uart_read_bytes((uart_port_t)LA_BOARD_LINK_UART, buffer, length, timeout);
 }
 
+size_t la_link_uart_available(void)
+{
+    size_t length = 0u;
+
+    if (uart_get_buffered_data_len((uart_port_t)LA_BOARD_LINK_UART, &length) != ESP_OK) {
+        return 0u;
+    }
+    return length;
+}
+
 esp_err_t la_link_uart_write_frame(const uint8_t *frame, size_t length)
 {
     if (frame == NULL || length == 0u || length > LA_BOARD_LINK_TX_BUFFER) {

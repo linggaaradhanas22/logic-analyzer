@@ -452,6 +452,15 @@ UiTask: `to_net_max_used` is the peak `link_to_net` occupancy in bytes and
   LinkRxTask also mirrors the frame into the P10 live ring and reports the
   outcome (`frames_mirrored` / `mirror_dropped`). A net-leg drop skips the
   mirror entirely, so the live view never shows events the net link lost.
+- **P9.4 bounded pressure and RX rescue.** The PRESSURE wait is bounded at
+  2 s; after that the control frame is dropped and counted
+  (`pressure_timeouts`) instead of parking LinkRxTask forever. An unbounded
+  wait was the root cause of the 2026-09-13 "gateway dead" degradation: a
+  stalled host filled the ring, the blocked task stopped reading the UART,
+  the full RX buffer held RTS low, and the Zynq TX path (PONG/status)
+  stalled with it. LinkRxTask also drains whatever the UART driver has
+  buffered after every pass (`rx_rescue_bytes`), so a lost `UART_DATA`
+  event under overflow cannot deadlock the RX path either.
 - **Counters** are frame-based and are surfaced by UiTask (P5.4) and,
   later, in the web view; `la_relay_reset_counters()` clears them without
   touching the configuration. None of this validates UART RTS/CTS, ring
@@ -465,7 +474,9 @@ hardware RTS/CTS, a 16 KiB RX driver buffer, ~64-byte RX FIFO threshold and a
 re-encodes accepted frames verbatim into a static 64 KiB NOSPLIT `link_to_net`
 ring and reports accumulated drops as `EVT_OVERRUN(stage=2)`, mirroring
 `EVT_DECODED` into an 8 KiB live ring (the P10 consumer is
-still open, so a full ring is counted in `mirror_dropped`); LinkTxTask (core 1,
+still open, so a full ring is counted in `mirror_dropped`), and drains the
+driver buffer on every pass so a lost `UART_DATA` event cannot deadlock the
+RX path; LinkTxTask (core 1,
 prio 18) drains a static 16 KiB NOSPLIT `net_to_link` ring to the UART with a
 bounded, watchdog-safe wait for TX room. NetServerTask is the only producer of
 `net_to_link`, so the single-producer rule holds. The adapters are compiled by
@@ -506,16 +517,24 @@ monotonic millisecond clock and execute the returned actions in order.
 The P5.3 adapter layer (`net_wifi.c`, `net_server.c`, `net_mdns.c`) drives the
 policy from the Wi-Fi event task (WIFI_UP on `IP_EVENT_STA_GOT_IP`, WIFI_LOST
 on `WIFI_EVENT_STA_DISCONNECTED`) through a static event queue into
-NetServerTask (core 0, prio 12), which owns the policy, a 100 ms `select()`
-loop, the single non-blocking client socket and the host-stream `la_proto`
-parser. LISTEN_STOP closes the listener and any client; a lost client or Wi-Fi
-loss executes the ordered LINK_ABORT/LINK_LIVE_STOP actions by encoding control
-frames into the link TX ring. Host frames are re-encoded verbatim into the link
-ring with TCP backpressure (the socket is not read while the ring is blocked).
-The Zynq->host ring is drained and counted while no client is attached so a
-later session never inherits stale frames. mDNS (`la-esp32.local`,
-`_la-analyzer._tcp` on :5555) comes from the pinned `espressif/mdns` managed
-component (1.12.0 in `fw-esp32/dependencies.lock`).
+NetServerTask (core 0, prio 12), which owns the policy, the single non-blocking
+client socket and the host-stream `la_proto` parser. Since P9.4 the task polls
+its non-blocking accept/recv/send paths every 2 ms instead of depending on
+lwIP `select()` (which stopped waking the listening socket after a relay
+flood); a zero-timeout select probe feeds the `sready`/`serr` diagnostics, a
+3 s stale-listener check rebuilds the listener when established :5555
+connections exist while `accept()` stays idle (`refresh`), accepted sockets
+get TCP_NODELAY, and a fast reconnect gets a 250 ms grace window plus a
+MSG_PEEK liveness check so the departing client's in-flight FIN is not
+mistaken for a second client. LISTEN_STOP closes the listener and any client;
+a lost client or Wi-Fi loss executes the ordered LINK_ABORT/LINK_LIVE_STOP
+actions by encoding control frames into the link TX ring. Host frames are
+re-encoded verbatim into the link ring with TCP backpressure (the socket is
+not read while the ring is blocked). The Zynq->host ring is drained and
+counted while no client is attached so a later session never inherits stale
+frames. mDNS (`la-esp32.local`, `_la-analyzer._tcp` on :5555) comes from the
+pinned `espressif/mdns` managed component (1.12.0 in
+`fw-esp32/dependencies.lock`).
 
 ## Cache, MMU and Buffer Contract
 

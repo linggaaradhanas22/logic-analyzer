@@ -41,6 +41,7 @@ static void ui_task(void *argument)
     la_net_policy_state_t state;
     la_net_counters_t net;
     uint32_t led_phase = 0u;
+    uint32_t stats_phase = 0u;
 
     (void)argument;
     esp_task_wdt_add(NULL);
@@ -67,25 +68,40 @@ static void ui_task(void *argument)
         (void)gpio_set_level(LA_BOARD_LED_GPIO, level);
         led_phase += 1u;
 
+        if ((stats_phase++ % 40u) == 0u) {
+            la_net_diag_dump();
+        }
+
         if ((led_phase & 3u) != 0u) {
             esp_task_wdt_reset();
             continue;
         }
         ESP_LOGI(TAG,
                  "link fwd=%u drop=%u press=%u mirror=%u/%u fifo_ovf=%u line_err=%u "
-                 "touse=%u rep=%u rx_bytes=%u tx_bytes=%u | net %s clients=%u/%u "
-                 "disc=%u wifidrop=%u rx_frames=%u tx_frames=%u to_host_discard=%u | "
+                 "ptimeout=%u rrescue=%u touse=%u rep=%u rx_bytes=%u tx_bytes=%u | net %s clients=%u/%u "
+                 "disc=%u wifiat=%u/%u wifidrop=%u rx_frames=%u tx_frames=%u to_host_discard=%u "
+                 "open=%u accfail=%u/%d closefail=%u/%d closemax=%u sretry=%u "
+                 "drains=%u loops=%u sready=%u serr=%u refresh=%u | "
                  "rssi=%d heap=%u stacks rx=%u tx=%u net=%u ui=%u",
                  (unsigned)up.frames_forwarded, (unsigned)up.best_effort_dropped,
                  (unsigned)up.control_pressure_events, (unsigned)up.frames_mirrored,
                  (unsigned)up.mirror_dropped, (unsigned)link.fifo_ovf_events,
-                 (unsigned)link.line_error_events, (unsigned)link.to_net_max_used,
+                 (unsigned)link.line_error_events, (unsigned)link.pressure_timeouts,
+                 (unsigned)link.rx_rescue_bytes, (unsigned)link.to_net_max_used,
                  (unsigned)link.overrun_reports, (unsigned)link.uart_rx_bytes,
                  (unsigned)link.uart_tx_bytes, policy_state_name(state),
                  (unsigned)policy.clients_accepted, (unsigned)policy.clients_rejected,
-                 (unsigned)policy.client_disconnects, (unsigned)net.wifi_event_drops,
+                 (unsigned)policy.client_disconnects,
+                 (unsigned)policy.wifi_attempts, (unsigned)policy.wifi_successes,
+                 (unsigned)net.wifi_event_drops,
                  (unsigned)net.client_rx_frames, (unsigned)net.client_tx_frames,
-                 (unsigned)net.to_host_discarded, (int)net.rssi,
+                 (unsigned)net.to_host_discarded, (unsigned)net.sockets_open,
+                 (unsigned)net.accept_failures, (int)net.accept_errno,
+                 (unsigned)net.close_failures, (int)net.close_errno,
+                 (unsigned)net.close_max_ms, (unsigned)net.send_retries,
+                 (unsigned)net.accept_drains, (unsigned)net.loops,
+                 (unsigned)net.select_ready, (unsigned)net.select_errors,
+                 (unsigned)net.listener_refreshes, (int)net.rssi,
                  (unsigned)esp_get_free_heap_size(), (unsigned)link.rx_stack_hwm,
                  (unsigned)link.tx_stack_hwm, (unsigned)net.net_stack_hwm,
                  (unsigned)uxTaskGetStackHighWaterMark(NULL));
