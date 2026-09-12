@@ -64,7 +64,11 @@ static la_event_batch_t *decoder_block_get(la_decoder_ctx_t *ctx)
         ctx->app->decoder_dropped_events[ctx->slot]++;
         return NULL;
     }
-    la_event_batch_init(block);
+    if (ctx->evt_format == LA_PROTO_EVT_FORMAT_BLOCK) {
+        la_event_batch_init_block(block, ctx->slot);
+    } else {
+        la_event_batch_init(block);
+    }
     ctx->current = block;
     return block;
 }
@@ -98,6 +102,7 @@ static void decoder_apply_config(la_decoder_ctx_t *ctx)
     while (xQueueReceive(ctx->cfg_q, &message, 0) == pdTRUE) {
         if (message.valid != 0u) {
             (void)la_decoder_core_configure(&ctx->core, &message.config);
+            ctx->evt_format = message.evt_format;
             ctx->app->decoder_events[ctx->slot] = 0u;
             ctx->app->decoder_dropped_segments[ctx->slot] = 0u;
         }

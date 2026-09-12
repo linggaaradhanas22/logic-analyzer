@@ -139,6 +139,7 @@ static void cmd_forward_live(la_cmd_ctx_t *ctx, la_ctrl_kind_t kind)
     message.kind = kind;
     message.config = *la_cmd_dispatch_config(&ctx->dispatch);
     message.config_valid = 1u;
+    message.evt_format = la_cmd_dispatch_evt_format(&ctx->dispatch);
     for (slot = 0u; slot < LA_PROTO_DECODER_MAX_SLOTS; ++slot) {
         if (la_cmd_dispatch_decoder(&ctx->dispatch, slot,
                                     &message.decoders[slot]) == 0) {

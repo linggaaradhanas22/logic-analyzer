@@ -118,6 +118,7 @@ typedef struct la_cmd_dispatch {
     uint32_t pl_id;
     uint32_t patgen_ctrl;
     uint8_t patgen_valid;
+    uint8_t evt_format; /* LA_PROTO_EVT_FORMAT_* latched by EVT_CFG (P9.2) */
     uint64_t pool_bytes; /* burst capture pool capacity; 0 disables the check */
     la_proto_decoder_config_t decoders[LA_PROTO_DECODER_MAX_SLOTS];
     uint8_t decoder_valid[LA_PROTO_DECODER_MAX_SLOTS];
@@ -158,6 +159,10 @@ LA_CMD_API const la_proto_config_t *la_cmd_dispatch_config(const la_cmd_dispatch
  * la_cmd_dispatch_patgen_valid() is nonzero. */
 LA_CMD_API int la_cmd_dispatch_patgen_valid(const la_cmd_dispatch_t *dispatch);
 LA_CMD_API uint32_t la_cmd_dispatch_patgen_ctrl(const la_cmd_dispatch_t *dispatch);
+
+/* Live event encoding selected by EVT_CFG (0x19, P9.2). Defaults to
+ * LA_PROTO_EVT_FORMAT_RECORDS and is forwarded on the next LIVE_START. */
+LA_CMD_API uint8_t la_cmd_dispatch_evt_format(const la_cmd_dispatch_t *dispatch);
 
 /* Validated decoder slot latch (P7.4). Returns 0 and copies the latched
  * configuration when slot holds one, -1 otherwise. decoder_count is the

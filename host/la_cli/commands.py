@@ -263,11 +263,13 @@ def _parse_decoder_spec(spec: str, sample_rate_hz: int) -> bytes:
               default="off", show_default=True,
               help="configure the on-board pattern generator before starting")
 @click.option("--count", default=None, type=int, help="stop after N events")
+@click.option("--compact", is_flag=True,
+              help="request the compact EVT_BLOCK event encoding (P9.2)")
 @click.option("--csv", is_flag=True, help="emit CSV rows instead of text")
 @click.option("--timeout", "timeout_s", default=None, type=float,
               help="overall deadline in seconds (default: until --count or Ctrl+C)")
 def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int | None,
-         csv: bool, timeout_s: float | None) -> None:
+         compact: bool, csv: bool, timeout_s: float | None) -> None:
     rate_hz = _parse_size(rate)
     sample_div = _sample_div(rate_hz)
     actual_rate = FS_HZ // (sample_div + 1)
@@ -290,8 +292,11 @@ def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int
         if patgen_mode != "off":
             client.configure_patgen(p.PATGEN_EN_MASK | (patgen_modes[patgen_mode] << 4))
         try:
-            events = client.live(decoder_cfg, config=stream_config, count=count,
-                                 timeout_s=timeout_s)
+            events = client.live(
+                decoder_cfg, config=stream_config, count=count,
+                timeout_s=timeout_s,
+                event_format=p.EVT_FORMAT_BLOCK if compact else p.EVT_FORMAT_RECORDS,
+            )
         except KeyboardInterrupt:
             client.stop_live()
             click.echo("live stopped")
@@ -319,7 +324,11 @@ def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int
         click.echo(
             f"overrun: {event['dropped']} events dropped at stage {event['stage']}"
         )
-    click.echo(f"live: {len(decoded)} decoded events, {len(overruns)} overruns")
+    click.echo(
+        f"live: {len(decoded)} decoded events, {len(overruns)} overruns "
+        f"({client.live_stats['wire_bytes']} wire bytes, "
+        f"{'compact' if compact else 'v1'})"
+    )
 
 
 @cli.command(name="trace", help="P8.3 task/queue trace: --start, --stop or --dump (default).")

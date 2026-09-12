@@ -49,10 +49,12 @@ where the receiver documents forward-compatible handling.
 | `0x16` | `LIVE_STOP` | host -> Zynq | empty |
 | `0x17` | `PATGEN_CFG` | host -> Zynq | `patgen_ctrl:u32` (additive v1 extension) |
 | `0x18` | `TRACE_CTRL` | host -> Zynq | `action:u8`, reserved[3] (additive v1 extension) |
+| `0x19` | `EVT_CFG` | host -> Zynq | `format:u8`, reserved[3] (additive v1 extension) |
 | `0x20` | `STATUS` | Zynq -> host | status snapshot, 52 bytes in v1 |
 | `0x21` | `EVT_TRIGGERED` | Zynq -> host | `trig_index:u64` |
 | `0x22` | `EVT_DECODED` | Zynq -> host | zero or more event records |
 | `0x23` | `EVT_OVERRUN` | Zynq -> host | `dropped:u32`, `stage:u8`, reserved[3] |
+| `0x24` | `EVT_BLOCK` | Zynq -> host | versioned compact event block (v1) |
 | `0x30` | `DATA_BEGIN` | Zynq -> host | burst metadata |
 | `0x31` | `DATA_CHUNK` | Zynq -> host | `offset:u32` + up to 1016 bytes |
 | `0x32` | `DATA_END` | Zynq -> host | reconstructed-data `crc32:u32` |
@@ -130,6 +132,40 @@ send, receive, send-failed, receive-failed), `SS`/`SR`/`SF`/`SE` (stream
 buffer send, receive, send-failed, receive-failed), `PL`/`DM` (PL and DMA
 interrupt entry), `SEG` (live segment published), `DEC` (decoder segment
 fed), `TX` (UART frame queued) and `OVR` (loss report queued).
+
+### EVT_CFG, type `0x19`
+
+An additive v1 extension that selects the live event encoding before
+`LIVE_START`. The payload is exactly 4 bytes: `format:u8` plus 3 reserved zero
+bytes. Format 0 (the default) keeps the v1 `EVT_DECODED` records; format 1
+selects the compact `EVT_BLOCK` encoding below. Only these two values are
+valid; anything else is rejected with NAK bad-field, and the command is only
+accepted in IDLE (like `DECODER_CFG`). The selection latches until changed and
+applies to the next `LIVE_START`; the Zynq acknowledges the frame.
+
+### EVT_BLOCK, type `0x24`
+
+The compact live event encoding selected by `EVT_CFG(format=1)`. The payload
+is one versioned block:
+
+| Offset | Size | Field |
+|---:|---:|---|
+| 0 | 1 | `version`, 1 |
+| 1 | 1 | `slot`, decoder slot 0-2 |
+| 2 | 2 | `count`, number of records, little-endian |
+| 4 | 8 | `t_base`, absolute `t_sample` of the first record, little-endian |
+| 12 | ... | `count` records |
+
+Each record is `t_delta:u16`, `kind:u8`, `len:u8`, `data[len]`. `t_delta` is
+the difference between this record's `t_sample` and the previous record's
+(first record: against `t_base`), little-endian. A `t_delta` of `0xFFFF` is an
+escape: the next 8 bytes are the absolute `t_sample:u64` little-endian, and
+the following delta is relative to that value. Event kinds, data semantics and
+the byte-exact timing are identical to `EVT_DECODED`; a block never splits a
+record, and a record that does not fit is left for the next block (drop-newest
+accounting stays in `EVT_OVERRUN`). A `slot` in the header replaces the
+per-record slot of the v1 format. Blocks are produced per decoder and sent as
+their own frames, so `count` records are all from the header slot.
 
 ### DECODER_CFG, type `0x14`
 

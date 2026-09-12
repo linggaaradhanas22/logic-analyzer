@@ -223,6 +223,31 @@ static int handle_trace(uint8_t sequence,
     return 0;
 }
 
+static int handle_evt_cfg(la_cmd_dispatch_t *dispatch,
+                          uint8_t sequence,
+                          const uint8_t *payload,
+                          uint16_t length,
+                          la_cmd_result_t *result)
+{
+    uint8_t format;
+
+    if (length != LA_PROTO_EVT_CFG_WIRE_SIZE) {
+        result_nak(result, LA_PROTO_EVT_CFG, sequence, LA_PROTO_ERROR_BAD_LENGTH);
+        return 0;
+    }
+    if (dispatch->view != LA_CMD_VIEW_IDLE) {
+        result_nak(result, LA_PROTO_EVT_CFG, sequence, LA_PROTO_ERROR_BUSY);
+        return 0;
+    }
+    if (la_proto_unpack_evt_cfg(&format, payload, length) != 0) {
+        result_nak(result, LA_PROTO_EVT_CFG, sequence, LA_PROTO_ERROR_BAD_FIELD);
+        return 0;
+    }
+    dispatch->evt_format = format;
+    result_ack(result, LA_PROTO_EVT_CFG, sequence);
+    return 0;
+}
+
 static uint8_t decoder_enabled_count(const la_cmd_dispatch_t *dispatch)
 {
     uint8_t count = 0u;
@@ -405,6 +430,9 @@ int la_cmd_dispatch_step(la_cmd_dispatch_t *dispatch,
     case LA_PROTO_TRACE_CTRL:
         return handle_trace(sequence, payload, length, result);
 
+    case LA_PROTO_EVT_CFG:
+        return handle_evt_cfg(dispatch, sequence, payload, length, result);
+
     case LA_PROTO_GET_STATUS:
         if (length != 0u) {
             result_nak(result, type, sequence, LA_PROTO_ERROR_BAD_LENGTH);
@@ -436,6 +464,7 @@ int la_cmd_dispatch_step(la_cmd_dispatch_t *dispatch,
     case LA_PROTO_EVT_TRIGGERED:
     case LA_PROTO_EVT_DECODED:
     case LA_PROTO_EVT_OVERRUN:
+    case LA_PROTO_EVT_BLOCK:
     case LA_PROTO_DATA_BEGIN:
     case LA_PROTO_DATA_CHUNK:
     case LA_PROTO_DATA_END:
@@ -522,6 +551,14 @@ uint32_t la_cmd_dispatch_patgen_ctrl(const la_cmd_dispatch_t *dispatch)
         return 0u;
     }
     return dispatch->patgen_ctrl;
+}
+
+uint8_t la_cmd_dispatch_evt_format(const la_cmd_dispatch_t *dispatch)
+{
+    if (dispatch == NULL) {
+        return LA_PROTO_EVT_FORMAT_RECORDS;
+    }
+    return dispatch->evt_format;
 }
 
 int la_cmd_dispatch_decoder(const la_cmd_dispatch_t *dispatch,

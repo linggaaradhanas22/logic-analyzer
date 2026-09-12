@@ -19,7 +19,9 @@ PING, PONG, CONFIG, ARM, ABORT, GET_STATUS = 0x01, 0x02, 0x10, 0x11, 0x12, 0x13
 DECODER_CFG, LIVE_START, LIVE_STOP = 0x14, 0x15, 0x16
 PATGEN_CFG = 0x17
 TRACE_CTRL = 0x18
+EVT_CFG = 0x19
 STATUS, EVT_TRIGGERED, EVT_DECODED, EVT_OVERRUN = 0x20, 0x21, 0x22, 0x23
+EVT_BLOCK = 0x24
 DATA_BEGIN, DATA_CHUNK, DATA_END = 0x30, 0x31, 0x32
 ACK, NAK, LOG = 0x40, 0x41, 0x7F
 
@@ -48,9 +50,16 @@ NAK_SIZE = 3
 DECODER_CFG_SIZE = 20
 PATGEN_CFG_SIZE = 4
 TRACE_CTRL_SIZE = 4
+EVT_CFG_SIZE = 4
 
 # TRACE_CTRL actions (protocol.md, additive v1 extension).
 TRACE_STOP, TRACE_START, TRACE_DUMP = 1, 2, 3
+
+# EVT_CFG formats (protocol.md, P9.2 additive v1 extension).
+EVT_FORMAT_RECORDS, EVT_FORMAT_BLOCK = 0, 1
+EVT_BLOCK_HEADER_SIZE = 12
+EVT_BLOCK_VERSION = 1
+EVT_BLOCK_DELTA_ESCAPE = 0xFFFF
 
 # PATGEN_CTRL field masks (la_regs.h / docs/regmap.yaml).
 PATGEN_EN_MASK = 0x00000001
@@ -206,6 +215,22 @@ def unpack_patgen_cfg(payload: bytes) -> int:
     return struct.unpack_from("<I", payload, 0)[0]
 
 
+def pack_evt_cfg(event_format: int) -> bytes:
+    """EVT_CFG payload: format:u8 plus three reserved zero bytes (P9.2)."""
+    if event_format not in (EVT_FORMAT_RECORDS, EVT_FORMAT_BLOCK):
+        raise ValueError(f"undefined event format: {event_format}")
+    return struct.pack("<BBBB", event_format, 0, 0, 0)
+
+
+def unpack_evt_cfg(payload: bytes) -> int:
+    if len(payload) != EVT_CFG_SIZE:
+        raise FrameError(f"EVT_CFG payload length {len(payload)}")
+    event_format = payload[0]
+    if event_format not in (EVT_FORMAT_RECORDS, EVT_FORMAT_BLOCK):
+        raise FrameError(f"undefined event format: {event_format}")
+    return event_format
+
+
 def pack_trace_ctrl(action: int) -> bytes:
     """TRACE_CTRL payload: action:u8 plus three reserved zero bytes (P8.3)."""
     if action not in (TRACE_STOP, TRACE_START, TRACE_DUMP):
@@ -334,6 +359,45 @@ def iter_decoded_events(payload: bytes):
             raise FrameError("truncated EVT_DECODED record data")
         yield slot, kind, t_sample, payload[offset:offset + length]
         offset += length
+
+
+def iter_block_events(payload: bytes):
+    """Parses one EVT_BLOCK v1 payload into (slot, kind, t_sample, data).
+
+    Resolves the per-record u16 deltas against the header t_base and the
+    absolute-timestamp escape (0xFFFF + u64). Raises FrameError on a bad
+    version, a truncated record or a count mismatch."""
+    if len(payload) < EVT_BLOCK_HEADER_SIZE:
+        raise FrameError("truncated EVT_BLOCK header")
+    version, slot = payload[0], payload[1]
+    if version != EVT_BLOCK_VERSION:
+        raise FrameError(f"unsupported EVT_BLOCK version {version}")
+    count = struct.unpack_from("<H", payload, 2)[0]
+    t_sample = struct.unpack_from("<Q", payload, 4)[0]
+    offset = EVT_BLOCK_HEADER_SIZE
+    for _ in range(count):
+        if offset + 2 > len(payload):
+            raise FrameError("truncated EVT_BLOCK delta")
+        delta = struct.unpack_from("<H", payload, offset)[0]
+        offset += 2
+        if delta == EVT_BLOCK_DELTA_ESCAPE:
+            if offset + 8 > len(payload):
+                raise FrameError("truncated EVT_BLOCK absolute timestamp")
+            t_sample = struct.unpack_from("<Q", payload, offset)[0]
+            offset += 8
+        else:
+            t_sample += delta
+        if offset + 2 > len(payload):
+            raise FrameError("truncated EVT_BLOCK record header")
+        kind = payload[offset]
+        length = payload[offset + 1]
+        offset += 2
+        if offset + length > len(payload):
+            raise FrameError("truncated EVT_BLOCK record data")
+        yield slot, kind, t_sample, payload[offset:offset + length]
+        offset += length
+    if offset != len(payload):
+        raise FrameError("trailing bytes after the EVT_BLOCK records")
 
 
 class FrameParser:

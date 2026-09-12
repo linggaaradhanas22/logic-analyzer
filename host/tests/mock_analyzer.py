@@ -42,7 +42,7 @@ STATUS_PAYLOAD = (
 assert len(STATUS_PAYLOAD) == 52
 
 
-_LIVE_SCENARIOS = ("live", "live_link_overrun")
+_LIVE_SCENARIOS = ("live", "live_link_overrun", "live_compact")
 
 
 def counter_samples(total: int) -> bytes:
@@ -67,6 +67,7 @@ class MockAnalyzer:
         self.last_patgen: bytes | None = None
         self.last_decoder: bytes | None = None
         self.last_trace_action: int | None = None
+        self.last_evt_format: int | None = None
         self.parser = p.FrameParser()
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -156,6 +157,9 @@ class MockAnalyzer:
             elif message_type == p.PATGEN_CFG:
                 self.last_patgen = payload
                 self._send(connection, p.ACK, p.pack_ack(p.PATGEN_CFG, sequence))
+            elif message_type == p.EVT_CFG:
+                self.last_evt_format = p.unpack_evt_cfg(payload)
+                self._send(connection, p.ACK, p.pack_ack(p.EVT_CFG, sequence))
             elif message_type == p.TRACE_CTRL:
                 self.last_trace_action = p.unpack_trace_ctrl(payload)
                 self._send(connection, p.ACK, p.pack_ack(p.TRACE_CTRL, sequence))
@@ -245,6 +249,27 @@ class MockAnalyzer:
         self._sequence = (self._sequence + 1) & 0xFF
         return sequence
 
+    def _stream_live_compact(self, connection: socket.socket) -> None:
+        """One EVT_BLOCK v1 with five BYTE records, including a delta escape
+        that exercises the absolute-timestamp path."""
+        t_samples = [10000, 10100, 10200, 10200 + 0xFFFF,
+                     10200 + 0xFFFF + 100]
+        payload = bytearray()
+        payload += bytes([p.EVT_BLOCK_VERSION, 0])  # version, slot
+        payload += struct.pack("<H", len(t_samples))
+        payload += struct.pack("<Q", t_samples[0])
+        previous = t_samples[0]
+        for index, t_sample in enumerate(t_samples):
+            delta = t_sample - previous
+            if index == 0 or delta >= 0xFFFF:
+                payload += struct.pack("<H", 0xFFFF)
+                payload += struct.pack("<Q", t_sample)
+            else:
+                payload += struct.pack("<H", delta)
+            payload += bytes([1, 1, b"HELLO"[index]])  # kind BYTE, len, data
+            previous = t_sample
+        self._send(connection, p.EVT_BLOCK, bytes(payload))
+
     def _stream_trace_dump(self, connection: socket.socket) -> None:
         """P8.3: a small deterministic dump (one task, one queue, four
         records) so the client and the renderer are exercised without
@@ -265,7 +290,11 @@ class MockAnalyzer:
     def _stream_live(self, connection: socket.socket) -> None:
         """Streams three EVT_DECODED batches of decoded 'LA-TEST\\n' bytes.
         `live` ends with a stage-1 decoder overrun; `live_link_overrun` ends
-        with a stage-2 link overrun (the P8.4 relay report)."""
+        with a stage-2 link overrun (the P8.4 relay report). `live_compact`
+        instead sends one EVT_BLOCK with a delta escape."""
+        if self.scenario == "live_compact":
+            self._stream_live_compact(connection)
+            return
         text = b"LA-TEST\n"
         base = 10_000
         for batch in range(3):

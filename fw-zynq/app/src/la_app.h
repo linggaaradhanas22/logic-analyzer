@@ -94,6 +94,7 @@ typedef struct la_ctrl_msg {
     la_ctrl_kind_t kind;
     la_proto_config_t config;
     uint8_t config_valid;
+    uint8_t evt_format; /* LA_PROTO_EVT_FORMAT_* for this live session (P9.2) */
     la_proto_decoder_config_t decoders[LA_PROTO_DECODER_MAX_SLOTS];
     uint8_t decoder_valid[LA_PROTO_DECODER_MAX_SLOTS];
     uint8_t decoder_count;
@@ -160,6 +161,7 @@ typedef struct la_live_segment_msg {
 typedef struct la_decoder_config_msg {
     la_proto_decoder_config_t config;
     uint8_t valid;
+    uint8_t evt_format; /* live event encoding for this decoder (P9.2) */
 } la_decoder_config_msg_t;
 
 struct la_app;
@@ -167,6 +169,7 @@ struct la_app;
 typedef struct la_decoder_ctx {
     struct la_app *app;
     uint8_t slot;
+    uint8_t evt_format; /* live event encoding from the latched EVT_CFG */
     QueueHandle_t cfg_q;
     QueueHandle_t seg_q;
     TaskHandle_t task;

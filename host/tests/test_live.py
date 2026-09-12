@@ -159,6 +159,35 @@ def test_live_client_collect_events_false_keeps_overruns(analyzer) -> None:
     assert len(overruns) == 1 and overruns[0]["dropped"] == 3
 
 
+def test_live_client_compact_blocks(analyzer) -> None:
+    mock = analyzer("live_compact")
+    client = AnalyzerClient(open_uri(mock.uri))
+    try:
+        events = client.live(p.pack_decoder_cfg_uart(0, 0, 115200, 10_000_000),
+                             count=5, event_format=p.EVT_FORMAT_BLOCK)
+        stats = dict(client.live_stats)
+    finally:
+        client.close()
+    assert mock.last_evt_format == p.EVT_FORMAT_BLOCK
+    decoded = [e for e in events if not e.get("overrun")]
+    assert [e["t_sample"] for e in decoded] == [
+        10000, 10100, 10200, 10200 + 0xFFFF, 10200 + 0xFFFF + 100,
+    ]
+    assert [e["data"] for e in decoded] == [bytes([c]) for c in b"HELLO"]
+    # Header 12 + records 13/5/5/13/5 = 53 payload, +7 frame overhead.
+    assert stats == {"events": 5, "frames": 1, "wire_bytes": 60, "overruns": 0}
+
+
+def test_live_command_compact(analyzer) -> None:
+    mock = analyzer("live_compact")
+    result = CliRunner().invoke(cli, [
+        "live", "--target", mock.uri, "--compact", "--count", "5",
+    ])
+    assert result.exit_code == 0, result.output
+    assert mock.last_evt_format == p.EVT_FORMAT_BLOCK
+    assert "compact" in result.output
+
+
 def test_live_command_text(analyzer) -> None:
     mock = analyzer("live")
     result = CliRunner().invoke(cli, [

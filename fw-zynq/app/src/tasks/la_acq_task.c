@@ -11,6 +11,11 @@
 #include <string.h>
 
 #define LA_ACQ_COMPLETE_POLLS 50u
+/* Upper bound on waiting for TxTask to release the capture buffer. TxTask
+ * abandons a stalled burst after LA_TX_ACK_TIMEOUT_MS, so this only trips if
+ * TxTask itself is wedged; AcqTask then reports an abort instead of blocking
+ * forever and lets the queued ABORT be processed. */
+#define LA_ACQ_BUFFER_WAIT_MS 5000u
 
 typedef struct la_acq_ctx {
     la_app_t *app;
@@ -42,8 +47,10 @@ static void acq_post_overrun(la_acq_ctx_t *ctx, uint32_t dropped, uint8_t stage)
     ctx->app->live_overflows++;
 }
 
-static void acq_wait_buffer_free(la_acq_ctx_t *ctx)
+static int acq_wait_buffer_free(la_acq_ctx_t *ctx)
 {
+    TickType_t start = xTaskGetTickCount();
+
     while (ctx->buffer_busy != 0u) {
         uint32_t bits = 0u;
 
@@ -53,7 +60,11 @@ static void acq_wait_buffer_free(la_acq_ctx_t *ctx)
                 ctx->buffer_busy = 0u;
             }
         }
+        if ((xTaskGetTickCount() - start) > pdMS_TO_TICKS(LA_ACQ_BUFFER_WAIT_MS)) {
+            return -1;
+        }
     }
+    return 0;
 }
 
 static void acq_post_notice(la_acq_ctx_t *ctx, la_notice_kind_t kind)
@@ -196,7 +207,10 @@ static void acq_start_live(la_acq_ctx_t *ctx, const la_ctrl_msg_t *message)
     uint32_t slot;
     uint8_t d;
 
-    acq_wait_buffer_free(ctx);
+    if (acq_wait_buffer_free(ctx) != 0) {
+        acq_post_notice(ctx, LA_NOTICE_ABORTED);
+        return;
+    }
 
     acq_apply_config(app, &message->config);
     la_regs_write32(&app->regs, LA_REG_IRQ_STAT_OFFSET,
@@ -230,6 +244,7 @@ static void acq_start_live(la_acq_ctx_t *ctx, const la_ctrl_msg_t *message)
             memset(&config, 0, sizeof(config));
             config.config = message->decoders[d];
             config.valid = 1u;
+            config.evt_format = message->evt_format;
             if (xQueueSend(app->decoders[d].cfg_q, &config, 0) == pdTRUE) {
                 ctx->decoder_enabled[d] = 1u;
                 ctx->enabled_decoders++;
@@ -457,7 +472,10 @@ static void acq_handle_ctrl(la_acq_ctx_t *ctx, const la_ctrl_msg_t *message)
     if (message->kind != LA_CTRL_ARM || message->config_valid == 0u) {
         return;
     }
-    acq_wait_buffer_free(ctx);
+    if (acq_wait_buffer_free(ctx) != 0) {
+        acq_post_notice(ctx, LA_NOTICE_ABORTED);
+        return;
+    }
 
     ctx->encoding = (uint8_t)(message->config.mode & LA_REG_MODE_ENCODING_MASK);
     ctx->sample_rate_hz = 100000000u / (message->config.sample_div + 1u);

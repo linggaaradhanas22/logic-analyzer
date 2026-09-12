@@ -116,6 +116,46 @@ def test_patgen_cfg_layout() -> None:
         p.unpack_patgen_cfg(b"\x00\x00\x00")
 
 
+def test_evt_cfg_layout() -> None:
+    assert p.pack_evt_cfg(p.EVT_FORMAT_BLOCK) == bytes([1, 0, 0, 0])
+    assert p.unpack_evt_cfg(bytes([0, 0, 0, 0])) == p.EVT_FORMAT_RECORDS
+    with pytest.raises(ValueError):
+        p.pack_evt_cfg(2)
+    with pytest.raises(p.FrameError):
+        p.unpack_evt_cfg(bytes([2, 0, 0, 0]))
+    with pytest.raises(p.FrameError):
+        p.unpack_evt_cfg(b"\x00\x00\x00")
+
+
+def test_evt_block_round_trip() -> None:
+    payload = bytearray([p.EVT_BLOCK_VERSION, 2])
+    payload += struct.pack("<H", 4)
+    payload += struct.pack("<Q", 1000)
+    # delta 0, delta 100, escape absolute, delta 5
+    payload += struct.pack("<HBB", 0, 1, 1) + b"A"
+    payload += struct.pack("<HBB", 100, 1, 1) + b"B"
+    payload += struct.pack("<H", 0xFFFF) + struct.pack("<Q", 1000 + 0xFFFF)
+    payload += struct.pack("<BB", 1, 1) + b"C"
+    payload += struct.pack("<HBB", 5, 1, 1) + b"D"
+    events = list(p.iter_block_events(bytes(payload)))
+    assert [(slot, kind, t, data) for slot, kind, t, data in events] == [
+        (2, 1, 1000, b"A"),
+        (2, 1, 1100, b"B"),
+        (2, 1, 1000 + 0xFFFF, b"C"),
+        (2, 1, 1000 + 0xFFFF + 5, b"D"),
+    ]
+    with pytest.raises(p.FrameError):
+        list(p.iter_block_events(bytes([2, 0]) + payload[2:]))  # bad version
+    with pytest.raises(p.FrameError):
+        list(p.iter_block_events(bytes(payload[:-1])))  # truncated
+    with pytest.raises(p.FrameError):
+        list(p.iter_block_events(bytes(payload) + b"\x00"))  # trailing bytes
+    short = bytearray(payload)
+    short[2] = 9  # count says 9 but only 4 records follow
+    with pytest.raises(p.FrameError):
+        list(p.iter_block_events(bytes(short)))
+
+
 def test_data_begin_and_end_layout() -> None:
     begin = struct.pack("<Q", 0x1122334455667788) + bytes([1, 0, 0, 0]) + struct.pack(
         "<I", 100_000_000

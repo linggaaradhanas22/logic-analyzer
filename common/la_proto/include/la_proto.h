@@ -18,6 +18,10 @@
 #define LA_PROTO_DECODER_CONFIG_WIRE_SIZE ((uint16_t)20u)
 #define LA_PROTO_PATGEN_CFG_WIRE_SIZE ((uint16_t)4u)
 #define LA_PROTO_TRACE_CTRL_WIRE_SIZE ((uint16_t)4u)
+#define LA_PROTO_EVT_CFG_WIRE_SIZE ((uint16_t)4u)
+#define LA_PROTO_EVT_BLOCK_HEADER_SIZE ((uint16_t)12u)
+#define LA_PROTO_EVT_BLOCK_VERSION ((uint8_t)1u)
+#define LA_PROTO_EVT_BLOCK_DELTA_ESCAPE ((uint16_t)0xFFFFu)
 #define LA_PROTO_PONG_WIRE_SIZE ((uint16_t)16u)
 #define LA_PROTO_ACK_WIRE_SIZE ((uint16_t)2u)
 #define LA_PROTO_NAK_WIRE_SIZE ((uint16_t)3u)
@@ -39,10 +43,12 @@ typedef enum la_proto_message_type {
     LA_PROTO_LIVE_STOP = 0x16,
     LA_PROTO_PATGEN_CFG = 0x17,
     LA_PROTO_TRACE_CTRL = 0x18,
+    LA_PROTO_EVT_CFG = 0x19,
     LA_PROTO_STATUS = 0x20,
     LA_PROTO_EVT_TRIGGERED = 0x21,
     LA_PROTO_EVT_DECODED = 0x22,
     LA_PROTO_EVT_OVERRUN = 0x23,
+    LA_PROTO_EVT_BLOCK = 0x24,
     LA_PROTO_DATA_BEGIN = 0x30,
     LA_PROTO_DATA_CHUNK = 0x31,
     LA_PROTO_DATA_END = 0x32,
@@ -251,6 +257,20 @@ LA_PROTO_API size_t la_proto_pack_trace_ctrl(uint8_t action,
 LA_PROTO_API int la_proto_unpack_trace_ctrl(uint8_t *action,
                                             const uint8_t *input,
                                             size_t input_length);
+
+/* EVT_CFG payload: format:u8, reserved[3] zero (P9.2). Format 0 keeps the v1
+ * EVT_DECODED records; format 1 selects the compact EVT_BLOCK encoding. */
+typedef enum la_proto_evt_format {
+    LA_PROTO_EVT_FORMAT_RECORDS = 0,
+    LA_PROTO_EVT_FORMAT_BLOCK = 1
+} la_proto_evt_format_t;
+
+LA_PROTO_API size_t la_proto_pack_evt_cfg(uint8_t format,
+                                          uint8_t *output,
+                                          size_t output_capacity);
+LA_PROTO_API int la_proto_unpack_evt_cfg(uint8_t *format,
+                                         const uint8_t *input,
+                                         size_t input_length);
 
 LA_PROTO_API size_t la_proto_pack_pong(const la_proto_pong_t *pong,
                                        uint8_t *output,

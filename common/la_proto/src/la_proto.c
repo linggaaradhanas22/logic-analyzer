@@ -124,10 +124,12 @@ int la_proto_message_type_valid(uint8_t type)
     case LA_PROTO_LIVE_STOP:
     case LA_PROTO_PATGEN_CFG:
     case LA_PROTO_TRACE_CTRL:
+    case LA_PROTO_EVT_CFG:
     case LA_PROTO_STATUS:
     case LA_PROTO_EVT_TRIGGERED:
     case LA_PROTO_EVT_DECODED:
     case LA_PROTO_EVT_OVERRUN:
+    case LA_PROTO_EVT_BLOCK:
     case LA_PROTO_DATA_BEGIN:
     case LA_PROTO_DATA_CHUNK:
     case LA_PROTO_DATA_END:
@@ -390,6 +392,34 @@ int la_proto_unpack_trace_ctrl(uint8_t *action,
         return -1;
     }
     *action = input[0];
+    return 0;
+}
+
+size_t la_proto_pack_evt_cfg(uint8_t format,
+                             uint8_t *output,
+                             size_t output_capacity)
+{
+    if (output == NULL || output_capacity < LA_PROTO_EVT_CFG_WIRE_SIZE ||
+        format > LA_PROTO_EVT_FORMAT_BLOCK) {
+        return 0u;
+    }
+    output[0] = format;
+    output[1] = 0u;
+    output[2] = 0u;
+    output[3] = 0u;
+    return LA_PROTO_EVT_CFG_WIRE_SIZE;
+}
+
+int la_proto_unpack_evt_cfg(uint8_t *format,
+                            const uint8_t *input,
+                            size_t input_length)
+{
+    if (format == NULL || input == NULL ||
+        input_length != LA_PROTO_EVT_CFG_WIRE_SIZE ||
+        input[0] > LA_PROTO_EVT_FORMAT_BLOCK) {
+        return -1;
+    }
+    *format = input[0];
     return 0;
 }
 

@@ -324,7 +324,8 @@ class AnalyzerClient:
              count: int | None = None, timeout_s: float | None = None,
              read_stall_s: float = 0.0,
              on_started=None, stop_on_overrun: bool = True,
-             collect_events: bool = True) -> list[dict]:
+             collect_events: bool = True,
+             event_format: int = p.EVT_FORMAT_RECORDS) -> list[dict]:
         """Configures the live stream and collects decoded events (P7.5).
 
         `config` is an optional 37-byte STREAM CONFIG payload sent before the
@@ -342,14 +343,30 @@ class AnalyzerClient:
         sustained-overload session runs for its full deadline (P8.5
         throughput measurement). `collect_events=False` counts decoded events
         without retaining them, so a long high-rate drain stays bounded; the
-        returned list then holds only the overrun records."""
+        returned list then holds only the overrun records. `event_format`
+        selects the encoding (P9.2): the default 0 keeps the v1 EVT_DECODED
+        records, 1 requests the compact EVT_BLOCK encoding with an EVT_CFG
+        frame before DECODER_CFG. `self.live_stats` reports the decoded event
+        count, received event frames and their wire bytes for the comparison
+        of the two encodings."""
         if timeout_s is None:
             deadline = float("inf")
         else:
             deadline = time.monotonic() + timeout_s
+        self.live_stats = {"events": 0, "frames": 0, "wire_bytes": 0, "overruns": 0}
         if config is not None:
             self._send(p.CONFIG, config)
             self._expect_ack(p.CONFIG, "CONFIG", deadline)
+        # The firmware latch persists across sessions, so always set the
+        # requested format explicitly. A pre-P9.2 peer NAKs EVT_CFG with
+        # unsupported; for the default records format that is harmless.
+        try:
+            self._send(p.EVT_CFG, p.pack_evt_cfg(event_format))
+            self._expect_ack(p.EVT_CFG, "EVT_CFG", deadline)
+        except AnalyzerError as exc:
+            if (event_format != p.EVT_FORMAT_RECORDS or
+                    exc.error_code != p.ERROR_UNSUPPORTED):
+                raise
         self._send(p.DECODER_CFG, decoder_config)
         self._expect_ack(p.DECODER_CFG, "DECODER_CFG", deadline)
         self._send(p.LIVE_START)
@@ -357,6 +374,16 @@ class AnalyzerClient:
         stop_requested = False
         start_acknowledged = False
         decoded_seen = 0
+
+        def events_of(message_type: int, payload: bytes):
+            if message_type == p.EVT_BLOCK:
+                return p.iter_block_events(payload)
+            return p.iter_decoded_events(payload)
+
+        def account_frame(message_type: int, payload: bytes) -> None:
+            if message_type in (p.EVT_DECODED, p.EVT_BLOCK):
+                self.live_stats["frames"] += 1
+                self.live_stats["wire_bytes"] += len(payload) + p.FRAME_OVERHEAD
 
         def on_live(message_type, sequence, payload):
             nonlocal stop_requested, start_acknowledged, decoded_seen
@@ -369,16 +396,17 @@ class AnalyzerClient:
                     if on_started is not None:
                         on_started()
                 return False
-            if message_type == p.EVT_DECODED:
+            account_frame(message_type, payload)
+            if message_type in (p.EVT_DECODED, p.EVT_BLOCK):
                 arrival = time.monotonic()
                 if not collect_events:
-                    for _slot, _kind, _t_sample, _data in p.iter_decoded_events(payload):
+                    for _slot, _kind, _t_sample, _data in events_of(message_type, payload):
                         decoded_seen += 1
                         if count is not None and decoded_seen >= count:
                             stop_requested = True
                             break
                     return stop_requested
-                for slot, kind, t_sample, data in p.iter_decoded_events(payload):
+                for slot, kind, t_sample, data in events_of(message_type, payload):
                     collected.append(
                         {"slot": slot, "kind": kind, "t_sample": t_sample,
                          "data": data, "arrival": arrival}
@@ -402,6 +430,7 @@ class AnalyzerClient:
             if message_type == p.EVT_OVERRUN:
                 dropped = int.from_bytes(payload[:4], "little")
                 stage = payload[4]
+                self.live_stats["overruns"] += 1
                 collected.append({"overrun": True, "dropped": dropped, "stage": stage})
                 return stop_on_overrun
             if message_type == p.NAK:
@@ -422,10 +451,11 @@ class AnalyzerClient:
             batches and any EVT_OVERRUN report may still be in flight."""
             if message_type == p.ACK:
                 return payload[0] == p.LIVE_STOP
-            if message_type == p.EVT_DECODED:
+            account_frame(message_type, payload)
+            if message_type in (p.EVT_DECODED, p.EVT_BLOCK):
                 if collect_events:
                     arrival = time.monotonic()
-                    for slot, kind, t_sample, data in p.iter_decoded_events(payload):
+                    for slot, kind, t_sample, data in events_of(message_type, payload):
                         collected.append(
                             {"slot": slot, "kind": kind, "t_sample": t_sample,
                              "data": data, "arrival": arrival}
@@ -434,6 +464,7 @@ class AnalyzerClient:
             if message_type == p.EVT_OVERRUN:
                 dropped = int.from_bytes(payload[:4], "little")
                 stage = payload[4]
+                self.live_stats["overruns"] += 1
                 collected.append({"overrun": True, "dropped": dropped, "stage": stage})
                 return False
             return False
@@ -451,6 +482,9 @@ class AnalyzerClient:
                     if not event.get("overrun"):
                         decoded_count += 1
             collected = trimmed
+        self.live_stats["events"] = (
+            len(collected) if collect_events else decoded_seen
+        )
         return collected
 
     def stop_live(self) -> None:

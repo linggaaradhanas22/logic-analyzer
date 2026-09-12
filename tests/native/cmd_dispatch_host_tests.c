@@ -609,6 +609,39 @@ static int test_trace_ctrl(void)
     return 0;
 }
 
+static int test_evt_cfg(void)
+{
+    la_cmd_dispatch_t dispatch;
+    la_cmd_result_t result;
+    uint8_t payload[LA_PROTO_EVT_CFG_WIRE_SIZE];
+
+    la_cmd_dispatch_init(&dispatch, TEST_FW_VERSION, TEST_PL_ID);
+    CHECK(la_cmd_dispatch_evt_format(&dispatch) == LA_PROTO_EVT_FORMAT_RECORDS,
+          "event format defaults to records");
+    CHECK(la_proto_pack_evt_cfg(LA_PROTO_EVT_FORMAT_BLOCK, payload,
+                                sizeof(payload)) == LA_PROTO_EVT_CFG_WIRE_SIZE,
+          "EVT_CFG packs");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_EVT_CFG, 0x31u, payload,
+                                LA_PROTO_EVT_CFG_WIRE_SIZE, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_ACK &&
+              result.type == LA_PROTO_EVT_CFG && result.sequence == 0x31u,
+          "EVT_CFG block format acknowledged");
+    CHECK(la_cmd_dispatch_evt_format(&dispatch) == LA_PROTO_EVT_FORMAT_BLOCK,
+          "event format latched");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_EVT_CFG, 0x32u, payload, 3u,
+                                0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_LENGTH,
+          "EVT_CFG bad length NAK");
+    payload[0] = 9u;
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_EVT_CFG, 0x33u, payload, 4u,
+                                0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_FIELD,
+          "EVT_CFG undefined format NAK bad field");
+    return 0;
+}
+
 static int test_arm_pool_capacity(void)
 {
     la_cmd_dispatch_t dispatch;
@@ -672,7 +705,7 @@ int main(void)
         test_get_status() != 0 || test_decoder_cfg() != 0 ||
         test_live_lifecycle() != 0 ||
         test_patgen_cfg() != 0 || test_trace_ctrl() != 0 ||
-        test_arm_pool_capacity() != 0 ||
+        test_evt_cfg() != 0 || test_arm_pool_capacity() != 0 ||
         test_ack_nak_routing() != 0 || test_argument_guards() != 0) {
         return 1;
     }

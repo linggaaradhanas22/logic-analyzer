@@ -480,6 +480,80 @@ static int test_event_batch(void)
     return 0;
 }
 
+static int test_event_block(void)
+{
+    la_event_batch_t batch;
+    la_decode_event_t event;
+    uint64_t last = 0u;
+    uint16_t offset;
+
+    la_event_batch_init_block(&batch, 2u);
+    CHECK(batch.type == LA_PROTO_EVT_BLOCK, "block type");
+    CHECK(batch.format == LA_PROTO_EVT_FORMAT_BLOCK, "block format");
+    CHECK(la_event_batch_empty(&batch) == 1, "block starts empty");
+    CHECK(la_event_batch_last_sample(&batch, &last) == -1, "empty block has no sample");
+
+    memset(&event, 0, sizeof(event));
+    event.kind = LA_DECODE_EVENT_BYTE;
+    event.t_sample = 1000u;
+    event.length = 1u;
+    event.data[0] = 0x4Cu;
+    CHECK(la_event_batch_add(&batch, 9u, &event) == 1, "first block record");
+    CHECK(la_event_batch_length(&batch) ==
+              LA_PROTO_EVT_BLOCK_HEADER_SIZE + 5u,
+          "block header plus 5-byte record");
+    CHECK(batch.data[0] == LA_PROTO_EVT_BLOCK_VERSION && batch.data[1] == 2u,
+          "block version and header slot");
+    CHECK(batch.data[2] == 1u && batch.data[3] == 0u, "block count 1");
+    CHECK(batch.data[4] == 0xE8u && batch.data[5] == 0x03u, "t_base little-endian");
+    CHECK(batch.data[12] == 0u && batch.data[13] == 0u, "first delta is zero");
+    CHECK(batch.data[14] == LA_DECODE_EVENT_BYTE && batch.data[15] == 1u &&
+              batch.data[16] == 0x4Cu,
+          "first block record fields");
+
+    event.t_sample = 1100u;
+    CHECK(la_event_batch_add(&batch, 0u, &event) == 1, "second block record");
+    CHECK(batch.data[2] == 2u, "block count 2");
+    CHECK(batch.data[17] == 100u && batch.data[18] == 0u, "u16 delta 100");
+    CHECK(la_event_batch_last_sample(&batch, &last) == 0 && last == 1100u,
+          "block last sample");
+
+    event.t_sample = 1100u + LA_PROTO_EVT_BLOCK_DELTA_ESCAPE;
+    CHECK(la_event_batch_add(&batch, 0u, &event) == 1, "escape record added");
+    offset = (uint16_t)(LA_PROTO_EVT_BLOCK_HEADER_SIZE + 5u + 5u);
+    CHECK(batch.data[offset] == 0xFFu && batch.data[offset + 1u] == 0xFFu,
+          "escape marker");
+    CHECK(batch.data[offset + 2u] == (uint8_t)(event.t_sample & 0xFFu) &&
+              batch.data[offset + 9u] == 0u,
+          "escape absolute timestamp little-endian");
+    CHECK(batch.data[offset + 10u] == LA_DECODE_EVENT_BYTE &&
+              batch.data[offset + 11u] == 1u && batch.data[offset + 12u] == 0x4Cu,
+          "escape record fields");
+    CHECK(la_event_batch_last_sample(&batch, &last) == 0 && last == event.t_sample,
+          "escape last sample");
+
+    la_event_batch_init(&batch);
+    event.t_sample = 42u;
+    (void)la_event_batch_add(&batch, 1u, &event);
+    event.t_sample = 77u;
+    (void)la_event_batch_add(&batch, 1u, &event);
+    CHECK(la_event_batch_last_sample(&batch, &last) == 0 && last == 77u,
+          "records last sample");
+
+    la_event_batch_init_block(&batch, 0u);
+    event.length = 16u;
+    while (la_event_batch_add(&batch, 0u, &event) == 1) {
+        /* fill */
+    }
+    CHECK(la_event_batch_length(&batch) <= LA_EVENT_BATCH_CAPACITY,
+          "block never exceeds the payload cap");
+    CHECK(la_event_batch_records(&batch) > 1u, "block holds many records");
+    CHECK(batch.data[2] == (uint8_t)(batch.records & 0xFFu) &&
+              batch.data[3] == (uint8_t)(batch.records >> 8),
+          "header count tracks records");
+    return 0;
+}
+
 static int test_evt_overrun_payload(void)
 {
     uint8_t payload[LA_PROTO_EVT_OVERRUN_WIRE_SIZE];
@@ -508,7 +582,7 @@ int main(void)
     if (test_live_ring() != 0 || test_decoder_core_uart() != 0 ||
         test_decoder_core_spi() != 0 || test_decoder_core_i2c() != 0 ||
         test_decoder_core_guards() != 0 || test_event_batch() != 0 ||
-        test_evt_overrun_payload() != 0) {
+        test_event_block() != 0 || test_evt_overrun_payload() != 0) {
         return 1;
     }
     puts("PASS: la_native_live");

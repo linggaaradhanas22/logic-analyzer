@@ -10,6 +10,10 @@
 #include <string.h>
 
 #define LA_TX_SEND_TIMEOUT pdMS_TO_TICKS(100)
+/* A burst job that makes no progress for this long (no chunk sent and no ACK
+ * received) is abandoned so a vanished host cannot wedge AcqTask waiting for
+ * the capture buffer forever (observed when the ESP32 relay stalled). */
+#define LA_TX_ACK_TIMEOUT_MS 2000u
 
 typedef struct la_tx_slot_map {
     uint8_t sequence;
@@ -27,6 +31,7 @@ typedef struct la_tx_ctx {
     uint8_t begin_sent;
     uint8_t end_sent;
     uint64_t next_chunk;
+    TickType_t last_progress;
     uint32_t jobs;
     uint32_t abandons;
     uint32_t reported_drops[LA_DECODER_COUNT];
@@ -121,6 +126,11 @@ static void tx_abandon(la_tx_ctx_t *ctx)
     }
 }
 
+static void tx_note_progress(la_tx_ctx_t *ctx)
+{
+    ctx->last_progress = xTaskGetTickCount();
+}
+
 static void tx_pump(la_tx_ctx_t *ctx)
 {
     uint8_t payload[LA_PROTO_DATA_CHUNK_MAX + LA_PROTO_DATA_CHUNK_FIELD_SIZE];
@@ -150,6 +160,7 @@ static void tx_pump(la_tx_ctx_t *ctx)
             tx_abandon(ctx);
             return;
         }
+        tx_note_progress(ctx);
         ctx->app->tx_retransmits++;
     }
 
@@ -166,6 +177,7 @@ static void tx_pump(la_tx_ctx_t *ctx)
                 tx_abandon(ctx);
                 return;
             }
+            tx_note_progress(ctx);
             ctx->begin_sent = 1u;
         } else if (out.kind == LA_TX_PACK_CHUNK) {
             if (la_tx_win_push(&ctx->win, sequence) != 0) {
@@ -180,6 +192,7 @@ static void tx_pump(la_tx_ctx_t *ctx)
                 tx_abandon(ctx);
                 return;
             }
+            tx_note_progress(ctx);
             ctx->app->tx_frames++;
         } else {
             if (tx_write(ctx, LA_PROTO_DATA_END, sequence, payload,
@@ -187,6 +200,7 @@ static void tx_pump(la_tx_ctx_t *ctx)
                 tx_abandon(ctx);
                 return;
             }
+            tx_note_progress(ctx);
             ctx->end_sent = 1u;
             break;
         }
@@ -228,11 +242,13 @@ static void tx_start_job(la_tx_ctx_t *ctx, const la_tx_job_t *job)
     ctx->begin_sent = 0u;
     ctx->end_sent = 0u;
     ctx->next_chunk = 0u;
+    tx_note_progress(ctx);
     tx_pump(ctx);
 }
 
 static void tx_handle_ack(la_tx_ctx_t *ctx, const la_ack_msg_t *message)
 {
+    tx_note_progress(ctx);
     switch (message->kind) {
     case LA_ACK_CHUNK:
         if (la_tx_win_ack(&ctx->win, message->sequence) == 0) {
@@ -281,32 +297,20 @@ static void tx_report_decoder_overruns(la_tx_ctx_t *ctx)
 }
 
 /* P8.2: worst UART-byte-to-send latency for the live stream. The last record
- * in the block is the newest event; its t_sample is the wire time in
- * (sample_div+1) sample clocks and the ARM XTime is the epoch. */
+ * in the block is the newest event (for either event encoding); its t_sample
+ * is the wire time in (sample_div+1) sample clocks and the ARM XTime is the
+ * epoch. */
 static void tx_track_latency(la_tx_ctx_t *ctx, const la_event_batch_t *block)
 {
     uint64_t arm = ctx->app->live_arm_time;
-    uint32_t offset = 0u;
     uint64_t t_sample = 0u;
     uint64_t elapsed_us;
     uint64_t sample_us;
     uint32_t latency_us;
     XTime now;
 
-    if (arm == 0u || block == NULL || block->length == 0u) {
+    if (arm == 0u || la_event_batch_last_sample(block, &t_sample) != 0) {
         return;
-    }
-    while (offset + 11u <= block->length) {
-        uint64_t t = 0u;
-        uint32_t index;
-        uint8_t length;
-
-        for (index = 0u; index < 8u; ++index) {
-            t |= (uint64_t)block->data[offset + 2u + index] << (8u * index);
-        }
-        length = block->data[offset + 10u];
-        t_sample = t;
-        offset += 11u + (uint32_t)length;
     }
     XTime_GetTime(&now);
     elapsed_us = ((uint64_t)(now - arm) * 1000000u) / (uint64_t)COUNTS_PER_SECOND;
@@ -345,9 +349,8 @@ static void tx_drain_events(la_tx_ctx_t *ctx)
                 return;
             }
             tx_track_latency(ctx, block);
-            (void)tx_write(ctx, LA_PROTO_EVT_DECODED,
-                           la_app_next_sequence(ctx->app), block->data,
-                           block->length);
+            (void)tx_write(ctx, block->type, la_app_next_sequence(ctx->app),
+                           block->data, block->length);
         }
         if (block != NULL &&
             xQueueSend(ctx->app->block_q, &block, 0) != pdTRUE) {
@@ -372,6 +375,11 @@ void la_tx_task(void *parameters)
 
     for (;;) {
         (void)xTaskNotifyWait(0u, UINT32_MAX, NULL, pdMS_TO_TICKS(2));
+        if (ctx->active != 0u &&
+            (xTaskGetTickCount() - ctx->last_progress) >
+                pdMS_TO_TICKS(LA_TX_ACK_TIMEOUT_MS)) {
+            tx_abandon(ctx);
+        }
 
         for (;;) {
             la_tx_job_t job;

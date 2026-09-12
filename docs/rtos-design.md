@@ -727,6 +727,130 @@ marker and queue send → `dec0` decoder-feed marker → `tx` stream send and
 `TX` frame marker, with the idle lane labelled. The raw dump is regenerated
 by the test under the ignored `build/traces/`.
 
+### P8.6 evaluation (AMP skipped, documented 2026-09-12)
+
+The plan marks CPU1 decoder offload as a stretch and allows a documented skip.
+The measurements collected in P7/P8 show the decoder is not the system
+bottleneck at any supported gate, so the skip is deliberate rather than an
+omission.
+
+Decoder demand versus capacity (all measured on this bench):
+
+| Workload | Offered transition words/s | One decoder capacity | Utilization |
+|---|---:|---:|---:|
+| UART 115200 live gate (P7.6) | ~0.1 M | ~1.28 M (P8.5, cached) | < 10% |
+| SPI 10 kHz full duplex gate (P7.6) | ~0.03 M | ~1.28 M | < 3% |
+| I2C 10 kHz gate (P7.6) | ~0.02 M | ~1.28 M | < 2% |
+| SPI 1 MHz overload (P8.4, deliberate) | ~3 M | ~1.28 M | saturated |
+
+The binding constraint is the transport, not the CPU: the 2 Mbps UART link
+carries ~200 kB/s of payload and the ESP32 relay measured ~120 kB/s, while the
+v1 event stream of the 115200 UART gate is ~10,069 events/s x 12 bytes =
+~121 kB/s. That stream already sits at the relay ceiling, which is why the
+60 s gate is tight and why P8.2 named the P9.2 compact format as the next
+lever. Moving decode work to CPU1 would not change any of those numbers; it
+would only add a second execution resource that the end-to-end path cannot
+feed.
+
+Design sketch if the stretch is ever revived (kept here so the work is not
+re-derived): CPU1 is released by writing its entry address to the OCM
+`0xFFFFFFF0` register and executing `SEV`; it runs a bare-metal loop (or a
+second FreeRTOS image) with its own MMU table that maps DDR Normal-cacheable
+and the 16 MiB non-cached window exactly as CPU0 does. Segment descriptors
+travel CPU0 -> CPU1 through a single-producer/single-consumer ring in OCM,
+and release messages travel back CPU1 -> CPU0, so the segment pool and live
+ring state stay owned by CPU0 and keep their existing single-writer rules;
+CPU1 only ever holds a borrowed handle. Event blocks come from a second
+static pool with SPSC rings in both directions, and either an SGI or a shared
+`SEV`/`WFE` flag signals new work. Cross-core visibility uses `__DMB()`
+between the payload write and the index update plus LDREX/STREX atomics; the
+SCU keeps the two A9 L1s coherent for cacheable Normal memory, and the P8.5
+cached live pool would need CPU1 to invalidate its own view before reading a
+DMA-written segment. The gaps to accept are a second image to build and load,
+no task-watchdog coverage for CPU1, and ownership bugs that only appear under
+bench load.
+
+Revisit when at least one of these becomes true: a transport measured at
+1.5 MB/s or more (the P9.1 SPI link or an ESP32-S3 USB-OTG path), sustained
+decode demand above roughly 1 M transition words/s at a supported gate, or a
+multi-decoder configuration whose combined demand exceeds one core. Until
+then P8.6 stays skipped with this rationale.
+
+### P9.2 results (compact events, 2026-09-12)
+
+The plan asks to quantify raw vs transition burst sizes for actual workloads,
+implement versioned block/delta timestamps if higher live rates are required,
+and recalculate the full-duplex SPI event bandwidth before revising the P7
+gates. All three were done; the compact format is implemented and verified
+but is opt-in (the v1 EVT_DECODED encoding remains the default).
+
+**Burst raw vs transition sizes.** The step (counter/walking-1/PRBS8) and UART
+rows are computed from the same bit-exact waveform models the P6.2 matrix
+asserts against hardware; SPI and I2C are bench captures (4096-sample windows,
+`build/reports/p92-sizes.json`). Ratio is transition bytes / raw bytes, where
+raw is one byte per sample and a transition word is 4 bytes.
+
+| Workload | Raw bytes | Transition bytes | Ratio |
+|---|---:|---:|---:|
+| counter/walking/PRBS8 @1M | 1,024 | 4,096 | 4.00 |
+| counter/walking/PRBS8 @10M | 8,192 | 3,280 | 0.40 |
+| counter/walking/PRBS8 @100M | 65,536 | 2,624 | 0.04 |
+| UART 115200 @1M | 40,000 | 468 | 0.012 |
+| UART 115200 @10M | 80,000 | 468 | 0.006 |
+| UART 115200 @100M | 160,000 | 468 | 0.003 |
+| SPI @1M / 10M / 100M | 4,096 | 3,188 / 3,188 / 320 | 0.78 / 0.78 / 0.08 |
+| I2C @1M / 10M / 100M | 4,096 | 3,224 / 648 / 132 | 0.79 / 0.16 / 0.03 |
+
+There is no fixed compression ratio: a counter that changes every sample is
+4x *larger* when transition-encoded (the encoder is a live-stream format, not
+a general compressor), while a UART or I2C stream shrinks 30-300x. Raw mode
+is the right choice for fast-changing signals in burst captures.
+
+**Compact EVT_BLOCK v1.** `EVT_CFG` (0x19, format 0/1) selects the live
+encoding before `LIVE_START`; format 1 sends `EVT_BLOCK` (0x24) blocks with a
+12-byte header (version, slot, count, t_base) and per-record
+`t_delta:u16, kind:u8, len:u8, data[len]`; a delta at or above 0xFFFF uses an
+absolute-u64 escape. Timestamps and event semantics are byte-exact. Bench
+measurement on the 115200 UART live stream over fixed 2 s windows (same
+offered rate, ~19.4k events per run):
+
+| Encoding | Wire bytes | Events | Bytes/event |
+|---|---:|---:|---:|
+| v1 EVT_DECODED | 242,330 | 19,346 | 12.53 |
+| compact EVT_BLOCK | 118,357 | 19,527 | 6.06 |
+
+That is a **51.6% wire-byte reduction** (53.3% in a second run) with the
+identical decoded byte stream. A single UART byte event drops from a 12-byte
+v1 record to about 5.6 bytes; blocks carry one slot and use u16 deltas. The
+live pipeline reaches ~120 kB/s at 115200 with v1, right at the ESP32 relay
+ceiling, so the compact format roughly doubles the relay headroom and is the
+lever named in the P8.2 results.
+
+**Full-duplex SPI event bandwidth.** A full-duplex SPI byte produces two BYTE
+events (MOSI and MISO) plus CS transitions; at 8-bit words the event rate is
+2 x SCK/8. With the measured 12.53/6.06 bytes per event:
+
+| SCK | Events/s | v1 wire | Compact wire | vs 200 kB/s link |
+|---:|---:|---:|---:|---|
+| 10 kHz | 2,500 | 31 kB/s | 15 kB/s | 16% / 8% |
+| 100 kHz | 25,000 | 313 kB/s | 152 kB/s | over / 76% |
+| 1 MHz | 250,000 | 3.1 MB/s | 1.5 MB/s | deliberate overload |
+
+The P7.6 SPI/I2C 10 kHz gates keep their >=20% headroom with either encoding.
+Compact events raise the zero-drop full-duplex SPI ceiling to roughly
+60-80 kHz against the measured ~120 kB/s relay; 100 kHz still needs the P9.1
+SPI link or the P9.4 Wi-Fi tuning. The P7 gates are therefore unchanged.
+
+**Robustness fixes found during the measurements.** A stalled burst transfer
+(the host vanished or the relay stalled) used to wedge the firmware forever:
+TxTask waited for ACKs with no timeout and AcqTask then blocked forever in
+`acq_wait_buffer_free`. TxTask now abandons a job after 2 s without progress
+(no chunk sent and no ACK) and AcqTask bounds its buffer wait at 5 s and
+reports an honest abort instead of blocking. The bench also exposed that a
+live session started while the patgen is already running (after a previous
+LIVE_STOP) streams almost no transitions; the P7.6 helper already toggles the
+patgen EN before every session and the P9.2 tests do the same.
+
 ## Windows Adapter Boundary
 
 The native adapter models static segment handles, synchronized reference
