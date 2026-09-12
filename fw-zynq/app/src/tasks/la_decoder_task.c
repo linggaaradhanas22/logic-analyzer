@@ -2,6 +2,8 @@
 
 #include "la_irq.h"
 
+#include "xiltimer.h"
+
 #include <string.h>
 
 /* P7.3 decoder task: one per decoder slot. Consumes la_decoder_config_msg_t
@@ -117,10 +119,19 @@ static void decoder_drain_segments(la_decoder_ctx_t *ctx)
             const uint32_t *words = (const uint32_t *)(uintptr_t)
                 la_live_ring_slot_address(&ctx->app->live_ring, message.slot);
             uint32_t word_count = message.length / 4u;
+            XTime start;
+            XTime end;
 
+            /* P8.5: busy time around the feed is the decoder throughput
+             * metric (the reads themselves happen inside the core). */
+            XTime_GetTime(&start);
             (void)la_decoder_core_feed_segment(&ctx->core, words, word_count,
                                                message.sequence, decoder_event,
                                                ctx);
+            XTime_GetTime(&end);
+            ctx->app->decoder_words[ctx->slot] += word_count;
+            ctx->app->decoder_busy_us[ctx->slot] +=
+                (uint32_t)((end - start) / (COUNTS_PER_SECOND / 1000000u));
         }
         /* The ring owns the slot state; the pool lock inside is taken under
          * this critical section so AcqTask's repost never interleaves. */

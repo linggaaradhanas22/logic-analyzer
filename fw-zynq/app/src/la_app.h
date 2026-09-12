@@ -74,7 +74,7 @@
 #define LA_PRIO_TX 5u
 #define LA_PRIO_STATUS 1u
 
-#define LA_FW_VERSION UINT32_C(0x00070000)
+#define LA_FW_VERSION UINT32_C(0x00080000)
 
 typedef enum la_ctrl_kind {
     LA_CTRL_ARM = 1,
@@ -206,6 +206,12 @@ typedef struct la_app {
     volatile uint32_t decoder_dropped_segments[LA_DECODER_COUNT];
     volatile uint32_t decoder_dropped_events[LA_DECODER_COUNT];
     volatile uint32_t decoder_queue_drops[LA_DECODER_COUNT];
+    /* P8.5 throughput instrumentation: transition words fed to each decoder
+     * and the cumulative XTime spent inside la_decoder_core_feed_segment
+     * (microseconds, 32-bit; wraps after about 71 minutes at full load).
+     * Monotonic since boot, printed by StatusTask for bench comparisons. */
+    volatile uint32_t decoder_words[LA_DECODER_COUNT];
+    volatile uint32_t decoder_busy_us[LA_DECODER_COUNT];
     volatile uint32_t live_overflows;
     volatile uint8_t live_active;
     /* P8.2 live latency: XTime counts at the live ARM, the latched sample

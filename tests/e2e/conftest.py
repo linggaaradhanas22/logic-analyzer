@@ -39,6 +39,19 @@ def pytest_addoption(parser) -> None:
         help="ESP32 USB console port (e.g. COM5) for the fifo_ovf= counter",
     )
     parser.addoption(
+        "--zynq-console",
+        default=None,
+        help="Zynq FTDI console port (e.g. COM7) for the P8.5 decoder "
+        "throughput counters (`LA status: dec words ...`)",
+    )
+    parser.addoption(
+        "--p85-seconds",
+        type=float,
+        default=20.0,
+        help="P8.5 decoder-throughput measurement window in seconds "
+        "(default 20; the status line period is 5 s)",
+    )
+    parser.addoption(
         "--loopback",
         action="store_true",
         help="run the P5.5 ESP32 loopback gate (requires the TX/RX and "

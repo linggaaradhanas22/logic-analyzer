@@ -41,6 +41,17 @@ static void la_program_noncached(void *context, uintptr_t section_base)
     Xil_SetTlbAttributes((INTPTR)section_base, NORM_NONCACHE);
 }
 
+#if LA_MEM_LIVE_CACHED
+/* P8.5: the live pool prefix is Normal Write-Back cacheable; every CPU read
+ * of DMA-written data must invalidate the range first (la_acq_task live
+ * publish, la_tx_task burst read). */
+static void la_program_cached(void *context, uintptr_t section_base)
+{
+    (void)context;
+    Xil_SetTlbAttributes((INTPTR)section_base, NORM_WB_CACHE);
+}
+#endif
+
 void vApplicationGetIdleTaskMemory(StaticTask_t **ppxIdleTaskTCBBuffer,
                                    StackType_t **ppxIdleTaskStackBuffer,
                                    uint32_t *pulIdleTaskStackSize)
@@ -91,10 +102,24 @@ int main(void)
         }
     }
     la_mem_apply_noncached(la_program_noncached, NULL);
+#if LA_MEM_LIVE_CACHED
+    if (la_mem_apply_range(la_program_cached, NULL, 0u,
+                           LA_MEM_LIVE_CACHED_SIZE) !=
+        LA_MEM_LIVE_CACHED_SIZE / LA_MEM_SECTION_SIZE) {
+        xil_printf("LA fatal: cached live-pool mapping failed\r\n");
+        for (;;) {
+        }
+    }
+#endif
     xil_printf("\r\nLA P4 FreeRTOS core on UART1\r\n");
     xil_printf("LA memory: fw end 0x%08X nc base 0x%08X\r\n",
                (unsigned)(uintptr_t)__la_fw_end,
                (unsigned)(uintptr_t)__la_nc_base);
+#if LA_MEM_LIVE_CACHED
+    xil_printf("LA live pool: cached (NORM_WB) + invalidate\r\n");
+#else
+    xil_printf("LA live pool: non-cached\r\n");
+#endif
 
     la_regs_dev_init(&regs, LA_REG_BASE_ADDRESS, boot_read32, boot_write32);
     selftest = la_regs_selftest(&regs);

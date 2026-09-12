@@ -39,6 +39,19 @@
 #define LA_MEM_SG_OFFSET UINT32_C(0x00800000)
 #define LA_MEM_SG_SIZE UINT32_C(0x00100000)      /* SG descriptors, 1 MiB */
 
+/* P8.5 cached-vs-non-cached experiment. 0 keeps the whole window
+ * Non-cacheable. 1 (the measured winner, see rtos-design.md P8.5 results)
+ * programs the live-pool prefix (16 x 256 KiB = 4 MiB, the same region
+ * la_live_ring uses at LA_MEM_CAPTURE_OFFSET) as Normal Write-Back cacheable;
+ * every CPU read of DMA-written data then goes through
+ * Xil_DCacheInvalidateRange (la_acq_task live publish, la_tx_task burst
+ * read). Override on the compiler command line to rebuild the experimental
+ * non-cached variant without editing this header. */
+#ifndef LA_MEM_LIVE_CACHED
+#define LA_MEM_LIVE_CACHED 1
+#endif
+#define LA_MEM_LIVE_CACHED_SIZE UINT32_C(0x00400000) /* 16 x 256 KiB */
+
 typedef enum la_mem_check_result {
     LA_MEM_CHECK_OK = 0,
     LA_MEM_CHECK_ERR_FW_OVERLAP_NC = -1,
@@ -64,6 +77,13 @@ LA_MEM_API int la_mem_geometry_check_full(uintptr_t fw_end, uintptr_t nc_base,
 /* Applies fn to every 1 MiB section of the non-cached window; returns the
  * number of sections programmed. */
 LA_MEM_API uint32_t la_mem_apply_noncached(la_mem_attr_fn fn, void *context);
+
+/* Applies fn to the 1 MiB sections covering [offset, offset+size) inside the
+ * window. offset and size must be multiples of LA_MEM_SECTION_SIZE, size must
+ * be nonzero, and the range must stay within LA_MEM_NC_SIZE; returns the
+ * number of sections programmed, or 0 on invalid arguments. */
+LA_MEM_API uint32_t la_mem_apply_range(la_mem_attr_fn fn, void *context,
+                                       uintptr_t offset, uintptr_t size);
 
 LA_MEM_API uintptr_t la_mem_nc_base(void);
 LA_MEM_API uintptr_t la_mem_capture_base(void);

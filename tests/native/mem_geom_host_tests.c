@@ -50,6 +50,42 @@ static int test_constant_geometry_ok(void)
     return 0;
 }
 
+static int test_apply_range(void)
+{
+    attr_recorder_t recorder;
+
+    memset(&recorder, 0, sizeof(recorder));
+    CHECK(la_mem_apply_range(record_attr, &recorder, 0u,
+                             LA_MEM_LIVE_CACHED_SIZE) ==
+              LA_MEM_LIVE_CACHED_SIZE / LA_MEM_SECTION_SIZE,
+          "cached prefix covers four sections");
+    CHECK(recorder.count == 4u, "cached prefix recorder count");
+    CHECK(recorder.bases[0] == LA_MEM_NC_BASE, "cached prefix starts at the window base");
+    CHECK(recorder.bases[3] == LA_MEM_NC_BASE + 3u * LA_MEM_SECTION_SIZE,
+          "cached prefix sections are contiguous");
+
+    memset(&recorder, 0, sizeof(recorder));
+    CHECK(la_mem_apply_range(record_attr, &recorder, LA_MEM_SG_OFFSET,
+                             LA_MEM_SG_SIZE) == 1u,
+          "sg section only");
+    CHECK(recorder.bases[0] == LA_MEM_NC_BASE + LA_MEM_SG_OFFSET, "sg section base");
+
+    CHECK(la_mem_apply_range(record_attr, &recorder, 0u, 0u) == 0u,
+          "zero size rejected");
+    CHECK(la_mem_apply_range(record_attr, &recorder, 0x1000u, LA_MEM_SECTION_SIZE) == 0u,
+          "unaligned offset rejected");
+    CHECK(la_mem_apply_range(record_attr, &recorder, 0u, 0x1000u) == 0u,
+          "unaligned size rejected");
+    CHECK(la_mem_apply_range(record_attr, &recorder, LA_MEM_NC_SIZE,
+                             LA_MEM_SECTION_SIZE) == 0u,
+          "offset at the window end rejected");
+    CHECK(la_mem_apply_range(record_attr, &recorder, 0u, LA_MEM_NC_SIZE + LA_MEM_SECTION_SIZE) == 0u,
+          "size past the window rejected");
+    CHECK(la_mem_apply_range(NULL, &recorder, 0u, LA_MEM_SECTION_SIZE) == 0u,
+          "null callback rejected");
+    return 0;
+}
+
 static int test_fw_overlap(void)
 {
     CHECK(la_mem_geometry_check(LA_MEM_NC_BASE + 1u) == LA_MEM_CHECK_ERR_FW_OVERLAP_NC,
@@ -104,8 +140,8 @@ static int test_full_branches(void)
 
 int main(void)
 {
-    if (test_constant_geometry_ok() != 0 || test_fw_overlap() != 0 ||
-        test_full_branches() != 0) {
+    if (test_constant_geometry_ok() != 0 || test_apply_range() != 0 ||
+        test_fw_overlap() != 0 || test_full_branches() != 0) {
         return 1;
     }
     puts("PASS: la_native_mem");

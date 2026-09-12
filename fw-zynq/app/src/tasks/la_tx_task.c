@@ -1,7 +1,9 @@
 #include "la_app.h"
 
+#include "la_mem_geom.h"
 #include "la_tx_pack.h"
 #include "la_tx_win.h"
+#include "xil_cache.h"
 #include "xiltimer.h"
 
 #include <string.h>
@@ -201,6 +203,18 @@ static void tx_start_job(la_tx_ctx_t *ctx, const la_tx_job_t *job)
         tx_abandon(ctx);
     }
     ctx->job = *job;
+#if LA_MEM_LIVE_CACHED
+    /* P8.5: the burst payload shares the cacheable live-pool prefix; drop the
+     * stale lines from the previous CPU read before DMA-written data is
+     * packed. total_words is bounded by the 8 MiB capture pool. */
+    if (job->total_words != 0u) {
+        uint32_t bytes = (uint32_t)(job->total_words * 4u);
+        if (bytes > LA_MEM_CAPTURE_SIZE) {
+            bytes = LA_MEM_CAPTURE_SIZE;
+        }
+        Xil_DCacheInvalidateRange((INTPTR)job->buffer, (bytes + 63u) & ~63u);
+    }
+#endif
     if (la_tx_pack_init(&ctx->pack, job->total_words, job->encoding,
                         job->sample_rate_hz) != 0) {
         (void)xTaskNotify(ctx->app->acq_task, LA_NOTIFY_JOB_DONE, eSetBits);

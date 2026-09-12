@@ -1,5 +1,7 @@
 #include "la_mem_geom.h"
 
+#include <stddef.h>
+
 static int aligned64(uintptr_t value)
 {
     return value % LA_MEM_ALIGNMENT == 0u;
@@ -39,18 +41,31 @@ int la_mem_geometry_check(uintptr_t fw_end)
                                       LA_MEM_SG_OFFSET, LA_MEM_SG_SIZE);
 }
 
-uint32_t la_mem_apply_noncached(la_mem_attr_fn fn, void *context)
+uint32_t la_mem_apply_range(la_mem_attr_fn fn, void *context,
+                            uintptr_t offset, uintptr_t size)
 {
     uintptr_t section;
+    uintptr_t end;
     uint32_t count = 0u;
 
-    for (section = LA_MEM_NC_BASE;
-         section < LA_MEM_NC_BASE + LA_MEM_NC_SIZE;
+    if (fn == NULL || size == 0u ||
+        offset % LA_MEM_SECTION_SIZE != 0u || size % LA_MEM_SECTION_SIZE != 0u ||
+        offset > LA_MEM_NC_SIZE || size > LA_MEM_NC_SIZE - offset) {
+        return 0u;
+    }
+    end = offset + size;
+    for (section = LA_MEM_NC_BASE + offset;
+         section < LA_MEM_NC_BASE + end;
          section += LA_MEM_SECTION_SIZE) {
         fn(context, section);
         count += 1u;
     }
     return count;
+}
+
+uint32_t la_mem_apply_noncached(la_mem_attr_fn fn, void *context)
+{
+    return la_mem_apply_range(fn, context, 0u, LA_MEM_NC_SIZE);
 }
 
 uintptr_t la_mem_nc_base(void)

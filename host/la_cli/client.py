@@ -286,7 +286,8 @@ class AnalyzerClient:
     def live(self, decoder_config: bytes, config: bytes | None = None,
              count: int | None = None, timeout_s: float | None = None,
              read_stall_s: float = 0.0,
-             on_started=None) -> list[dict]:
+             on_started=None, stop_on_overrun: bool = True,
+             collect_events: bool = True) -> list[dict]:
         """Configures the live stream and collects decoded events (P7.5).
 
         `config` is an optional 37-byte STREAM CONFIG payload sent before the
@@ -298,7 +299,13 @@ class AnalyzerClient:
         the gateway relay buffers fill and the link-overrun report is
         exercised. `on_started` is called once when the LIVE_START ACK is
         seen (P7.6 isolated-byte trigger). Every decoded event carries an
-        `arrival` monotonic timestamp for P8.2 latency measurements."""
+        `arrival` monotonic timestamp for P8.2 latency measurements.
+
+        `stop_on_overrun=False` keeps draining after an EVT_OVERRUN so a
+        sustained-overload session runs for its full deadline (P8.5
+        throughput measurement). `collect_events=False` counts decoded events
+        without retaining them, so a long high-rate drain stays bounded; the
+        returned list then holds only the overrun records."""
         if timeout_s is None:
             deadline = float("inf")
         else:
@@ -312,9 +319,10 @@ class AnalyzerClient:
         collected: list[dict] = []
         stop_requested = False
         start_acknowledged = False
+        decoded_seen = 0
 
         def on_live(message_type, sequence, payload):
-            nonlocal stop_requested, start_acknowledged
+            nonlocal stop_requested, start_acknowledged, decoded_seen
             if message_type == p.ACK:
                 acked_type, _acked_sequence = payload[0], payload[1]
                 if acked_type == p.LIVE_START:
@@ -326,6 +334,13 @@ class AnalyzerClient:
                 return False
             if message_type == p.EVT_DECODED:
                 arrival = time.monotonic()
+                if not collect_events:
+                    for _slot, _kind, _t_sample, _data in p.iter_decoded_events(payload):
+                        decoded_seen += 1
+                        if count is not None and decoded_seen >= count:
+                            stop_requested = True
+                            break
+                    return stop_requested
                 for slot, kind, t_sample, data in p.iter_decoded_events(payload):
                     collected.append(
                         {"slot": slot, "kind": kind, "t_sample": t_sample,
@@ -351,7 +366,7 @@ class AnalyzerClient:
                 dropped = int.from_bytes(payload[:4], "little")
                 stage = payload[4]
                 collected.append({"overrun": True, "dropped": dropped, "stage": stage})
-                return True
+                return stop_on_overrun
             if message_type == p.NAK:
                 nak_type, _seq, error = payload[0], payload[1], payload[2]
                 raise AnalyzerError(
@@ -371,12 +386,13 @@ class AnalyzerClient:
             if message_type == p.ACK:
                 return payload[0] == p.LIVE_STOP
             if message_type == p.EVT_DECODED:
-                arrival = time.monotonic()
-                for slot, kind, t_sample, data in p.iter_decoded_events(payload):
-                    collected.append(
-                        {"slot": slot, "kind": kind, "t_sample": t_sample,
-                         "data": data, "arrival": arrival}
-                    )
+                if collect_events:
+                    arrival = time.monotonic()
+                    for slot, kind, t_sample, data in p.iter_decoded_events(payload):
+                        collected.append(
+                            {"slot": slot, "kind": kind, "t_sample": t_sample,
+                             "data": data, "arrival": arrival}
+                        )
                 return False
             if message_type == p.EVT_OVERRUN:
                 dropped = int.from_bytes(payload[:4], "little")

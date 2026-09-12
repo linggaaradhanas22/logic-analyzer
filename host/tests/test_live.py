@@ -131,6 +131,34 @@ def test_live_client_count_stops_early(analyzer) -> None:
     assert len(decoded) == 5
 
 
+def test_live_client_drains_past_overrun_when_asked(analyzer) -> None:
+    mock = analyzer("live")
+    client = AnalyzerClient(open_uri(mock.uri))
+    try:
+        events = client.live(p.pack_decoder_cfg_uart(0, 0, 115200, 10_000_000),
+                             timeout_s=0.3, stop_on_overrun=False)
+    finally:
+        client.close()
+    decoded = [e for e in events if not e.get("overrun")]
+    overruns = [e for e in events if e.get("overrun")]
+    assert len(decoded) == 24
+    assert len(overruns) == 1
+
+
+def test_live_client_collect_events_false_keeps_overruns(analyzer) -> None:
+    mock = analyzer("live")
+    client = AnalyzerClient(open_uri(mock.uri))
+    try:
+        events = client.live(p.pack_decoder_cfg_uart(0, 0, 115200, 10_000_000),
+                             timeout_s=0.3, stop_on_overrun=False,
+                             collect_events=False)
+    finally:
+        client.close()
+    assert [e for e in events if not e.get("overrun")] == []
+    overruns = [e for e in events if e.get("overrun")]
+    assert len(overruns) == 1 and overruns[0]["dropped"] == 3
+
+
 def test_live_command_text(analyzer) -> None:
     mock = analyzer("live")
     result = CliRunner().invoke(cli, [

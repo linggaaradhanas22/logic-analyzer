@@ -4,6 +4,7 @@
 #include "la_burst_plan.h"
 #include "la_mem_geom.h"
 #include "la_regs.h"
+#include "xil_cache.h"
 #include "xiltimer.h"
 
 #include <string.h>
@@ -351,6 +352,16 @@ static void acq_handle_live_irq(la_acq_ctx_t *ctx)
         if (status != 0) {
             continue;
         }
+#if LA_MEM_LIVE_CACHED
+        /* P8.5: drop the stale cache lines DMA just overwrote before any
+         * decoder reads the segment. The range is 64-byte aligned and capped
+         * at the segment size, so the BSP fast path applies. */
+        if (message.length != 0u) {
+            Xil_DCacheInvalidateRange(
+                (INTPTR)la_live_ring_slot_address(&app->live_ring, message.slot),
+                (message.length + 63u) & ~63u);
+        }
+#endif
         for (d = 0u; d < LA_PROTO_DECODER_MAX_SLOTS; ++d) {
             if (ctx->decoder_enabled[d] == 0u) {
                 continue;

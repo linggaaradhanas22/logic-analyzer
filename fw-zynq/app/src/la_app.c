@@ -8,6 +8,12 @@
 
 #include <string.h>
 
+/* P8.5: the cacheable prefix must cover the whole live pool. */
+typedef char la_live_pool_fits_cached_prefix[
+    (LA_LIVE_SEGMENT_COUNT * LA_LIVE_SEGMENT_BYTES) <= LA_MEM_LIVE_CACHED_SIZE
+        ? 1
+        : -1];
+
 static uint32_t la_mmio_read32(uintptr_t address)
 {
     return Xil_In32((UINTPTR)address);

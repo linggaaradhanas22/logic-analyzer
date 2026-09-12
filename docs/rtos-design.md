@@ -540,7 +540,30 @@ never reaches the window, and `main()` re-checks the geometry at boot before
 programming each 1 MiB section Non-cacheable with `Xil_SetTlbAttributes(..,
 NORM_NONCACHE)`. Anything that reads or writes the window from the CPU side
 must still respect the 64-byte allocation alignment for future cached
-operation; today no cache maintenance is needed on the non-cached path.
+operation.
+
+Since P8.5 (2026-09-12) the first 4 MiB of the window (the live pool) is
+re-programmed Normal Write-Back cacheable (`NORM_WB_CACHE`) when
+`LA_MEM_LIVE_CACHED` is 1, which is the tracked default. The measured decoder
+throughput is about 28% higher than the non-cached variant (results below).
+The cache contract for that region is: PL DMA writes are never coherent with
+the A9 caches, so every CPU read of DMA-written data must first invalidate the
+written range. Two call sites do this and must stay in sync with any new
+reader:
+
+- `la_acq_task` live publish: after `la_dma_collect_live` reports a completed
+  segment and before the segment is queued to any decoder,
+  `Xil_DCacheInvalidateRange(slot, round_up(length, 64))` drops the stale L1
+  and L2 lines. The BSP implementation maintains both levels and takes its
+  fast path for cache-line-aligned ranges.
+- `la_tx_task` burst start: before packing a capture job,
+  `Xil_DCacheInvalidateRange(job.buffer, round_up(total_words * 4, 64))` covers
+  the whole used capture buffer (the cached prefix and the non-cached tail;
+  invalidating the non-cached tail is harmless).
+
+The CPU never writes payload data, so lines are clean and invalidation cannot
+lose data. The SG descriptor pool and the rest of the window stay
+Non-cacheable, so descriptor maintenance is unchanged.
 
 An acquisition overflow stops or marks a gap; it never silently drops samples.
 If no free live segment exists, AcqTask reports `EVT_OVERRUN(stage=DMA)` and
@@ -608,6 +631,51 @@ metric). The host-side test asserts the frame decodes and the final byte's
 event is delivered with the in-stream baseline. A wake-latency outlier of
 625 ms was recorded in the same ISR stats run; it is a P8.2 follow-up
 (probably a boot/first-use artifact, not reproduced in the live path).
+
+### P8.5 results (cached vs non-cached live pool, 2026-09-12)
+
+The plan asks whether decoder throughput improves when live segments sit in
+cached memory with `Xil_DCacheInvalidateRange` instead of the Non-cacheable
+window. The experiment built both variants from the same source with the
+`LA_MEM_LIVE_CACHED` switch and measured the same workload on the bench.
+
+Method: patgen SPI mode 4 at DIV=0 (1 MHz SCK, CH0/CH1/CH2), sample_div=0
+(100 MS/s transition stream), live decoder slot 0 = SPI (sck 0, mosi 1, cs 2,
+active low), 20 s window. The host drains events without retaining them and
+does not stop on the expected stage-1/2 overrun reports
+(`stop_on_overrun=False`, `collect_events=False`), so the Zynq is not
+backpressured into idle. The decoder task accumulates `decoder_words[slot]`
+and the XTime spent inside `la_decoder_core_feed_segment`
+(`decoder_busy_us[slot]`); StatusTask prints both. The status task starves
+while the decoder is saturated, so the test snapshots the counters before the
+stream and after LIVE_STOP has quiesced and divides the deltas by the
+host-measured window. Each variant's boot banner (`LA live pool: ...`) was
+captured during the JTAG reload.
+
+| Build | Run | Decoder words/s | Decoder busy | Dropped segments |
+|---|---|---:|---:|---:|
+| `LA_MEM_LIVE_CACHED=0` | 1 | 973,085 | 96.2% | 4,620 |
+| `LA_MEM_LIVE_CACHED=0` | 2 | 1,006,094 | 99.5% | 4,787 |
+| `LA_MEM_LIVE_CACHED=0` | 3 | 1,007,818 | 99.5% | 4,786 |
+| `LA_MEM_LIVE_CACHED=1` | 1 | 1,288,915 | 99.3% | 3,337 |
+| `LA_MEM_LIVE_CACHED=1` | 2 | 1,282,279 | 98.9% | 3,326 |
+| `LA_MEM_LIVE_CACHED=1` | 3 | 1,284,519 | 99.0% | 3,326 |
+
+The cached variant decodes about 28% more transition words per second than the
+steady non-cached runs (the first non-cached run is 3% slower again) and drops
+about 30% fewer segments at the same offered rate, so it is the tracked
+default. The SPI decoder is saturated in both variants (96-99% busy), which is
+what makes the comparison meaningful: the workload offers more than either
+variant can decode.
+
+Correctness was verified after the switch: the full `test-e2e` suite passes
+36 + 2 skipped with the cached build, including both burst matrices (the
+TxTask invalidate path) and the 60 s zero-drop UART live gate (the AcqTask
+invalidate path) with bit-exact decoded data. The invalidation cost per
+256 KiB segment is negligible against the milliseconds of decode work it
+precedes, and the cached region is the same physical 4 MiB the live ring
+already used, so no memory layout changed. The `la_mem_apply_range` helper and
+the geometry constants are host-tested (`la_native_mem`).
 
 ## Windows Adapter Boundary
 
