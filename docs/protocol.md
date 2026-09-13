@@ -181,8 +181,20 @@ their own frames, so `count` records are all from the header slot.
 ### DECODER_CFG, type `0x14`
 
 The payload is exactly 20 bytes. Byte 0 is slot 0 through 2; byte 1 is type:
-0 off, 1 UART, 2 SPI, 3 I2C. Bytes 2 and 3 are reserved. The remaining 16
-bytes are a type-specific union.
+0 off, 1 UART, 2 SPI, 3 I2C. Byte 2 is `stop_on_len` and byte 3 is reserved.
+
+`stop_on_len` is the P7.7 decoded-pattern stop length. When nonzero, the
+first decoded BYTE record sequence that matches the pattern stops the live
+acquisition; the following `EVT_TRIGGERED` carries the matching record's
+sample index. The pattern bytes live in the type's reserved region in decode
+order: UART bytes 9 through 11 (at most 3 bytes), SPI bytes 13 through 19 (at
+most 7 bytes), I2C bytes 6 through 19 (at most 14 bytes). Bytes of that
+region beyond `stop_on_len` must be zero and a length above the region is
+rejected with NAK bad-field. `stop_on_len` 0 (the default, and what every
+pre-P7.7 host sends) disables the feature; the receiver ignores the reserved
+pattern bytes when the length is zero.
+
+The remaining 16 bytes are a type-specific union.
 
 For UART, bytes 4 through 8 are `rx_channel`, `data_bits`, `parity` (0 none,
 1 even, 2 odd), `stop_bits` and `inverted`; bytes 9 through 11 are reserved;

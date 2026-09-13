@@ -44,6 +44,9 @@
 #define LA_NOTIFY_SEGMENT_FREE ((uint32_t)0x00000020u)
 #define LA_NOTIFY_LIVE_STOP ((uint32_t)0x00000040u)
 #define LA_NOTIFY_DECODER ((uint32_t)0x00000080u)
+/* P7.7: a decoder matched its stop pattern and asks AcqTask to end the live
+ * session (the decoder task latches the match in la_app_t first). */
+#define LA_NOTIFY_STOP_ON ((uint32_t)0x00000100u)
 
 typedef struct la_irq {
     la_regs_dev_t regs;

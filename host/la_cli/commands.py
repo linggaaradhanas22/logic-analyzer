@@ -212,10 +212,34 @@ def abort(target: str, timeout_s: float) -> None:
     click.echo("aborted")
 
 
-def _parse_decoder_spec(spec: str, sample_rate_hz: int) -> bytes:
+def _printable_bytes(data: bytes) -> str:
+    """Renders decoded bytes for the live text view. Non-printable bytes
+    become '.', which also keeps the line encodable on a cp1252 console when
+    the stream starts mid-frame."""
+    return "".join(chr(byte) if 32 <= byte < 127 else "." for byte in data)
+
+
+def _parse_stop_on(value: str | None) -> bytes | None:
+    """P7.7: parses --stop-on hex bytes ("4c41", "4C 41" or "0x4c41")."""
+    if value is None:
+        return None
+    text = value.replace(" ", "").replace(":", "").replace("-", "")
+    if text[:2].lower() == "0x":
+        text = text[2:]
+    if not text or len(text) % 2 != 0:
+        raise click.BadParameter("--stop-on needs an even number of hex digits")
+    try:
+        return bytes.fromhex(text)
+    except ValueError as exc:
+        raise click.BadParameter("--stop-on must be hex bytes") from exc
+
+
+def _parse_decoder_spec(spec: str, sample_rate_hz: int,
+                        stop_on: bytes | None = None) -> bytes:
     """Parses the live decoder spec (P7.6): `uart:rx=CH,baud=BAUD`,
     `spi:sck=CH[,mosi=CH][,miso=CH][,cs=CH][,cpol=0][,cpha=0][,word=8]`
-    `[,lsb=0][,cs_active=0]` or `i2c:scl=CH,sda=CH`."""
+    `[,lsb=0][,cs_active=0]` or `i2c:scl=CH,sda=CH`. `stop_on` is the P7.7
+    decoded-pattern stop, limited by the decoder type's reserved bytes."""
     name, sep, params_text = spec.strip().partition(":")
     if not sep:
         raise click.BadParameter("decoder must be uart:..., spi:... or i2c:...")
@@ -234,7 +258,8 @@ def _parse_decoder_spec(spec: str, sample_rate_hz: int) -> bytes:
                 raise ValueError("uart needs rx and baud")
             if params["baud"] <= 0:
                 raise ValueError("baud must be positive")
-            return p.pack_decoder_cfg_uart(0, params["rx"], params["baud"], sample_rate_hz)
+            return p.pack_decoder_cfg_uart(0, params["rx"], params["baud"], sample_rate_hz,
+                                           stop_on=stop_on)
         if name == "spi":
             known = {"sck", "mosi", "miso", "cs", "cpol", "cpha", "word", "lsb", "cs_active"}
             if "sck" not in params or set(params) - known:
@@ -242,11 +267,12 @@ def _parse_decoder_spec(spec: str, sample_rate_hz: int) -> bytes:
             return p.pack_decoder_cfg_spi(
                 0, params["sck"], params.get("mosi", -1), params.get("miso", -1),
                 params.get("cs", -1), params.get("cpol", 0), params.get("cpha", 0),
-                params.get("word", 8), params.get("lsb", 0), params.get("cs_active", 0))
+                params.get("word", 8), params.get("lsb", 0), params.get("cs_active", 0),
+                stop_on=stop_on)
         if name == "i2c":
             if set(params) != {"scl", "sda"}:
                 raise ValueError("i2c needs scl and sda")
-            return p.pack_decoder_cfg_i2c(0, params["scl"], params["sda"])
+            return p.pack_decoder_cfg_i2c(0, params["scl"], params["sda"], stop_on=stop_on)
     except (KeyError, ValueError) as exc:
         raise click.BadParameter(str(exc)) from exc
     raise click.BadParameter("decoder must be uart:..., spi:... or i2c:...")
@@ -265,15 +291,18 @@ def _parse_decoder_spec(spec: str, sample_rate_hz: int) -> bytes:
 @click.option("--count", default=None, type=int, help="stop after N events")
 @click.option("--compact", is_flag=True,
               help="request the compact EVT_BLOCK event encoding (P9.2)")
+@click.option("--stop-on", "stop_on", default=None,
+              help="stop when the decoder matches these hex bytes (P7.7), e.g. 4c41")
 @click.option("--csv", is_flag=True, help="emit CSV rows instead of text")
 @click.option("--timeout", "timeout_s", default=None, type=float,
               help="overall deadline in seconds (default: until --count or Ctrl+C)")
 def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int | None,
-         compact: bool, csv: bool, timeout_s: float | None) -> None:
+         compact: bool, stop_on: str | None, csv: bool, timeout_s: float | None) -> None:
     rate_hz = _parse_size(rate)
     sample_div = _sample_div(rate_hz)
     actual_rate = FS_HZ // (sample_div + 1)
-    decoder_cfg = _parse_decoder_spec(decoder_spec, actual_rate)
+    stop_bytes = _parse_stop_on(stop_on)
+    decoder_cfg = _parse_decoder_spec(decoder_spec, actual_rate, stop_bytes)
     # Live decode consumes transition words; the 2 ms flush interval matches
     # the PL default (LIVE_FLUSH_CYCLES at 100 MHz).
     stream_config = p.pack_config(
@@ -296,6 +325,7 @@ def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int
                 decoder_cfg, config=stream_config, count=count,
                 timeout_s=timeout_s,
                 event_format=p.EVT_FORMAT_BLOCK if compact else p.EVT_FORMAT_RECORDS,
+                stop_on_match=stop_bytes is not None,
             )
         except KeyboardInterrupt:
             client.stop_live()
@@ -317,13 +347,14 @@ def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int
     else:
         for event in decoded:
             name = p.EVENT_NAMES.get(event["kind"], f"kind{event['kind']}")
-            printable = event["data"].decode("ascii", errors="replace")
             click.echo(f"t={event['t_sample']} slot={event['slot']} {name} "
-                       f"0x{event['data'].hex()} {printable!r}")
+                       f"0x{event['data'].hex()} {_printable_bytes(event['data'])!r}")
     for event in overruns:
         click.echo(
             f"overrun: {event['dropped']} events dropped at stage {event['stage']}"
         )
+    if client.live_match_index is not None:
+        click.echo(f"stop-on match at sample {client.live_match_index}")
     click.echo(
         f"live: {len(decoded)} decoded events, {len(overruns)} overruns "
         f"({client.live_stats['wire_bytes']} wire bytes, "

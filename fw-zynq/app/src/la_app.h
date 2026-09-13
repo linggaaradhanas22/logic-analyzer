@@ -91,7 +91,7 @@
 #define LA_PRIO_TX 5u
 #define LA_PRIO_STATUS 1u
 
-#define LA_FW_VERSION UINT32_C(0x00080000)
+#define LA_FW_VERSION UINT32_C(0x00090000)
 
 typedef enum la_ctrl_kind {
     LA_CTRL_ARM = 1,
@@ -116,7 +116,8 @@ typedef enum la_notice_kind {
     LA_NOTICE_DONE,
     LA_NOTICE_ABORTED,
     LA_NOTICE_STREAMING,
-    LA_NOTICE_OVERRUN
+    LA_NOTICE_OVERRUN,
+    LA_NOTICE_STOP_ON
 } la_notice_kind_t;
 
 typedef struct la_notice {
@@ -188,6 +189,7 @@ typedef struct la_decoder_ctx {
     uint32_t batches;
     uint32_t dropped_batches;
     uint32_t dropped_events;
+    uint8_t stop_on_reported; /* P7.7: match already handed to AcqTask */
 } la_decoder_ctx_t;
 
 typedef struct la_app {
@@ -238,6 +240,13 @@ typedef struct la_app {
     volatile uint32_t decoder_busy_us[LA_DECODER_COUNT];
     volatile uint32_t live_overflows;
     volatile uint8_t live_active;
+    /* P7.7 stop-on match: the first decoder to complete its pattern latches
+     * the slot and the matching sample index here (critical section), then
+     * notifies AcqTask with LA_NOTIFY_STOP_ON. AcqTask clears the flag when
+     * the live session ends. */
+    volatile uint8_t live_stop_on;
+    volatile uint8_t live_stop_slot;
+    volatile uint64_t live_stop_index;
     /* P8.2 live latency: XTime counts at the live ARM, the latched sample
      * divider and the worst byte-to-send latency in microseconds (published
      * by StatusTask). */

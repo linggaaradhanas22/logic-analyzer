@@ -79,6 +79,15 @@ typedef enum la_proto_decoder_type {
 
 #define LA_PROTO_DECODER_MAX_SLOTS 3u
 
+/* P7.7 protocol-aware stop. DECODER_CFG byte 2 is `stop_on_len` (0 disables)
+ * and the decoder type's reserved bytes carry the pattern in decode order:
+ * UART bytes 9..11, SPI bytes 13..19, I2C bytes 6..19. A decoded BYTE record
+ * matching the whole pattern stops the live acquisition. */
+#define LA_PROTO_STOP_ON_MAX_UART ((uint8_t)3u)
+#define LA_PROTO_STOP_ON_MAX_SPI ((uint8_t)7u)
+#define LA_PROTO_STOP_ON_MAX_I2C ((uint8_t)14u)
+#define LA_PROTO_STOP_ON_MAX LA_PROTO_STOP_ON_MAX_I2C
+
 typedef struct la_proto_config {
     uint32_t ctrl_flags;
     uint32_t sample_div;
@@ -125,6 +134,8 @@ typedef struct la_proto_i2c_config {
 typedef struct la_proto_decoder_config {
     uint8_t slot;
     uint8_t type;
+    uint8_t stop_on_len; /* P7.7: pattern length, 0 = disabled */
+    uint8_t stop_on[LA_PROTO_STOP_ON_MAX];
     union {
         la_proto_uart_config_t uart;
         la_proto_spi_config_t spi;

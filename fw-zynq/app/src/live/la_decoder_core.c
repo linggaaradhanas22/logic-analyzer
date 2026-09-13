@@ -9,12 +9,40 @@ typedef struct la_decoder_sink {
     int events;
 } la_decoder_sink_t;
 
+static void decoder_match_stop_on(la_decoder_core_t *core,
+                                  const la_decode_event_t *event)
+{
+    uint8_t index;
+
+    if (core->config.stop_on_len == 0u || core->stop_on_hit != 0u ||
+        event->kind != LA_DECODE_EVENT_BYTE) {
+        return;
+    }
+    for (index = 0u; index < event->length; ++index) {
+        uint8_t value = event->data[index];
+
+        if (value == core->config.stop_on[core->stop_on_pos]) {
+            core->stop_on_pos++;
+            if (core->stop_on_pos == core->config.stop_on_len) {
+                core->stop_on_hit = 1u;
+                core->stop_on_t_sample = event->t_sample;
+                return;
+            }
+        } else {
+            /* Restart at the first pattern byte when this byte matches it
+             * (it may already start the next match). */
+            core->stop_on_pos = (value == core->config.stop_on[0]) ? 1u : 0u;
+        }
+    }
+}
+
 static void decoder_emit(void *context, const la_decode_event_t *event)
 {
     la_decoder_sink_t *sink = (la_decoder_sink_t *)context;
 
     sink->events++;
     sink->core->stats.events++;
+    decoder_match_stop_on(sink->core, event);
     if (sink->callback != NULL) {
         sink->callback(sink->context, event);
     }
@@ -67,6 +95,9 @@ int la_decoder_core_configure(la_decoder_core_t *core,
     core->expected_sequence = 0u;
     core->t_sample = 0u;
     core->last_sample = 0u;
+    core->stop_on_pos = 0u;
+    core->stop_on_hit = 0u;
+    core->stop_on_t_sample = 0u;
     memset(&core->stats, 0, sizeof(core->stats));
 
     switch (config->type) {
@@ -207,4 +238,19 @@ const la_decoder_stats_t *la_decoder_core_stats(const la_decoder_core_t *core)
 const la_proto_decoder_config_t *la_decoder_core_config(const la_decoder_core_t *core)
 {
     return core != NULL ? &core->config : NULL;
+}
+
+int la_decoder_core_stop_on_hit(const la_decoder_core_t *core)
+{
+    return core != NULL && core->stop_on_hit != 0u;
+}
+
+int la_decoder_core_stop_on_sample(const la_decoder_core_t *core,
+                                   uint64_t *t_sample)
+{
+    if (core == NULL || t_sample == NULL || core->stop_on_hit == 0u) {
+        return -1;
+    }
+    *t_sample = core->stop_on_t_sample;
+    return 0;
 }

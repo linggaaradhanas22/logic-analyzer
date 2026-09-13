@@ -6,7 +6,9 @@ jumper installed (patgen UART on CH0):
     .venv\\Scripts\\python.exe tools\\run.py test-e2e -- --target tcp://la-esp32.local:5555 --live
 
 `test_live_uart_decode_events` verifies the decoded "LA-TEST\\n" frame over the
-live path. `test_live_uart_continuous_zero_drop` streams for
+live path. `test_live_stop_on_decoded_pattern` (P7.7) configures the decoded
+stop pattern "LA" and requires the session to end on the match report with the
+firmware back in IDLE. `test_live_uart_continuous_zero_drop` streams for
 `--live-seconds` (default 10; the plan gate uses 60) and requires zero
 EVT_OVERRUN frames, a clean repeating byte stream and `dropped_segments == 0`
 in the final STATUS. `test_live_spi_decode_events` and
@@ -133,6 +135,35 @@ def test_live_uart_decode_events(client: AnalyzerClient, request) -> None:
     assert not overruns, overruns
     data = _aligned_frame_bytes(events)
     assert data[: len(UART_FRAME)] == UART_FRAME
+
+
+def test_live_stop_on_decoded_pattern(client: AnalyzerClient, request) -> None:
+    """P7.7 decoded-pattern trigger: the UART patgen stream ends the session
+    when the decoder matches "LA". The match is reported as EVT_TRIGGERED with
+    the matching sample index, the firmware drains the still-owned segments
+    and returns to IDLE without a host LIVE_STOP driving the teardown."""
+    baud = request.config.getoption("--live-baud")
+    _configure_patgen_uart(client, baud)
+    started = time.monotonic()
+    events = client.live(
+        p.pack_decoder_cfg_uart(0, 0, baud, FCLK_HZ, stop_on=b"LA"),
+        config=_stream_config(1), count=None, timeout_s=10.0,
+        stop_on_match=True,
+    )
+    elapsed = time.monotonic() - started
+    assert client.live_match_index is not None, "no EVT_TRIGGERED match report"
+    assert elapsed < 5.0, "stop-on did not end the session early"
+    decoded = [event for event in events
+               if not event.get("overrun") and event["kind"] == EVENT_BYTE]
+    data = b"".join(event["data"] for event in decoded)
+    assert b"LA" in data, f"matched bytes missing from {data[:32]!r}"
+    # The reported index is the second matched byte's sample position and
+    # must lie inside the decoded stream's sample span.
+    first = decoded[0]["t_sample"]
+    last = decoded[-1]["t_sample"]
+    assert first <= client.live_match_index <= last, (first, client.live_match_index, last)
+    status = client.status()
+    assert status["state"] == 0, "firmware did not return to IDLE after stop-on"
 
 
 def test_live_uart_continuous_zero_drop(client: AnalyzerClient, request) -> None:

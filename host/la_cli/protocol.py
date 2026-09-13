@@ -279,6 +279,20 @@ def pack_nak(nak_type: int, sequence: int, error: int) -> bytes:
 # Decoder configuration (protocol.md DECODER_CFG, 20 bytes).
 DECODER_OFF, DECODER_UART, DECODER_SPI, DECODER_I2C = 0, 1, 2, 3
 
+# P7.7 protocol-aware stop: byte 2 is the pattern length and the type's
+# reserved bytes carry the pattern (UART 9..11, SPI 13..19, I2C 6..19).
+STOP_ON_MAX = {DECODER_UART: 3, DECODER_SPI: 7, DECODER_I2C: 14}
+
+
+def _stop_on_bytes(decoder_type: int, stop_on: bytes | None) -> bytes:
+    if stop_on is None:
+        return b""
+    pattern = bytes(stop_on)
+    limit = STOP_ON_MAX[decoder_type]
+    if len(pattern) > limit:
+        raise ValueError(f"stop pattern too long for this decoder (max {limit} bytes)")
+    return pattern
+
 # EVT_DECODED event kinds (docs/decoders.md numbering).
 EVENT_NAMES = {
     1: "BYTE", 2: "FRAME_ERR", 3: "PARITY_ERR", 4: "START", 5: "STOP",
@@ -290,21 +304,25 @@ EVENT_NAMES = {
 def pack_decoder_cfg_uart(slot: int, rx_channel: int, baud_hz: int,
                           sample_rate_hz: int, data_bits: int = 8,
                           parity: int = 0, stop_bits: int = 1,
-                          inverted: int = 0) -> bytes:
+                          inverted: int = 0,
+                          stop_on: bytes | None = None) -> bytes:
     if not 0 <= slot <= 2:
         raise ValueError("decoder slot must be 0..2")
     if not 0 <= rx_channel <= 7:
         raise ValueError("UART rx channel must be 0..7")
     if not 5 <= data_bits <= 9 or parity not in (0, 1, 2) or stop_bits not in (1, 2):
         raise ValueError("invalid UART decoder parameters")
+    pattern = _stop_on_bytes(DECODER_UART, stop_on)
     payload = bytearray(DECODER_CFG_SIZE)
     payload[0] = slot
     payload[1] = DECODER_UART
+    payload[2] = len(pattern)
     payload[4] = rx_channel
     payload[5] = data_bits
     payload[6] = parity
     payload[7] = stop_bits
     payload[8] = inverted
+    payload[9:9 + len(pattern)] = pattern
     struct.pack_into("<I", payload, 12, baud_hz)
     struct.pack_into("<I", payload, 16, sample_rate_hz)
     return bytes(payload)
@@ -321,7 +339,8 @@ def _decoder_channel(value: int, *, optional: bool = False) -> int:
 def pack_decoder_cfg_spi(slot: int, sck_channel: int, mosi_channel: int = -1,
                          miso_channel: int = -1, cs_channel: int = -1,
                          cpol: int = 0, cpha: int = 0, word_size: int = 8,
-                         lsb_first: int = 0, cs_active: int = 0) -> bytes:
+                         lsb_first: int = 0, cs_active: int = 0,
+                         stop_on: bytes | None = None) -> bytes:
     """SPI DECODER_CFG (protocol.md 0x14): signed channel bytes, -1 = absent."""
     if not 0 <= slot <= 2:
         raise ValueError("decoder slot must be 0..2")
@@ -337,19 +356,23 @@ def pack_decoder_cfg_spi(slot: int, sck_channel: int, mosi_channel: int = -1,
         raise ValueError("invalid SPI decoder flags")
     if word_size not in (8, 16):
         raise ValueError("SPI word size must be 8 or 16")
+    pattern = _stop_on_bytes(DECODER_SPI, stop_on)
     payload = bytearray(DECODER_CFG_SIZE)
     payload[0] = slot
     payload[1] = DECODER_SPI
+    payload[2] = len(pattern)
     payload[4:8] = bytes(channels)
     payload[8] = cpol
     payload[9] = cpha
     payload[10] = word_size
     payload[11] = lsb_first
     payload[12] = cs_active
+    payload[13:13 + len(pattern)] = pattern
     return bytes(payload)
 
 
-def pack_decoder_cfg_i2c(slot: int, scl_channel: int, sda_channel: int) -> bytes:
+def pack_decoder_cfg_i2c(slot: int, scl_channel: int, sda_channel: int,
+                         stop_on: bytes | None = None) -> bytes:
     """I2C DECODER_CFG (protocol.md 0x14)."""
     if not 0 <= slot <= 2:
         raise ValueError("decoder slot must be 0..2")
@@ -357,11 +380,14 @@ def pack_decoder_cfg_i2c(slot: int, scl_channel: int, sda_channel: int) -> bytes
         raise ValueError("I2C channels must be 0..7")
     if scl_channel == sda_channel:
         raise ValueError("I2C SCL and SDA must differ")
+    pattern = _stop_on_bytes(DECODER_I2C, stop_on)
     payload = bytearray(DECODER_CFG_SIZE)
     payload[0] = slot
     payload[1] = DECODER_I2C
+    payload[2] = len(pattern)
     payload[4] = scl_channel
     payload[5] = sda_channel
+    payload[6:6 + len(pattern)] = pattern
     return bytes(payload)
 
 

@@ -25,6 +25,12 @@
  * never interpreted as contiguous samples. The sample clock continues from
  * the accumulated run length; per protocol.md, timestamps after a gap are not
  * claimed to be sample-accurate.
+ *
+ * P7.7 protocol-aware stop: the config carries an optional stop pattern
+ * (DECODER_CFG byte 2 plus the type's reserved bytes). The core matches
+ * decoded BYTE record data in order with a rolling window; a full match
+ * latches stop_on_hit and the matching record's t_sample so the decoder task
+ * can ask AcqTask to quiesce the live stream ("trigger on decoded value").
  */
 
 #include "la_decode.h"
@@ -53,6 +59,9 @@ typedef struct la_decoder_core {
     uint32_t expected_sequence;
     uint64_t t_sample;  /* next sample index (end of the last run) */
     uint8_t last_sample;
+    uint8_t stop_on_pos;    /* rolling pattern match position */
+    uint8_t stop_on_hit;    /* set once the pattern completed */
+    uint64_t stop_on_t_sample; /* t_sample of the matching BYTE record */
     la_uart_decoder_t uart;
     la_spi_decoder_t spi;
     la_i2c_decoder_t i2c;
@@ -83,5 +92,13 @@ LA_DECODER_API int la_decoder_core_feed_segment(la_decoder_core_t *core,
 
 LA_DECODER_API const la_decoder_stats_t *la_decoder_core_stats(const la_decoder_core_t *core);
 LA_DECODER_API const la_proto_decoder_config_t *la_decoder_core_config(const la_decoder_core_t *core);
+
+/* P7.7: 1 once a decoded BYTE record completed the configured stop pattern. */
+LA_DECODER_API int la_decoder_core_stop_on_hit(const la_decoder_core_t *core);
+
+/* P7.7: t_sample of the BYTE record that completed the stop pattern.
+ * Returns 0 and stores the timestamp, or -1 when no match has occurred. */
+LA_DECODER_API int la_decoder_core_stop_on_sample(const la_decoder_core_t *core,
+                                                  uint64_t *t_sample);
 
 #endif /* LA_DECODER_CORE_H */

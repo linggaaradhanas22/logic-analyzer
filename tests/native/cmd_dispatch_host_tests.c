@@ -362,6 +362,34 @@ static int test_decoder_cfg(void)
               result.outcome == LA_CMD_OUT_NAK && result.error == LA_PROTO_ERROR_BAD_FIELD,
           "DECODER_CFG bad field NAK");
 
+    /* P7.7: the stop pattern rides in DECODER_CFG byte 2 plus the type's
+     * reserved bytes and latches with the slot. */
+    make_uart_decoder(&config, 0u);
+    config.stop_on_len = 2u;
+    config.stop_on[0] = 0x4Cu;
+    config.stop_on[1] = 0x41u;
+    CHECK(la_proto_pack_decoder_config(&config, payload, sizeof(payload)) ==
+              LA_PROTO_DECODER_CONFIG_WIRE_SIZE,
+          "stop-on decoder config packs");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_DECODER_CFG, 0x29u, payload,
+                                (uint16_t)sizeof(payload), 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_DECODER_CFG && result.slot == 0u,
+          "stop-on decoder config accepted");
+    CHECK(la_cmd_dispatch_decoder(&dispatch, 0u, &latched) == 0 &&
+              latched.stop_on_len == 2u && latched.stop_on[0] == 0x4Cu &&
+              latched.stop_on[1] == 0x41u,
+          "stop-on pattern latched");
+
+    /* An oversized pattern is a bad-field NAK and leaves the latch alone. */
+    payload[2] = LA_PROTO_STOP_ON_MAX_UART + 1u;
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_DECODER_CFG, 0x2Au, payload,
+                                (uint16_t)sizeof(payload), 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK && result.error == LA_PROTO_ERROR_BAD_FIELD,
+          "stop-on oversized pattern NAK");
+    CHECK(la_cmd_dispatch_decoder(&dispatch, 0u, &latched) == 0 &&
+              latched.stop_on_len == 2u,
+          "rejected stop-on leaves the latch unchanged");
+
     CHECK(send_config(&dispatch, 0x26u, &result) == 0, "burst CONFIG accepted");
     CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_ARM, 0x27u, NULL, 0u, 0u, &result) == 0 &&
               result.outcome == LA_CMD_OUT_ARM,

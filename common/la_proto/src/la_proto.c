@@ -210,6 +210,23 @@ static int valid_channel(int8_t channel, int required)
     return (channel >= 0 && channel <= 7) || (!required && channel == -1);
 }
 
+/* P7.7: the stop pattern must fit the type's reserved bytes and every unused
+ * byte of that region must be zero. */
+static int valid_stop_on(uint8_t limit, const la_proto_decoder_config_t *config)
+{
+    uint8_t index;
+
+    if (config->stop_on_len > limit) {
+        return 0;
+    }
+    for (index = config->stop_on_len; index < limit; ++index) {
+        if (config->stop_on[index] != 0u) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int la_proto_validate_decoder_config(const la_proto_decoder_config_t *config)
 {
     const la_proto_spi_config_t *spi;
@@ -221,12 +238,13 @@ int la_proto_validate_decoder_config(const la_proto_decoder_config_t *config)
     }
     switch (config->type) {
     case LA_PROTO_DECODER_OFF:
-        return 0;
+        return config->stop_on_len == 0u ? 0 : -1;
     case LA_PROTO_DECODER_UART:
         uart = &config->params.uart;
         return uart->rx_channel <= 7u && uart->data_bits >= 5u && uart->data_bits <= 9u &&
                        uart->parity <= 2u && (uart->stop_bits == 1u || uart->stop_bits == 2u) &&
-                       uart->inverted <= 1u && uart->baud_hz != 0u && uart->sample_rate_hz != 0u
+                       uart->inverted <= 1u && uart->baud_hz != 0u && uart->sample_rate_hz != 0u &&
+                       valid_stop_on(LA_PROTO_STOP_ON_MAX_UART, config)
                    ? 0
                    : -1;
     case LA_PROTO_DECODER_SPI:
@@ -235,13 +253,15 @@ int la_proto_validate_decoder_config(const la_proto_decoder_config_t *config)
                        valid_channel(spi->miso_channel, 0) && valid_channel(spi->cs_channel, 0) &&
                        (spi->mosi_channel != -1 || spi->miso_channel != -1) && spi->cpol <= 1u &&
                        spi->cpha <= 1u && (spi->word_size == 8u || spi->word_size == 16u) &&
-                       spi->lsb_first <= 1u && spi->cs_active <= 1u
+                       spi->lsb_first <= 1u && spi->cs_active <= 1u &&
+                       valid_stop_on(LA_PROTO_STOP_ON_MAX_SPI, config)
                    ? 0
                    : -1;
     case LA_PROTO_DECODER_I2C:
         i2c = &config->params.i2c;
         return valid_channel(i2c->scl_channel, 1) && valid_channel(i2c->sda_channel, 1) &&
-                       i2c->scl_channel != i2c->sda_channel
+                       i2c->scl_channel != i2c->sda_channel &&
+                       valid_stop_on(LA_PROTO_STOP_ON_MAX_I2C, config)
                    ? 0
                    : -1;
     default:
@@ -260,6 +280,7 @@ size_t la_proto_pack_decoder_config(const la_proto_decoder_config_t *config,
     memset(output, 0, LA_PROTO_DECODER_CONFIG_WIRE_SIZE);
     output[0] = config->slot;
     output[1] = config->type;
+    output[2] = config->stop_on_len;
     switch (config->type) {
     case LA_PROTO_DECODER_UART:
         output[4] = config->params.uart.rx_channel;
@@ -267,6 +288,7 @@ size_t la_proto_pack_decoder_config(const la_proto_decoder_config_t *config,
         output[6] = config->params.uart.parity;
         output[7] = config->params.uart.stop_bits;
         output[8] = config->params.uart.inverted;
+        memcpy(&output[9], config->stop_on, LA_PROTO_STOP_ON_MAX_UART);
         put_u32_le(&output[12], config->params.uart.baud_hz);
         put_u32_le(&output[16], config->params.uart.sample_rate_hz);
         break;
@@ -280,10 +302,12 @@ size_t la_proto_pack_decoder_config(const la_proto_decoder_config_t *config,
         output[10] = config->params.spi.word_size;
         output[11] = config->params.spi.lsb_first;
         output[12] = config->params.spi.cs_active;
+        memcpy(&output[13], config->stop_on, LA_PROTO_STOP_ON_MAX_SPI);
         break;
     case LA_PROTO_DECODER_I2C:
         output[4] = (uint8_t)config->params.i2c.scl_channel;
         output[5] = (uint8_t)config->params.i2c.sda_channel;
+        memcpy(&output[6], config->stop_on, LA_PROTO_STOP_ON_MAX_I2C);
         break;
     default:
         break;
@@ -301,6 +325,7 @@ int la_proto_unpack_decoder_config(la_proto_decoder_config_t *config,
     memset(config, 0, sizeof(*config));
     config->slot = input[0];
     config->type = input[1];
+    config->stop_on_len = input[2];
     switch (config->type) {
     case LA_PROTO_DECODER_UART:
         config->params.uart.rx_channel = input[4];
@@ -308,6 +333,7 @@ int la_proto_unpack_decoder_config(la_proto_decoder_config_t *config,
         config->params.uart.parity = input[6];
         config->params.uart.stop_bits = input[7];
         config->params.uart.inverted = input[8];
+        memcpy(config->stop_on, &input[9], LA_PROTO_STOP_ON_MAX_UART);
         config->params.uart.baud_hz = get_u32_le(&input[12]);
         config->params.uart.sample_rate_hz = get_u32_le(&input[16]);
         break;
@@ -321,10 +347,12 @@ int la_proto_unpack_decoder_config(la_proto_decoder_config_t *config,
         config->params.spi.word_size = input[10];
         config->params.spi.lsb_first = input[11];
         config->params.spi.cs_active = input[12];
+        memcpy(config->stop_on, &input[13], LA_PROTO_STOP_ON_MAX_SPI);
         break;
     case LA_PROTO_DECODER_I2C:
         config->params.i2c.scl_channel = (int8_t)input[4];
         config->params.i2c.sda_channel = (int8_t)input[5];
+        memcpy(config->stop_on, &input[6], LA_PROTO_STOP_ON_MAX_I2C);
         break;
     default:
         break;

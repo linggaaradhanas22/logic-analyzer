@@ -261,6 +261,7 @@ static void acq_start_live(la_acq_ctx_t *ctx, const la_ctrl_msg_t *message)
     }
     ctx->live = 1u;
     ctx->overflow_seen = 0u;
+    app->live_stop_on = 0u;
     ctx->trig_index = 0u;
     app->live_active = 1u;
     app->word_count = 0u;
@@ -276,7 +277,8 @@ static void acq_start_live(la_acq_ctx_t *ctx, const la_ctrl_msg_t *message)
     acq_post_notice(ctx, LA_NOTICE_STREAMING);
 }
 
-static void acq_stop_live(la_acq_ctx_t *ctx, int report_overrun, uint32_t dropped)
+static void acq_stop_live(la_acq_ctx_t *ctx, int report_overrun, uint32_t dropped,
+                          int stop_on)
 {
     la_app_t *app = ctx->app;
     la_acq_event_t event;
@@ -285,6 +287,7 @@ static void acq_stop_live(la_acq_ctx_t *ctx, int report_overrun, uint32_t droppe
 
     ctx->live = 0u;
     app->live_active = 0u;
+    app->live_stop_on = 0u;
     la_regs_write32(&app->regs, LA_REG_CTRL_OFFSET, LA_REG_CTRL_ABORT_MASK);
     la_dma_stop(&app->dma);
 
@@ -322,7 +325,10 @@ static void acq_stop_live(la_acq_ctx_t *ctx, int report_overrun, uint32_t droppe
         acq_post_overrun(ctx, dropped, 0u);
     }
     if (la_acq_fsm_abort(&ctx->fsm, &event) == 0) {
-        acq_post_notice(ctx, LA_NOTICE_ABORTED);
+        /* P7.7: a stop-on match reports the matching sample index instead of
+         * a plain abort; the events of the drained segments still follow. */
+        acq_post_notice(ctx, stop_on != 0 ? LA_NOTICE_STOP_ON
+                                          : LA_NOTICE_ABORTED);
     }
 }
 
@@ -336,7 +342,7 @@ static void acq_handle_live_irq(la_acq_ctx_t *ctx)
 
     count = la_dma_collect_live(&app->dma, entries, LA_LIVE_SEGMENT_COUNT);
     if (count < 0 || app->dma.error != 0u) {
-        acq_stop_live(ctx, 1, 0u);
+        acq_stop_live(ctx, 1, 0u, 0);
         return;
     }
     ctx->word_count =
@@ -349,7 +355,7 @@ static void acq_handle_live_irq(la_acq_ctx_t *ctx)
         uint8_t d;
 
         if (entries[index].id >= LA_LIVE_SEGMENT_COUNT) {
-            acq_stop_live(ctx, 1, 0u);
+            acq_stop_live(ctx, 1, 0u, 0);
             return;
         }
         message.slot = entries[index].id;
@@ -394,7 +400,7 @@ static void acq_handle_live_irq(la_acq_ctx_t *ctx)
     }
 
     if (acq_live_repost(ctx) != 0) {
-        acq_stop_live(ctx, 1, 0u);
+        acq_stop_live(ctx, 1, 0u, 0);
     }
     /* A ring with no posted descriptor is not itself an error: consumers
      * release their references within a few milliseconds and the next
@@ -433,7 +439,7 @@ static void acq_handle_pl(la_acq_ctx_t *ctx)
             /* In stream mode DONE follows an overflow stop and drain. */
             acq_handle_live_irq(ctx);
             if (ctx->live != 0u) {
-                acq_stop_live(ctx, 1, 0u);
+                acq_stop_live(ctx, 1, 0u, 0);
             }
         } else {
             acq_complete(ctx);
@@ -448,7 +454,7 @@ static void acq_handle_ctrl(la_acq_ctx_t *ctx, const la_ctrl_msg_t *message)
 
     if (message->kind == LA_CTRL_ABORT) {
         if (ctx->live != 0u) {
-            acq_stop_live(ctx, 0, 0u);
+            acq_stop_live(ctx, 0, 0u, 0);
             return;
         }
         if (la_acq_fsm_state(&ctx->fsm) != LA_ACQ_IDLE) {
@@ -458,7 +464,7 @@ static void acq_handle_ctrl(la_acq_ctx_t *ctx, const la_ctrl_msg_t *message)
     }
     if (message->kind == LA_CTRL_LIVE_STOP) {
         if (ctx->live != 0u) {
-            acq_stop_live(ctx, 0, 0u);
+            acq_stop_live(ctx, 0, 0u, 0);
         }
         return;
     }
@@ -550,8 +556,17 @@ void la_acq_task(void *parameters)
             }
             if (ctx->live != 0u && (bits & LA_NOTIFY_SEGMENT_FREE) != 0u) {
                 if (acq_live_repost(ctx) != 0) {
-                    acq_stop_live(ctx, 1, 0u);
+                    acq_stop_live(ctx, 1, 0u, 0);
                 }
+            }
+            /* P7.7: a decoder matched its stop pattern. Latch the matching
+             * sample index for the notice, then quiesce through the same
+             * path as LIVE_STOP so still-owned completed segments drain. */
+            if (ctx->live != 0u && (bits & LA_NOTIFY_STOP_ON) != 0u &&
+                app->live_stop_on != 0u) {
+                ctx->trig_index = app->live_stop_index;
+                app->trig_index = ctx->trig_index;
+                acq_stop_live(ctx, 0, 0u, 1);
             }
         } else if (la_acq_fsm_state(&ctx->fsm) == LA_ACQ_ARMED) {
             acq_abort(ctx, 1);

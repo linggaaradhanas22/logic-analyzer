@@ -411,6 +411,38 @@ placed after the drain would only reach the host at teardown.
 | `ev_q` (8) | decoder tasks (multi-producer) | TxTask | Full queue drops the whole batch and counts its records |
 | `notice_q` | AcqTask | CmdTask | EVT_OVERRUN notices are additive to the lifecycle notices |
 
+### P7.7 protocol-aware stop (decoded-pattern trigger)
+
+`DECODER_CFG` byte 2 carries `stop_on_len` and the type's reserved bytes carry
+the pattern (UART 3, SPI 7, I2C 14 bytes; `docs/protocol.md`). The path is:
+
+- `la_decoder_core` keeps a rolling match position and compares the data of
+  every emitted BYTE record (in record order) against the pattern. A full
+  match latches `stop_on_hit` and the matching record's `t_sample`; the event
+  itself is still emitted, so the host sees the byte that completed the
+  pattern. Non-BYTE events (START/STOP/ACK/...) never match. The match is
+  detected when the decoder processes the segment, not at the wire edge, so a
+  backlogged decoder stops the stream later than the physical byte.
+- The decoder task checks the latch after each fed segment. The first decoder
+  to match wins: it latches slot and sample index in `la_app_t` under a
+  critical section and notifies AcqTask with `LA_NOTIFY_STOP_ON`; the match is
+  reported once per configuration.
+- AcqTask reuses the `LIVE_STOP` path (`acq_stop_live`): write `CTRL.ABORT`,
+  stop the DMA, notify every decoder to drain and flush, abort the live ring
+  (DMA-owned slots freed at once, CPU-owned slots drained by their consumers),
+  then soft-reset the datapath and return the FSM to IDLE. This is the
+  "freeze still-owned completed segments for burst drain" behavior of the
+  plan: already-completed segments are drained and their decoded events reach
+  the host instead of being discarded. It posts `LA_NOTICE_STOP_ON` with the
+  matching sample index instead of a plain abort.
+- CmdTask maps the notice to `EVT_TRIGGERED(match_index)` plus a LOG line, so
+  the host live client can end the session and report "trigger on decoded
+  value". A plain PL trigger still emits `EVT_TRIGGERED` without ending a
+  session; the host opts in with `stop_on_match`.
+- Retaining a last-K pre-trigger history is out of scope (it needs a
+  separately budgeted history pool and explicit ownership), matching the
+  plan's P7.7 note.
+
 ## ESP32 link relay core (P5.2)
 
 `la_relay.{h,c}` (in the `la_link` IDF component, include/link API; pure C,

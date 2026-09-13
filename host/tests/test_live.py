@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import pytest
 from click.testing import CliRunner
 
@@ -56,6 +58,23 @@ def test_decoder_config_i2c_pack_layout() -> None:
         p.pack_decoder_cfg_i2c(0, 3, 3)  # SCL and SDA must differ
     with pytest.raises(ValueError):
         p.pack_decoder_cfg_i2c(0, 3, 8)  # channel range
+
+
+def test_decoder_config_stop_on_pack_layout() -> None:
+    """P7.7: byte 2 is the length and the type's reserved bytes carry the
+    decoded-pattern stop."""
+    payload = p.pack_decoder_cfg_uart(0, 0, 115200, 100_000_000, stop_on=b"LA")
+    assert payload[2] == 2 and payload[9:11] == b"LA" and payload[11] == 0
+    spi = p.pack_decoder_cfg_spi(1, 0, mosi_channel=1, stop_on=b"\x4c\x41")
+    assert spi[2] == 2 and spi[13:15] == b"\x4c\x41" and spi[15] == 0
+    i2c = p.pack_decoder_cfg_i2c(2, 3, 4, stop_on=b"\x01\x02\x03")
+    assert i2c[2] == 3 and i2c[6:9] == b"\x01\x02\x03"
+    with pytest.raises(ValueError):
+        p.pack_decoder_cfg_uart(0, 0, 115200, 100_000_000, stop_on=b"LATE")  # max 3
+    with pytest.raises(ValueError):
+        p.pack_decoder_cfg_spi(0, 0, mosi_channel=1, stop_on=bytes(8))  # max 7
+    with pytest.raises(ValueError):
+        p.pack_decoder_cfg_i2c(0, 3, 4, stop_on=bytes(15))  # max 14
 
 
 def test_live_client_collects_events_and_overrun(analyzer) -> None:
@@ -268,3 +287,70 @@ def test_live_command_unknown_decoder_name() -> None:
     ])
     assert result.exit_code != 0
     assert "decoder must be" in result.output
+
+
+def test_live_client_stops_on_decoded_match(analyzer) -> None:
+    """P7.7: an EVT_TRIGGERED report ends the session when requested and the
+    match sample index is exposed."""
+    mock = analyzer("live_stop_on")
+    client = AnalyzerClient(open_uri(mock.uri))
+    started = time.monotonic()
+    try:
+        events = client.live(
+            p.pack_decoder_cfg_uart(0, 0, 115200, 10_000_000, stop_on=b"LA"),
+            stop_on_match=True,
+        )
+        assert client.live_match_index == 10_100
+    finally:
+        client.close()
+    elapsed = time.monotonic() - started
+    decoded = [e for e in events if not e.get("overrun")]
+    assert len(decoded) == 8  # only the batch before the match report
+    assert b"".join(e["data"] for e in decoded) == b"LA-TEST\n"
+    assert elapsed < 0.5  # stopped at the match, not at a deadline
+    assert mock.last_decoder is not None
+    assert mock.last_decoder[2] == 2 and mock.last_decoder[9:11] == b"LA"
+
+
+def test_live_client_triggered_does_not_stop_without_stop_on(analyzer) -> None:
+    mock = analyzer("live_stop_on")
+    client = AnalyzerClient(open_uri(mock.uri))
+    started = time.monotonic()
+    try:
+        events = client.live(
+            p.pack_decoder_cfg_uart(0, 0, 115200, 10_000_000), timeout_s=0.5
+        )
+        assert client.live_match_index == 10_100
+    finally:
+        client.close()
+    # The trigger was seen but did not end the session: it ran to the deadline.
+    assert time.monotonic() - started >= 0.4
+    assert len([e for e in events if not e.get("overrun")]) == 8
+
+
+def test_live_command_stop_on(analyzer) -> None:
+    mock = analyzer("live_stop_on")
+    result = CliRunner().invoke(cli, [
+        "live", "--target", mock.uri, "--decoder", "uart:rx=0,baud=115200",
+        "--stop-on", "4c41",
+    ])
+    assert result.exit_code == 0, result.output
+    assert "stop-on match at sample 10100" in result.output
+    assert mock.last_decoder is not None
+    assert mock.last_decoder[2] == 2 and mock.last_decoder[9:11] == b"LA"
+
+
+def test_live_command_stop_on_bad_hex() -> None:
+    result = CliRunner().invoke(cli, [
+        "live", "--target", "tcp://127.0.0.1:1", "--stop-on", "4c4",
+    ])
+    assert result.exit_code != 0
+    assert "hex digits" in result.output
+
+
+def test_printable_bytes_rendering() -> None:
+    from host.la_cli.commands import _printable_bytes
+
+    assert _printable_bytes(b"LA-TEST\n") == "LA-TEST."
+    assert _printable_bytes(bytes([0x00, 0xFF, 0x41])) == "..A"
+    assert _printable_bytes(b"") == ""

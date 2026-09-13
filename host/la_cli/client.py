@@ -340,7 +340,8 @@ class AnalyzerClient:
              read_stall_s: float = 0.0,
              on_started=None, stop_on_overrun: bool = True,
              collect_events: bool = True,
-             event_format: int = p.EVT_FORMAT_RECORDS) -> list[dict]:
+             event_format: int = p.EVT_FORMAT_RECORDS,
+             stop_on_match: bool = False) -> list[dict]:
         """Configures the live stream and collects decoded events (P7.5).
 
         `config` is an optional 37-byte STREAM CONFIG payload sent before the
@@ -361,14 +362,18 @@ class AnalyzerClient:
         returned list then holds only the overrun records. `event_format`
         selects the encoding (P9.2): the default 0 keeps the v1 EVT_DECODED
         records, 1 requests the compact EVT_BLOCK encoding with an EVT_CFG
-        frame before DECODER_CFG. `self.live_stats` reports the decoded event
-        count, received event frames and their wire bytes for the comparison
-        of the two encodings."""
+        frame before DECODER_CFG. `stop_on_match=True` (P7.7) stops the pump
+        when the firmware reports an EVT_TRIGGERED frame for a decoded stop
+        pattern; the match sample index is kept in `self.live_match_index`.
+        `self.live_stats` reports the decoded event count, received event
+        frames and their wire bytes for the comparison of the two
+        encodings."""
         if timeout_s is None:
             deadline = float("inf")
         else:
             deadline = time.monotonic() + timeout_s
         self.live_stats = {"events": 0, "frames": 0, "wire_bytes": 0, "overruns": 0}
+        self.live_match_index: int | None = None
         if config is not None:
             self._send(p.CONFIG, config)
             self._expect_ack(p.CONFIG, "CONFIG", deadline)
@@ -442,6 +447,15 @@ class AnalyzerClient:
                                 decoded += 1
                     collected[:] = keep
                 return stop_requested
+            if message_type == p.EVT_TRIGGERED:
+                # P7.7: a decoded stop pattern matched (or a PL trigger in a
+                # live session); the caller decides whether that ends the
+                # session.
+                self.live_match_index = int.from_bytes(payload[:8], "little")
+                if stop_on_match:
+                    stop_requested = True
+                    return True
+                return False
             if message_type == p.EVT_OVERRUN:
                 dropped = int.from_bytes(payload[:4], "little")
                 stage = payload[4]

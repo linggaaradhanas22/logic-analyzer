@@ -272,6 +272,19 @@ static void cmd_frame_callback(void *context, uint8_t type, uint8_t sequence,
     }
 }
 
+static void cmd_post_evt_triggered(la_cmd_ctx_t *ctx, uint64_t index)
+{
+    uint8_t payload[8];
+    unsigned index_byte;
+
+    for (index_byte = 0u; index_byte < 8u; ++index_byte) {
+        payload[index_byte] = (uint8_t)(index & 0xFFu);
+        index >>= 8;
+    }
+    cmd_post_frame(ctx, LA_PROTO_EVT_TRIGGERED, la_app_next_sequence(ctx->app),
+                   payload, sizeof(payload));
+}
+
 static void cmd_handle_notice(la_cmd_ctx_t *ctx, const la_notice_t *notice)
 {
     la_app_t *app = ctx->app;
@@ -280,20 +293,18 @@ static void cmd_handle_notice(la_cmd_ctx_t *ctx, const la_notice_t *notice)
     case LA_NOTICE_ARMED:
         la_cmd_dispatch_acq_notice(&ctx->dispatch, LA_CMD_ACQ_ARMED);
         break;
-    case LA_NOTICE_TRIGGERED: {
-        uint8_t payload[8];
-        uint64_t index = notice->trig_index;
-        unsigned index_byte;
-
+    case LA_NOTICE_TRIGGERED:
         la_cmd_dispatch_acq_notice(&ctx->dispatch, LA_CMD_ACQ_TRIGGERED);
-        for (index_byte = 0u; index_byte < 8u; ++index_byte) {
-            payload[index_byte] = (uint8_t)(index & 0xFFu);
-            index >>= 8;
-        }
-        cmd_post_frame(ctx, LA_PROTO_EVT_TRIGGERED, la_app_next_sequence(app),
-                       payload, sizeof(payload));
+        cmd_post_evt_triggered(ctx, notice->trig_index);
         break;
-    }
+    case LA_NOTICE_STOP_ON:
+        /* P7.7: the decoded-pattern match ended the live session; the index
+         * is the matching byte's sample position ("trigger on decoded
+         * value"). The view returns to IDLE before the drained events. */
+        la_cmd_dispatch_acq_notice(&ctx->dispatch, LA_CMD_ACQ_ABORTED);
+        cmd_post_evt_triggered(ctx, notice->trig_index);
+        cmd_post_log(ctx, "live stopped on decoded pattern");
+        break;
     case LA_NOTICE_DONE:
         la_cmd_dispatch_acq_notice(&ctx->dispatch, LA_CMD_ACQ_DONE);
         break;

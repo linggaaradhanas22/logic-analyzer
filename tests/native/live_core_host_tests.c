@@ -435,6 +435,93 @@ static int test_decoder_core_guards(void)
     return 0;
 }
 
+static int test_decoder_core_stop_on(void)
+{
+    la_decoder_core_t core;
+    la_proto_decoder_config_t config;
+    sample_buf_t buffer;
+    uint32_t words[TEST_SAMPLES];
+    uint32_t word_count;
+    event_log_t log;
+    uint64_t match = 0u;
+    uint32_t index;
+    int hit_at = -1;
+
+    memset(&buffer, 0, sizeof(buffer));
+    build_uart_text(&buffer, "LA-TEST\n", 8u);
+    word_count = samples_to_words(&buffer, words,
+                                  (uint32_t)(sizeof(words) / sizeof(words[0])));
+
+    la_decoder_core_init(&core);
+    memset(&config, 0, sizeof(config));
+    config.slot = 0u;
+    config.type = LA_PROTO_DECODER_UART;
+    config.params.uart.rx_channel = 0u;
+    config.params.uart.data_bits = 8u;
+    config.params.uart.parity = LA_UART_PARITY_NONE;
+    config.params.uart.stop_bits = 1u;
+    config.params.uart.inverted = 0u;
+    config.params.uart.baud_hz = 100u;
+    config.params.uart.sample_rate_hz = 400u;
+    config.stop_on_len = 2u;
+    config.stop_on[0] = 0x4Cu; /* 'L' */
+    config.stop_on[1] = 0x41u; /* 'A' */
+    CHECK(la_decoder_core_configure(&core, &config) == 0, "stop-on UART configured");
+    CHECK(la_decoder_core_stop_on_hit(&core) == 0, "no hit before any feed");
+    CHECK(la_decoder_core_stop_on_sample(&core, &match) == -1,
+          "no match sample before any feed");
+
+    /* Feed one transition word per segment: the rolling match must survive
+     * segment boundaries (the pattern completes on the second byte). */
+    memset(&log, 0, sizeof(log));
+    for (index = 0u; index < word_count; ++index) {
+        CHECK(la_decoder_core_feed_segment(&core, &words[index], 1u,
+                                           (uint32_t)(index + 1u), log_event,
+                                           &log) >= 0,
+              "feed stop-on word");
+        if (la_decoder_core_stop_on_hit(&core)) {
+            hit_at = (int)index;
+            break;
+        }
+    }
+    CHECK(hit_at >= 0 && (uint32_t)hit_at < word_count, "stop-on pattern matched");
+    CHECK(la_decoder_core_stop_on_sample(&core, &match) == 0 && match == 44u,
+          "match sample is the second byte's timestamp");
+    CHECK(log.count == 2u && log.events[0].data[0] == 0x4Cu &&
+              log.events[1].kind == LA_DECODE_EVENT_BYTE &&
+              log.events[1].data[0] == 0x41u,
+          "matching bytes are still emitted in order");
+
+    /* A pattern that never occurs leaves the hit clear. */
+    la_decoder_core_init(&core);
+    config.stop_on[0] = 0xFFu;
+    config.stop_on[1] = 0xFEu;
+    CHECK(la_decoder_core_configure(&core, &config) == 0, "nonmatching pattern configured");
+    memset(&log, 0, sizeof(log));
+    CHECK(la_decoder_core_feed_segment(&core, words, word_count, 1u, log_event, &log) >= 0,
+          "feed nonmatching stream");
+    CHECK(la_decoder_core_stop_on_hit(&core) == 0, "no false stop-on hit");
+
+    /* Reconfiguring clears a previous hit. */
+    config.stop_on[0] = 0x4Cu;
+    config.stop_on[1] = 0x41u;
+    CHECK(la_decoder_core_configure(&core, &config) == 0, "stop-on reconfigured");
+    CHECK(la_decoder_core_stop_on_hit(&core) == 0, "reconfigure clears the hit");
+
+    /* A single-byte pattern matches immediately (length 1 is valid). */
+    config.stop_on_len = 1u;
+    config.stop_on[0] = 0x54u; /* 'T' */
+    config.stop_on[1] = 0u;
+    CHECK(la_decoder_core_configure(&core, &config) == 0, "single-byte pattern configured");
+    memset(&log, 0, sizeof(log));
+    CHECK(la_decoder_core_feed_segment(&core, words, word_count, 1u, log_event, &log) >= 0,
+          "feed single-byte pattern stream");
+    CHECK(la_decoder_core_stop_on_hit(&core) == 1 &&
+              la_decoder_core_stop_on_sample(&core, &match) == 0 && match == 132u,
+          "single-byte pattern matches the fourth byte");
+    return 0;
+}
+
 /* -------------------------------------------------------------- event batch */
 
 static int test_event_batch(void)
@@ -581,8 +668,9 @@ int main(void)
 {
     if (test_live_ring() != 0 || test_decoder_core_uart() != 0 ||
         test_decoder_core_spi() != 0 || test_decoder_core_i2c() != 0 ||
-        test_decoder_core_guards() != 0 || test_event_batch() != 0 ||
-        test_event_block() != 0 || test_evt_overrun_payload() != 0) {
+        test_decoder_core_guards() != 0 || test_decoder_core_stop_on() != 0 ||
+        test_event_batch() != 0 || test_event_block() != 0 ||
+        test_evt_overrun_payload() != 0) {
         return 1;
     }
     puts("PASS: la_native_live");

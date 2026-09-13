@@ -43,7 +43,7 @@ STATUS_PAYLOAD = (
 assert len(STATUS_PAYLOAD) == 52
 
 
-_LIVE_SCENARIOS = ("live", "live_link_overrun", "live_compact")
+_LIVE_SCENARIOS = ("live", "live_link_overrun", "live_compact", "live_stop_on")
 
 
 def counter_samples(total: int) -> bytes:
@@ -317,6 +317,11 @@ class MockAnalyzer:
                 payload += bytes([1])  # data length
                 payload += bytes([byte])
             self._send(connection, p.EVT_DECODED, bytes(payload))
+            if self.scenario == "live_stop_on" and batch == 0:
+                # P7.7: the decoded-pattern match report arrives between
+                # batches; a client with stop_on_match ends the session here.
+                self._send(connection, p.EVT_TRIGGERED, struct.pack("<Q", 10_100))
+                return
         if self.scenario == "live_link_overrun":
             dropped, stage = 7, 2
         else:

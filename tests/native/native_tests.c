@@ -176,6 +176,32 @@ static int test_protocol(void)
               unpacked_decoder.params.spi.miso_channel == -1 &&
               unpacked_decoder.params.spi.word_size == 16u,
           "DECODER_CFG payload round trip");
+
+    /* P7.7 stop-on pattern: byte 2 is the length and the SPI pattern starts
+     * at byte 13; a length above the type's reserved space or nonzero
+     * padding is rejected. */
+    decoder_config.stop_on_len = 2u;
+    decoder_config.stop_on[0] = 0x4Cu;
+    decoder_config.stop_on[1] = 0x41u;
+    CHECK(la_proto_pack_decoder_config(&decoder_config, decoder_payload, sizeof(decoder_payload)) ==
+              LA_PROTO_DECODER_CONFIG_WIRE_SIZE,
+          "DECODER_CFG with stop pattern packs");
+    CHECK(decoder_payload[2] == 2u && decoder_payload[13] == 0x4Cu &&
+              decoder_payload[14] == 0x41u && decoder_payload[15] == 0u,
+          "DECODER_CFG stop pattern byte layout");
+    CHECK(la_proto_unpack_decoder_config(&unpacked_decoder, decoder_payload,
+                                         sizeof(decoder_payload)) == 0 &&
+              unpacked_decoder.stop_on_len == 2u &&
+              unpacked_decoder.stop_on[0] == 0x4Cu &&
+              unpacked_decoder.stop_on[1] == 0x41u,
+          "DECODER_CFG stop pattern round trip");
+    decoder_config.stop_on_len = LA_PROTO_STOP_ON_MAX_SPI + 1u;
+    CHECK(la_proto_validate_decoder_config(&decoder_config) != 0,
+          "DECODER_CFG rejects an oversized stop pattern");
+    decoder_config.stop_on_len = 1u;
+    decoder_config.stop_on[1] = 0xAAu;
+    CHECK(la_proto_validate_decoder_config(&decoder_config) != 0,
+          "DECODER_CFG rejects nonzero pattern padding");
     return 0;
 }
 

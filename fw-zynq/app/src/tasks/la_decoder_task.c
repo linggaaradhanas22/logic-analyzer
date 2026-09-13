@@ -103,6 +103,7 @@ static void decoder_apply_config(la_decoder_ctx_t *ctx)
         if (message.valid != 0u) {
             (void)la_decoder_core_configure(&ctx->core, &message.config);
             ctx->evt_format = message.evt_format;
+            ctx->stop_on_reported = 0u;
             ctx->app->decoder_events[ctx->slot] = 0u;
             ctx->app->decoder_dropped_segments[ctx->slot] = 0u;
         }
@@ -139,6 +140,25 @@ static void decoder_drain_segments(la_decoder_ctx_t *ctx)
             ctx->app->decoder_busy_us[ctx->slot] +=
                 (uint32_t)((end - start) / (COUNTS_PER_SECOND / 1000000u));
             la_trace_mark(LA_TRACE_EVENT_MARK_DECODE, (uint16_t)ctx->slot);
+            /* P7.7: a full stop-pattern match ends the live session. The
+             * first decoder to match latches the slot and sample index;
+             * AcqTask reuses the LIVE_STOP quiesce/drain path so the events
+             * already decoded still reach the host. */
+            if (ctx->stop_on_reported == 0u &&
+                la_decoder_core_stop_on_hit(&ctx->core)) {
+                uint64_t t_sample = 0u;
+
+                (void)la_decoder_core_stop_on_sample(&ctx->core, &t_sample);
+                taskENTER_CRITICAL();
+                if (ctx->app->live_stop_on == 0u) {
+                    ctx->app->live_stop_on = 1u;
+                    ctx->app->live_stop_slot = ctx->slot;
+                    ctx->app->live_stop_index = t_sample;
+                }
+                taskEXIT_CRITICAL();
+                ctx->stop_on_reported = 1u;
+                (void)xTaskNotify(ctx->app->acq_task, LA_NOTIFY_STOP_ON, eSetBits);
+            }
         }
         /* The ring owns the slot state; the pool lock inside is taken under
          * this critical section so AcqTask's repost never interleaves. */
