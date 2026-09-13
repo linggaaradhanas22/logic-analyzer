@@ -45,6 +45,11 @@
 
 #define LA_SPI_SRR_RESET 0x0000000Au
 
+/* DGIER: the IP only asserts ip2intc_irpt while the global interrupt enable
+ * is set (XSP_GINTR_ENABLE_MASK in the BSP driver); without it the
+ * half-empty/DRR interrupts never reach the GIC and the TX FIFO starves. */
+#define LA_SPI_DGIER_GIE 0x80000000u
+
 /* SPICR bits. */
 #define LA_SPI_CR_LOOPBACK 0x00000001u
 #define LA_SPI_CR_ENABLE 0x00000002u
@@ -94,8 +99,10 @@
      LA_SPI_ISR_SLAVE_MODE_ERROR | LA_SPI_ISR_MSB_ERROR |                       \
      LA_SPI_ISR_LOOPBACK_ERROR | LA_SPI_ISR_COMMAND_ERROR)
 
-/* TFO/RFO occupancy field. */
-#define LA_SPI_FIFO_OCCUPANCY_MASK 0x0000007Fu
+/* TFO/RFO occupancy field. The register holds occupancy - 1 (an empty FIFO
+ * also reads 0), so the occupancy helpers add one; the field is 8 bits wide
+ * for the 256-byte FIFO (log2(depth)). */
+#define LA_SPI_FIFO_OCCUPANCY_MASK 0x000000FFu
 
 typedef uint32_t (*la_spi_read32_fn)(uintptr_t address);
 typedef void (*la_spi_write32_fn)(uintptr_t address, uint32_t value);
@@ -146,8 +153,10 @@ LA_SPI_API uint32_t la_spi_irq_status(const la_spi_dev_t *dev);
 LA_SPI_API void la_spi_irq_clear(const la_spi_dev_t *dev, uint32_t mask);
 LA_SPI_API void la_spi_irq_enable(const la_spi_dev_t *dev, uint32_t mask);
 
-/* Configuration self-check: the core must report slave mode (SPISR bit 5) and
- * no latched error flags. Returns a la_spi_check_result_t. */
+/* Configuration self-check: SPICR must have SPE set with the master bit clear
+ * and no latched SPISR error flags. (SPISR's Slave_Mode_Select bit is a
+ * transaction/selection status, not the configuration, so it is not used.)
+ * Returns a la_spi_check_result_t. */
 LA_SPI_API int la_spi_check(const la_spi_dev_t *dev);
 
 LA_SPI_API const char *la_spi_check_name(int result);

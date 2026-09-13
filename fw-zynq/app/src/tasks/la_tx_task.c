@@ -103,17 +103,20 @@ static int tx_write(la_tx_ctx_t *ctx, uint8_t type, uint8_t sequence,
         (type == LA_PROTO_DATA_BEGIN || type == LA_PROTO_DATA_CHUNK ||
          type == LA_PROTO_DATA_END)) {
         /* P9.1: LINK_CFG selected the SPI slave for burst frames. The 8 KiB
-         * frame ring can be full while the ACK window still has room, so
-         * retry briefly before reporting a drop; commands and ACKs stay on
-         * the UART. */
+         * frame ring can be full while the ACK window still has room; wait
+         * for the SPI task to free space (it signals every pass) instead of
+         * a 1 ms poll, which caps the producer below the 10 MHz link rate
+         * and starves the slave mid-frame (bench 2026-09-13). */
         unsigned tries;
 
-        for (tries = 0u; tries < 100u; ++tries) {
+        for (tries = 0u; tries < 20u; ++tries) {
             if (la_spi_enqueue(wire, encoded) == 0) {
                 la_trace_mark(LA_TRACE_EVENT_MARK_TX_FRAME, type);
                 return 0;
             }
-            vTaskDelay(pdMS_TO_TICKS(1));
+            if (la_spi_wait_space(pdMS_TO_TICKS(100)) != 0) {
+                break;
+            }
         }
         ctx->app->tx_drops++;
         return -1;
@@ -155,6 +158,7 @@ static void tx_pump(la_tx_ctx_t *ctx)
     uint8_t payload[LA_PROTO_DATA_CHUNK_MAX + LA_PROTO_DATA_CHUNK_FIELD_SIZE];
     la_tx_pack_out_t out;
     uint8_t sequence;
+    int spi = ctx->app->spi_bulk != 0u;
 
     if (ctx->active == 0u) {
         return;
@@ -183,8 +187,14 @@ static void tx_pump(la_tx_ctx_t *ctx)
         ctx->app->tx_retransmits++;
     }
 
+    /* P9.1: the SPI ring is the flow-control device for the best-effort bulk
+     * path (tx_write retries while it is full), so chunks are not paced by
+     * the UART ACK window: an 8-chunk window leaves the SPI FIFO empty at
+     * every window boundary, and the fixed-size master reads then clock zeros
+     * into the frame stream (bench 2026-09-13). ACKs are still processed;
+     * there is simply no retransmit map for SPI frames. */
     while (ctx->active != 0u &&
-           la_tx_win_outstanding(&ctx->win) < LA_TX_WIN_DEPTH) {
+           (spi != 0 || la_tx_win_outstanding(&ctx->win) < LA_TX_WIN_DEPTH)) {
         if (la_tx_pack_next(&ctx->pack, tx_read, ctx, payload, sizeof(payload),
                             &out) != 0) {
             break;
@@ -199,11 +209,13 @@ static void tx_pump(la_tx_ctx_t *ctx)
             tx_note_progress(ctx);
             ctx->begin_sent = 1u;
         } else if (out.kind == LA_TX_PACK_CHUNK) {
-            if (la_tx_win_push(&ctx->win, sequence) != 0) {
-                tx_abandon(ctx);
-                return;
+            if (spi == 0) {
+                if (la_tx_win_push(&ctx->win, sequence) != 0) {
+                    tx_abandon(ctx);
+                    return;
+                }
+                tx_map_add(ctx, sequence, ctx->next_chunk);
             }
-            tx_map_add(ctx, sequence, ctx->next_chunk);
             ctx->next_chunk++;
             if (tx_write(ctx, LA_PROTO_DATA_CHUNK, sequence, payload,
                          (uint16_t)(LA_PROTO_DATA_CHUNK_FIELD_SIZE +
@@ -226,7 +238,7 @@ static void tx_pump(la_tx_ctx_t *ctx)
     }
 
     if (ctx->active != 0u && ctx->end_sent != 0u &&
-        la_tx_win_outstanding(&ctx->win) == 0u) {
+        (spi != 0 || la_tx_win_outstanding(&ctx->win) == 0u)) {
         ctx->jobs++;
         tx_release_job(ctx);
     }

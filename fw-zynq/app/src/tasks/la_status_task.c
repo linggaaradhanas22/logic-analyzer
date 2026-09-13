@@ -67,5 +67,16 @@ void la_status_task(void *parameters)
                    (unsigned)la_irq_stats_min_us(&app->irq.wake_stats),
                    (unsigned)la_irq_stats_avg_us(&app->irq.wake_stats),
                    (unsigned)la_irq_stats_max_us(&app->irq.wake_stats));
+        {
+            uint32_t spi_tx = 0u;
+            uint32_t spi_rx = 0u;
+            uint32_t spi_underruns = 0u;
+            uint32_t spi_errors = 0u;
+
+            la_spi_snapshot(&spi_tx, &spi_rx, &spi_underruns, &spi_errors);
+            xil_printf("LA status: spi tx=%u rx=%u underrun=%u err=%u\r\n",
+                       (unsigned)spi_tx, (unsigned)spi_rx,
+                       (unsigned)spi_underruns, (unsigned)spi_errors);
+        }
     }
 }

@@ -281,6 +281,11 @@ int la_spi_service_start(la_app_t *app);
  * (TxTask or the boot path); all-or-nothing, returns 0 or -1 when full. */
 int la_spi_enqueue(const uint8_t *frame, size_t length);
 
+/* P9.1: blocks until the SPI service task has freed ring space (or the timeout
+ * expires). Lets TxTask pace the producer to the link rate instead of a 1 ms
+ * poll, which under-feeds the 10 MHz master. Returns 0 when signalled. */
+int la_spi_wait_space(TickType_t ticks);
+
 /* P9.1 counters for StatusTask/console reporting. */
 void la_spi_snapshot(uint32_t *tx_bytes, uint32_t *rx_bytes,
                      uint32_t *underruns, uint32_t *errors);

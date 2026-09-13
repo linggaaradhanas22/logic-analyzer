@@ -88,9 +88,9 @@ static uint32_t fake_read(uintptr_t address)
             return byte;
         }
     case LA_SPI_TFO_OFFSET:
-        return (uint32_t)fake.tx_count;
+        return fake.tx_count == 0u ? 0u : (uint32_t)(fake.tx_count - 1u);
     case LA_SPI_RFO_OFFSET:
-        return (uint32_t)fake.rx_count;
+        return fake.rx_count == 0u ? 0u : (uint32_t)(fake.rx_count - 1u);
     case LA_SPI_IPISR_OFFSET:
         return fake.ipisr;
     case LA_SPI_IPIER_OFFSET:
@@ -167,6 +167,7 @@ static int test_reset_and_start(void)
     CHECK((fake.spicr & LA_SPI_CR_MASTER) == 0u, "start keeps slave mode");
     CHECK((fake.spicr & (LA_SPI_CR_TX_FIFO_RESET | LA_SPI_CR_RX_FIFO_RESET)) == 0u,
           "start leaves the reset bits clear");
+    CHECK(fake.dgier == LA_SPI_DGIER_GIE, "start enables the global interrupt");
     CHECK(la_spi_check(&dev) == LA_SPI_CHECK_OK, "slave mode check");
     return 0;
 }
@@ -180,6 +181,7 @@ static int test_tx_push_and_full(void)
     dev = make_dev();
     CHECK(la_spi_start(&dev) == 0, "start for TX");
     CHECK((la_spi_status(&dev) & LA_SPI_SR_TX_EMPTY) != 0u, "TX empty at start");
+    CHECK(la_spi_tx_occupancy(&dev) == 0u, "empty TX occupancy is zero");
     for (index = 0u; index < FAKE_DEPTH; ++index) {
         CHECK(la_spi_tx_push(&dev, (uint8_t)(0x40u + index)) == 0, "TX push room");
     }
@@ -237,12 +239,15 @@ static int test_check_errors(void)
 
     fake_reset_model();
     dev = make_dev();
+    fake.spicr = LA_SPI_CR_ENABLE;
     fake.sr_errors = LA_SPI_SR_SLAVE_MODE_ERROR;
     CHECK(la_spi_check(&dev) == LA_SPI_CHECK_ERROR_FLAGS, "error flag detected");
     fake.sr_errors = 0u;
     CHECK(la_spi_check(&dev) == LA_SPI_CHECK_OK, "clean slave check");
-    fake.master_mode = 1u; /* a master-mode core reports no slave select bit */
+    fake.spicr = LA_SPI_CR_ENABLE | LA_SPI_CR_MASTER;
     CHECK(la_spi_check(&dev) == LA_SPI_CHECK_NOT_SLAVE, "master mode detected");
+    fake.spicr = 0u;
+    CHECK(la_spi_check(&dev) == LA_SPI_CHECK_NOT_SLAVE, "disabled core detected");
     CHECK(strcmp(la_spi_check_name(LA_SPI_CHECK_ERROR_FLAGS), "ERROR_FLAGS") == 0,
           "check name");
     CHECK(strcmp(la_spi_check_name(42), "UNKNOWN") == 0, "unknown check name");

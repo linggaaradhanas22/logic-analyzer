@@ -47,6 +47,10 @@ int la_spi_start(const la_spi_dev_t *dev)
     for (poll = 0u; poll < LA_SPI_POLL_LIMIT; ++poll) {
         uint32_t now = la_spi_read32(dev, LA_SPI_SPICR_OFFSET);
         if ((now & (LA_SPI_CR_TX_FIFO_RESET | LA_SPI_CR_RX_FIFO_RESET)) == 0u) {
+            /* The IP only drives ip2intc_irpt while DGIER.GIE is set; the
+             * service task depends on the TX half-empty/DRR interrupts to
+             * keep the FIFO fed inside a 256-byte master burst. */
+            la_spi_write32(dev, LA_SPI_DGIER_OFFSET, LA_SPI_DGIER_GIE);
             return 0;
         }
     }
@@ -88,12 +92,20 @@ int la_spi_rx_pop(const la_spi_dev_t *dev, uint8_t *byte)
 
 uint32_t la_spi_tx_occupancy(const la_spi_dev_t *dev)
 {
-    return la_spi_read32(dev, LA_SPI_TFO_OFFSET) & LA_SPI_FIFO_OCCUPANCY_MASK;
+    if ((la_spi_status(dev) & LA_SPI_SR_TX_EMPTY) != 0u) {
+        return 0u;
+    }
+    return (la_spi_read32(dev, LA_SPI_TFO_OFFSET) &
+            LA_SPI_FIFO_OCCUPANCY_MASK) + 1u;
 }
 
 uint32_t la_spi_rx_occupancy(const la_spi_dev_t *dev)
 {
-    return la_spi_read32(dev, LA_SPI_RFO_OFFSET) & LA_SPI_FIFO_OCCUPANCY_MASK;
+    if ((la_spi_status(dev) & LA_SPI_SR_RX_EMPTY) != 0u) {
+        return 0u;
+    }
+    return (la_spi_read32(dev, LA_SPI_RFO_OFFSET) &
+            LA_SPI_FIFO_OCCUPANCY_MASK) + 1u;
 }
 
 uint32_t la_spi_irq_status(const la_spi_dev_t *dev)
@@ -114,9 +126,11 @@ void la_spi_irq_enable(const la_spi_dev_t *dev, uint32_t mask)
 
 int la_spi_check(const la_spi_dev_t *dev)
 {
+    uint32_t control = la_spi_read32(dev, LA_SPI_SPICR_OFFSET);
     uint32_t status = la_spi_status(dev);
 
-    if ((status & LA_SPI_SR_SLAVE_MODE) == 0u) {
+    if ((control & LA_SPI_CR_ENABLE) == 0u ||
+        (control & LA_SPI_CR_MASTER) != 0u) {
         return LA_SPI_CHECK_NOT_SLAVE;
     }
     if ((status & LA_SPI_SR_ERROR_MASK) != 0u) {

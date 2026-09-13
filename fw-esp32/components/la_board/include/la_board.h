@@ -85,10 +85,12 @@
 #else
 #define LA_BOARD_SPI_CLOCK_HZ 10000000
 #endif
-/* Burst = the PL slave FIFO depth: one transaction drains exactly one FIFO
- * full, so the PS refills between transactions and frames stay intact even
- * without the data-ready handshake (P9.1 bring-up). */
-#define LA_BOARD_SPI_BURST_BYTES 256
+/* Largest SPI frame body the master clocks in one transaction: one la_proto
+ * payload (1024 B) plus its 2-byte CRC. LinkSpiTask reads the 5-byte header
+ * first and sizes the body transaction from the frame length field, so a
+ * data-ready drop between frames becomes an idle gap instead of zeros inside
+ * a frame (P9.1 bench 2026-09-13). */
+#define LA_BOARD_SPI_FRAME_BODY_MAX 1026
 #define LA_BOARD_SPI_TASK_CORE 1
 #define LA_BOARD_SPI_TASK_PRIO 19
 #define LA_BOARD_SPI_TASK_STACK 4096

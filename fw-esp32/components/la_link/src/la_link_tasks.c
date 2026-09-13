@@ -7,6 +7,7 @@
 #include "driver/uart.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_rom_sys.h"
 #include "esp_task_wdt.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -334,11 +335,12 @@ static void link_tx_task(void *argument)
     }
 }
 
-/* P9.1 SPI master: while the JA-1 data-ready line is high it reads a full
- * burst from the Zynq axi_quad_spi slave and hands the bytes to LinkRxTask
- * through the SPI stream buffer (the relay keeps a single producer). A burst
- * longer than the slave queue underruns into zeros; the la_proto parser skips
- * or rejects those by CRC and resyncs on the next frame. */
+/* P9.1 SPI master: while the JA-1 data-ready line is high it reads one whole
+ * la_proto frame (5-byte header, then the body sized from the length field)
+ * and hands the bytes to LinkRxTask through the SPI stream buffer (the relay
+ * keeps a single producer). Frame-sized transactions are what keeps a
+ * data-ready drop between frames from clocking zeros inside a frame; a
+ * corrupted frame is still caught by the la_proto CRC and resynced. */
 static void link_spi_task(void *argument)
 {
     la_link_state_t *link = &s_link;
@@ -348,13 +350,25 @@ static void link_spi_task(void *argument)
         .sclk_io_num = LA_BOARD_SPI_SCK_GPIO,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
-        .max_transfer_sz = LA_BOARD_SPI_BURST_BYTES,
+        .max_transfer_sz = LA_BOARD_SPI_FRAME_BODY_MAX,
     };
     spi_device_interface_config_t device = {
         .clock_speed_hz = LA_BOARD_SPI_CLOCK_HZ,
         .mode = 0,
-        .spics_io_num = LA_BOARD_SPI_CS_GPIO,
+        /* CS is driven manually around each transaction: the axi_quad_spi
+         * slave only enables its MISO driver after spisel asserts, and the
+         * driver's cs_ena_pretrans only applies to half-duplex transactions.
+         * Without the setup delay the first frame after idle is clocked
+         * before MISO is valid and is lost to CRC (bench 2026-09-13). */
+        .spics_io_num = -1,
         .queue_size = 1,
+    };
+    gpio_config_t cs = {
+        .pin_bit_mask = 1ULL << LA_BOARD_SPI_CS_GPIO,
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
     };
     gpio_config_t ready = {
         .pin_bit_mask = 1ULL << LA_BOARD_SPI_READY_GPIO,
@@ -364,12 +378,14 @@ static void link_spi_task(void *argument)
         .intr_type = GPIO_INTR_DISABLE,
     };
     spi_device_handle_t handle = NULL;
-    uint8_t *burst = heap_caps_malloc(LA_BOARD_SPI_BURST_BYTES, MALLOC_CAP_DMA);
+    uint8_t *body = heap_caps_malloc(LA_BOARD_SPI_FRAME_BODY_MAX, MALLOC_CAP_DMA);
 
     (void)argument;
     esp_task_wdt_add(NULL);
+    (void)gpio_config(&cs);
+    gpio_set_level(LA_BOARD_SPI_CS_GPIO, 1);
     (void)gpio_config(&ready);
-    if (burst == NULL ||
+    if (body == NULL ||
         spi_bus_initialize((spi_host_device_t)LA_BOARD_SPI_HOST, &bus,
                            SPI_DMA_CH_AUTO) != ESP_OK ||
         spi_bus_add_device((spi_host_device_t)LA_BOARD_SPI_HOST, &device,
@@ -395,17 +411,49 @@ static void link_spi_task(void *argument)
             do_read = level != 0;
 #endif
             if (do_read != 0) {
-                spi_transaction_t transaction = {
-                    .length = LA_BOARD_SPI_BURST_BYTES * 8u,
-                    .rx_buffer = burst,
+                uint8_t header[5];
+                spi_transaction_t header_tx = {
+                    .length = sizeof(header) * 8u,
+                    .rx_buffer = header,
                 };
 
-                if (spi_device_transmit(handle, &transaction) == ESP_OK) {
-                    size_t written = xStreamBufferSend(link->spi_rx_sb, burst,
-                                                       LA_BOARD_SPI_BURST_BYTES,
-                                                       pdMS_TO_TICKS(100));
-                    link->counters.spi_bytes += (uint32_t)written;
+                gpio_set_level(LA_BOARD_SPI_CS_GPIO, 0);
+                esp_rom_delay_us(2);
+                if (spi_device_transmit(handle, &header_tx) == ESP_OK) {
+                    uint16_t payload = (uint16_t)header[3] |
+                                       ((uint16_t)header[4] << 8u);
+                    size_t body_bytes = 0u;
+
+                    if (header[0] == LA_PROTO_SOF &&
+                        payload <= LA_PROTO_MAX_PAYLOAD) {
+                        spi_transaction_t body_tx = {
+                            .length = (size_t)(payload + 2u) * 8u,
+                            .rx_buffer = body,
+                        };
+
+                        if (spi_device_transmit(handle, &body_tx) == ESP_OK) {
+                            body_bytes = (size_t)payload + 2u;
+                        }
+                    }
+                    /* Always hand the header to the parser so the byte stream
+                     * stays continuous across resyncs; the body only when the
+                     * transaction completed. */
+                    {
+                        size_t written = xStreamBufferSend(
+                            link->spi_rx_sb, header, sizeof(header),
+                            pdMS_TO_TICKS(100));
+
+                        link->counters.spi_bytes += (uint32_t)written;
+                    }
+                    if (body_bytes != 0u) {
+                        size_t written = xStreamBufferSend(
+                            link->spi_rx_sb, body, body_bytes,
+                            pdMS_TO_TICKS(100));
+
+                        link->counters.spi_bytes += (uint32_t)written;
+                    }
                 }
+                gpio_set_level(LA_BOARD_SPI_CS_GPIO, 1);
             } else {
                 vTaskDelay(pdMS_TO_TICKS(1));
             }
