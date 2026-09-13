@@ -39,4 +39,32 @@ menu "Logic analyzer gateway"
             10 MHz and moves to 20 MHz only after the bench characterizes the
             200 ohm series-resistor edges (docs/spi-link.md).
 
+    config LA_SPI_ENABLE
+        bool "P9.1 SPI bulk link (LinkSpiTask)"
+        default y
+        help
+            Start the SPI master task. Disable for bring-up A/B tests when
+            the PL SPI slave is not present or not wired; the UART link and
+            the host relay are unaffected.
+
+    config LA_SPI_READY_REQUIRED
+        bool "P9.1 SPI data-ready line gates transactions"
+        default y
+        help
+            When enabled, LinkSpiTask only starts a burst while the JA-1
+            data-ready line is high (the intended P9.1 handshake). Disable to
+            read continuously: the slave sends zeros when its FIFO is empty
+            and the la_proto parser drops them, so the link still works when
+            the data-ready wire is absent (bring-up fallback; the SPI bus
+            stays busy).
+
+    config LA_LINK_UART_SELFTEST
+        bool "UART2 internal loopback self-test at boot"
+        default n
+        help
+            Bring-up aid: enable the UART2 internal loopback, write a pattern,
+            verify it is received and log PASS/FAIL before the link tasks
+            start. Proves the ESP32 UART controller independently of the JD
+            ribbon and the Zynq.
+
 endmenu

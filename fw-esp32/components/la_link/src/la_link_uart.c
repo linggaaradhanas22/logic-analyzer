@@ -1,5 +1,7 @@
 #include "la_link_uart.h"
 
+#include <string.h>
+
 #include "driver/gpio.h"
 #include "driver/uart.h"
 #include "esp_log.h"
@@ -65,6 +67,36 @@ esp_err_t la_link_uart_init(QueueHandle_t *event_queue)
         (void)uart_driver_delete((uart_port_t)LA_BOARD_LINK_UART);
         return result;
     }
+
+#if CONFIG_LA_LINK_UART_SELFTEST
+    {
+        /* Bring-up aid: prove the ESP32 UART controller independently of the
+         * JD ribbon and the Zynq. The internal loopback routes TX to RX. */
+        static const char pattern[] = "LA-LOOP";
+        uint8_t received[sizeof(pattern)] = {0};
+        int written;
+        int read;
+
+        (void)uart_set_loop_back((uart_port_t)LA_BOARD_LINK_UART, true);
+        written = uart_write_bytes((uart_port_t)LA_BOARD_LINK_UART, pattern,
+                                   sizeof(pattern) - 1u);
+        (void)uart_wait_tx_done((uart_port_t)LA_BOARD_LINK_UART,
+                                pdMS_TO_TICKS(100));
+        read = uart_read_bytes((uart_port_t)LA_BOARD_LINK_UART, received,
+                               sizeof(pattern) - 1u, pdMS_TO_TICKS(200));
+        (void)uart_set_loop_back((uart_port_t)LA_BOARD_LINK_UART, false);
+        (void)uart_flush_input((uart_port_t)LA_BOARD_LINK_UART);
+        if (written == (int)(sizeof(pattern) - 1u) &&
+            read == (int)(sizeof(pattern) - 1u) &&
+            memcmp(pattern, received, sizeof(pattern) - 1u) == 0) {
+            ESP_LOGI(TAG, "UART%d internal loopback selftest: PASS",
+                     LA_BOARD_LINK_UART);
+        } else {
+            ESP_LOGE(TAG, "UART%d internal loopback selftest: FAIL (w=%d r=%d)",
+                     LA_BOARD_LINK_UART, written, read);
+        }
+    }
+#endif
 
     ESP_LOGI(TAG, "UART%d %d 8N1 RTS/CTS tx=%d rx=%d rts=%d cts=%d",
              LA_BOARD_LINK_UART,

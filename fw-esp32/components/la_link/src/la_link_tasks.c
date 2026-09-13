@@ -25,8 +25,10 @@ static const char *TAG = "la_link";
 #define LA_LINK_NET_TO_LINK_BYTES (16u * 1024u)
 #define LA_LINK_LIVE_BYTES (8u * 1024u)
 /* P9.1: SPI bytes are handed from LinkSpiTask to LinkRxTask through this
- * stream buffer so the relay keeps a single producer. */
-#define LA_LINK_SPI_RX_BYTES (4u * 1024u)
+ * stream buffer so the relay keeps a single producer. Sized so a 10-20 MHz
+ * SPI burst (up to ~2.5 MB/s) can fill it while LinkRxTask wakes on a short
+ * UART-event timeout. */
+#define LA_LINK_SPI_RX_BYTES (16u * 1024u)
 /* P9.4: a control frame waits at most this long for relay-ring room before it
  * is dropped and counted. An unbounded wait parked LinkRxTask when the host
  * stopped reading; its full UART RX buffer then held RTS low, which stalled
@@ -247,7 +249,9 @@ static void link_rx_task(void *argument)
     for (;;) {
         int handled_data = 0;
 
-        if (xQueueReceive(link->uart_queue, &event, pdMS_TO_TICKS(100)) == pdTRUE) {
+        /* Short timeout: the SPI stream buffer drain below must not wait for
+         * a UART event (P9.1), and the event-less rescue drain stays prompt. */
+        if (xQueueReceive(link->uart_queue, &event, pdMS_TO_TICKS(5)) == pdTRUE) {
             switch (event.type) {
             case UART_DATA: {
                 size_t remaining = event.size;
@@ -379,24 +383,43 @@ static void link_spi_task(void *argument)
              (unsigned)LA_BOARD_SPI_CLOCK_HZ, LA_BOARD_SPI_SCK_GPIO,
              LA_BOARD_SPI_MOSI_GPIO, LA_BOARD_SPI_MISO_GPIO,
              LA_BOARD_SPI_CS_GPIO, LA_BOARD_SPI_READY_GPIO);
-    for (;;) {
-        if (gpio_get_level(LA_BOARD_SPI_READY_GPIO) != 0) {
-            spi_transaction_t transaction = {
-                .length = LA_BOARD_SPI_BURST_BYTES * 8u,
-                .rx_buffer = burst,
-            };
+    {
+        uint32_t last_bytes = 0u;
+        TickType_t last_report = xTaskGetTickCount();
 
-            if (spi_device_transmit(handle, &transaction) == ESP_OK) {
-                size_t written = xStreamBufferSend(link->spi_rx_sb, burst,
-                                                   LA_BOARD_SPI_BURST_BYTES,
-                                                   pdMS_TO_TICKS(100));
-                link->counters.spi_bytes += (uint32_t)written;
+        for (;;) {
+            int level = gpio_get_level(LA_BOARD_SPI_READY_GPIO);
+            int do_read = 1;
+
+#if CONFIG_LA_SPI_READY_REQUIRED
+            do_read = level != 0;
+#endif
+            if (do_read != 0) {
+                spi_transaction_t transaction = {
+                    .length = LA_BOARD_SPI_BURST_BYTES * 8u,
+                    .rx_buffer = burst,
+                };
+
+                if (spi_device_transmit(handle, &transaction) == ESP_OK) {
+                    size_t written = xStreamBufferSend(link->spi_rx_sb, burst,
+                                                       LA_BOARD_SPI_BURST_BYTES,
+                                                       pdMS_TO_TICKS(100));
+                    link->counters.spi_bytes += (uint32_t)written;
+                }
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(1));
             }
-        } else {
-            vTaskDelay(pdMS_TO_TICKS(1));
+            if ((xTaskGetTickCount() - last_report) > pdMS_TO_TICKS(5000)) {
+                last_report = xTaskGetTickCount();
+                if (link->counters.spi_bytes == last_bytes) {
+                    ESP_LOGW(TAG, "SPI idle: ready=%d bytes=%u", level,
+                             (unsigned)link->counters.spi_bytes);
+                }
+                last_bytes = link->counters.spi_bytes;
+            }
+            link->counters.spi_stack_hwm = uxTaskGetStackHighWaterMark(NULL);
+            esp_task_wdt_reset();
         }
-        link->counters.spi_stack_hwm = uxTaskGetStackHighWaterMark(NULL);
-        esp_task_wdt_reset();
     }
 }
 
@@ -451,14 +474,18 @@ esp_err_t la_link_start(void)
                                       LA_BOARD_LINK_TX_TASK_STACK, NULL,
                                       LA_BOARD_LINK_TX_TASK_PRIO,
                                       s_tx_stack, &s_tx_tcb,
-                                      LA_BOARD_LINK_TX_TASK_CORE) == NULL ||
-        xTaskCreateStaticPinnedToCore(link_spi_task, "LinkSpi",
+                                      LA_BOARD_LINK_TX_TASK_CORE) == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+#if CONFIG_LA_SPI_ENABLE
+    if (xTaskCreateStaticPinnedToCore(link_spi_task, "LinkSpi",
                                       LA_BOARD_SPI_TASK_STACK, NULL,
                                       LA_BOARD_SPI_TASK_PRIO,
                                       s_spi_stack, &s_spi_tcb,
                                       LA_BOARD_SPI_TASK_CORE) == NULL) {
         return ESP_ERR_NO_MEM;
     }
+#endif
     ESP_LOGI(TAG, "link tasks started (to_net %u B, net_to_link %u B, live %u B, spi_rx %u B)",
              (unsigned)LA_LINK_TO_NET_BYTES,
              (unsigned)LA_LINK_NET_TO_LINK_BYTES,

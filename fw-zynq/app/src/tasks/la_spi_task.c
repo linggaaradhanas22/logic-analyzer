@@ -40,6 +40,7 @@ typedef struct la_spi_ctx {
     XGpioPs gpio;
     uint8_t gpio_ok;
     TaskHandle_t task;
+    uint32_t irq_mask;
     volatile uint32_t isr_status;
     volatile uint32_t rx_bytes;
     volatile uint32_t tx_bytes;
@@ -101,10 +102,12 @@ static void la_spi_task(void *parameters)
     (void)la_spi_reset(&ctx->dev);
     (void)la_spi_start(&ctx->dev);
     la_spi_irq_clear(&ctx->dev, 0xFFFFFFFFu);
-    la_spi_irq_enable(&ctx->dev, LA_SPI_ISR_TX_FIFO_HALF_EMPTY |
-                                     LA_SPI_ISR_DTR_UNDERRUN |
-                                     LA_SPI_ISR_DRR_OVERRUN |
-                                     LA_SPI_ISR_DRR_NOT_EMPTY);
+    /* The TX half-empty flag is level-persistent: enabling it while the FIFO
+     * is idle re-asserts the PL interrupt forever and starves the UART link
+     * tasks. It is enabled only while there is data to feed (see the loop). */
+    ctx->irq_mask = LA_SPI_ISR_DTR_UNDERRUN | LA_SPI_ISR_DRR_OVERRUN |
+                    LA_SPI_ISR_DRR_NOT_EMPTY;
+    la_spi_irq_enable(&ctx->dev, ctx->irq_mask);
     if (la_irq_connect(LA_SPI_INTR_ID, la_spi_isr, ctx,
                        (uintptr_t)XPAR_XSCUGIC_0_BASEADDR,
                        XINTERRUPT_DEFAULT_PRIORITY) != 0) {
@@ -168,6 +171,19 @@ static void la_spi_task(void *parameters)
                 break;
             }
         }
+        {
+            uint32_t mask = LA_SPI_ISR_DTR_UNDERRUN | LA_SPI_ISR_DRR_OVERRUN |
+                            LA_SPI_ISR_DRR_NOT_EMPTY;
+
+            if (la_spi_core_ready(&ctx->core) != 0 ||
+                la_spi_tx_occupancy(&ctx->dev) > 0u) {
+                mask |= LA_SPI_ISR_TX_FIFO_HALF_EMPTY;
+            }
+            if (mask != ctx->irq_mask) {
+                ctx->irq_mask = mask;
+                la_spi_irq_enable(&ctx->dev, mask);
+            }
+        }
         spi_set_ready(ctx, la_spi_core_ready(&ctx->core) != 0 ||
                                la_spi_tx_occupancy(&ctx->dev) > 0u);
         ctx->stack_hwm = uxTaskGetStackHighWaterMark(NULL);
@@ -189,7 +205,13 @@ int la_spi_service_start(la_app_t *app)
 
 int la_spi_enqueue(const uint8_t *frame, size_t length)
 {
-    return la_spi_core_push(&s_spi.core, frame, length);
+    int result = la_spi_core_push(&s_spi.core, frame, length);
+
+    if (result == 0 && s_spi.task != NULL) {
+        /* Wake the service task so it re-enables the TX interrupt promptly. */
+        (void)xTaskNotifyGive(s_spi.task);
+    }
+    return result;
 }
 
 void la_spi_snapshot(uint32_t *tx_bytes, uint32_t *rx_bytes,

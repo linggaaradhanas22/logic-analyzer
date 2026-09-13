@@ -13,9 +13,11 @@
 #include "la_board.h"
 #include "la_link.h"
 #include "la_proto.h"
+#include "lwip/api.h"
 #include "lwip/priv/sockets_priv.h"
 #include "lwip/priv/tcp_priv.h"
 #include "lwip/sockets.h"
+#include "lwip/stats.h"
 #include "lwip/tcpip.h"
 #include "net_mdns.h"
 #include "net_wifi.h"
@@ -366,6 +368,12 @@ void la_net_diag_dump(void)
     ESP_LOGI(TAG, "diag listen_fd=%d client_fd=%d listen_conn=%p",
              s_server.listen_fd, s_server.client_fd,
              lsock != NULL ? (void *)lsock->conn : NULL);
+    if (lsock != NULL) {
+        ESP_LOGI(TAG, "diag listen sock rcvevent=%d sendevent=%d errevent=%d waiting=%d err=%d",
+                 (int)lsock->rcvevent, (int)lsock->sendevent,
+                 (int)lsock->errevent, (int)lsock->select_waiting,
+                 lsock->conn != NULL ? (int)netconn_err(lsock->conn) : -99);
+    }
     for (lpcb = tcp_listen_pcbs.listen_pcbs; lpcb != NULL; lpcb = lpcb->next) {
         ESP_LOGI(TAG, "diag listen pcb port=%u accept=%p arg=%p",
                  (unsigned)lpcb->local_port, (void *)lpcb->accept,
@@ -373,6 +381,11 @@ void la_net_diag_dump(void)
         listen_count += 1u;
     }
     for (pcb = tcp_active_pcbs; pcb != NULL; pcb = pcb->next) {
+        if (pcb->local_port == LA_BOARD_TCP_PORT) {
+            ESP_LOGI(TAG, "diag active pcb remote=%u state=%d listener=%p",
+                     (unsigned)pcb->remote_port, (int)pcb->state,
+                     (void *)pcb->listener);
+        }
         active_count += 1u;
     }
     for (pcb = tcp_tw_pcbs; pcb != NULL; pcb = pcb->next) {
@@ -381,6 +394,15 @@ void la_net_diag_dump(void)
     UNLOCK_TCPIP_CORE();
     ESP_LOGI(TAG, "diag pcbs listen=%u active=%u tw=%u", listen_count,
              active_count, tw_count);
+#if LWIP_STATS
+    ESP_LOGI(TAG, "diag tcp xmit=%u recv=%u drop=%u chkerr=%u memerr=%u err=%u",
+             (unsigned)lwip_stats.tcp.xmit, (unsigned)lwip_stats.tcp.recv,
+             (unsigned)lwip_stats.tcp.drop, (unsigned)lwip_stats.tcp.chkerr,
+             (unsigned)lwip_stats.tcp.memerr, (unsigned)lwip_stats.tcp.err);
+    ESP_LOGI(TAG, "diag ip recv=%u drop=%u chkerr=%u memerr=%u",
+             (unsigned)lwip_stats.ip.recv, (unsigned)lwip_stats.ip.drop,
+             (unsigned)lwip_stats.ip.chkerr, (unsigned)lwip_stats.ip.memerr);
+#endif
 }
 
 static void on_host_frame(void *context,
