@@ -419,18 +419,23 @@ def trace_cmd(target: str, do_start: bool, do_stop: bool, do_dump: bool,
 @click.option("--target", "-t", required=True, help="analyzer link target URI")
 @click.option("--spi", "use_spi", is_flag=True, help="route burst DATA_* frames over the SPI slave")
 @click.option("--uart", "use_uart", is_flag=True, help="keep burst DATA_* frames on the UART (default)")
-def link_cmd(target: str, use_spi: bool, use_uart: bool) -> None:
+@click.option("--clock", "spi_clock_mhz", type=int, default=0,
+              help="ESP32 SPI master clock in MHz for the bulk link (0 = firmware default)")
+def link_cmd(target: str, use_spi: bool, use_uart: bool, spi_clock_mhz: int) -> None:
     if use_spi and use_uart:
         raise click.BadParameter("choose only one of --spi or --uart")
+    if spi_clock_mhz and not use_spi:
+        raise click.BadParameter("--clock requires --spi")
     transport = p.LINK_SPI if use_spi else p.LINK_UART
     client = _make_client(target)
     try:
-        client.configure_link(transport)
+        client.configure_link(transport, spi_clock_mhz=spi_clock_mhz)
     except (AnalyzerError, TransportError) as exc:
         raise click.ClickException(str(exc)) from exc
     finally:
         client.close()
-    click.echo(f"link: burst transport {'spi' if transport == p.LINK_SPI else 'uart'}")
+    suffix = f", clock {spi_clock_mhz} MHz" if spi_clock_mhz else ""
+    click.echo(f"link: burst transport {'spi' if transport == p.LINK_SPI else 'uart'}{suffix}")
 
 
 def main() -> int:

@@ -295,8 +295,32 @@ int la_spi_enqueue(const uint8_t *frame, size_t length);
  * poll, which under-feeds the 10 MHz master. Returns 0 when signalled. */
 int la_spi_wait_space(TickType_t ticks);
 
+/* P9.1: drops any queued/partial SPI frame data and resets the slave FIFOs.
+ * Called at every burst job start so a new capture cannot inherit the tail of
+ * an aborted one. Returns 0 when the service task completed the flush. */
+int la_spi_flush(TickType_t ticks);
+
 /* P9.1 counters for StatusTask/console reporting. */
 void la_spi_snapshot(uint32_t *tx_bytes, uint32_t *rx_bytes,
                      uint32_t *underruns, uint32_t *errors);
+
+/* P9.1 bench diagnostics: current ring/FIFO/ready state and the per-source
+ * interrupt counts (why the master read stalled, which error bits fire). */
+typedef struct la_spi_debug {
+    uint32_t ring_used;
+    uint32_t fifo_occ;
+    uint32_t ready;
+    uint32_t isr_events;
+    uint32_t isr_underrun;
+    uint32_t isr_half_empty;
+    uint32_t isr_other;
+    uint32_t ready_rises;
+    uint32_t ready_falls;
+    uint32_t frames_dropped;
+    uint32_t task_passes;
+    uint32_t buffered;
+} la_spi_debug_t;
+
+void la_spi_debug(la_spi_debug_t *out);
 
 #endif /* LA_APP_H */

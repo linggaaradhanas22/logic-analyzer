@@ -415,6 +415,11 @@ static void on_host_frame(void *context,
     size_t frame_bytes;
 
     (void)context;
+    /* P9.1: the LINK_CFG clock byte selects the SPI master clock before the
+     * frame is forwarded to the Zynq (which ignores the field). */
+    if (type == LA_PROTO_LINK_CFG && length >= 2u && payload[1] != 0u) {
+        (void)la_link_spi_set_clock((uint32_t)payload[1] * 1000000u);
+    }
     frame_bytes = la_proto_encode(type, sequence, payload, length, frame,
                                   sizeof(frame));
     if (frame_bytes == 0u) {

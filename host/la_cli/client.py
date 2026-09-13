@@ -220,13 +220,15 @@ class AnalyzerClient:
         self._send(p.PATGEN_CFG, p.pack_patgen_cfg(patgen_ctrl))
         self._expect_ack(p.PATGEN_CFG, "PATGEN_CFG", deadline)
 
-    def configure_link(self, transport: int, timeout_s: float = 5.0) -> None:
+    def configure_link(self, transport: int, spi_clock_mhz: int = 0,
+                       timeout_s: float = 5.0) -> None:
         """Selects the burst DATA_* transport (additive v1 LINK_CFG, P9.1).
 
         transport is p.LINK_UART (default) or p.LINK_SPI. Commands and ACKs
-        always stay on the UART; only burst frames move."""
+        always stay on the UART; only burst frames move. spi_clock_mhz sets
+        the ESP32 SPI master clock (0 keeps the firmware default)."""
         deadline = time.monotonic() + timeout_s
-        self._send(p.LINK_CFG, p.pack_link_cfg(transport))
+        self._send(p.LINK_CFG, p.pack_link_cfg(transport, spi_clock_mhz))
         self._expect_ack(p.LINK_CFG, "LINK_CFG", deadline)
 
     def trace_control(self, action: int, timeout_s: float = 5.0) -> None:

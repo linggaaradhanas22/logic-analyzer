@@ -103,18 +103,24 @@ static int tx_write(la_tx_ctx_t *ctx, uint8_t type, uint8_t sequence,
         (type == LA_PROTO_DATA_BEGIN || type == LA_PROTO_DATA_CHUNK ||
          type == LA_PROTO_DATA_END)) {
         /* P9.1: LINK_CFG selected the SPI slave for burst frames. The 8 KiB
-         * frame ring can be full while the ACK window still has room; wait
-         * for the SPI task to free space (it signals every pass) instead of
-         * a 1 ms poll, which caps the producer below the 10 MHz link rate
-         * and starves the slave mid-frame (bench 2026-09-13). */
-        unsigned tries;
+         * frame ring is the flow-control device (the host ACK window does not
+         * pace the SPI path), and the ESP32 relay is legitimately slower than
+         * the SPI wire rate, so the producer waits up to the stalled-host
+         * bound (LA_TX_ACK_TIMEOUT_MS) for ring space instead of the old
+         * ~20 ms retry cap, which aborted every long capture on the slow
+         * relay (bench 2026-09-13: 1331 dropped frames in one drain attempt). */
+        TickType_t start = xTaskGetTickCount();
 
-        for (tries = 0u; tries < 20u; ++tries) {
+        for (;;) {
             if (la_spi_enqueue(wire, encoded) == 0) {
                 la_trace_mark(LA_TRACE_EVENT_MARK_TX_FRAME, type);
                 return 0;
             }
             if (la_spi_wait_space(pdMS_TO_TICKS(100)) != 0) {
+                break;
+            }
+            if ((xTaskGetTickCount() - start) >
+                pdMS_TO_TICKS(LA_TX_ACK_TIMEOUT_MS)) {
                 break;
             }
         }
@@ -250,6 +256,12 @@ static void tx_start_job(la_tx_ctx_t *ctx, const la_tx_job_t *job)
         tx_abandon(ctx);
     }
     ctx->job = *job;
+    if (ctx->app->spi_bulk != 0u) {
+        /* P9.1: start every SPI burst from an empty ring/FIFO. A previous
+         * aborted capture can leave a partial frame queued, and the ESP32
+         * master would relay its tail into the new capture. */
+        (void)la_spi_flush(pdMS_TO_TICKS(50));
+    }
 #if LA_MEM_LIVE_CACHED
     /* P8.5: the burst payload shares the cacheable live-pool prefix; drop the
      * stale lines from the previous CPU read before DMA-written data is

@@ -98,3 +98,18 @@ def pytest_addoption(parser) -> None:
         "DIV so slower rates exercise the same pipeline within link headroom "
         "(default 115200)",
     )
+    parser.addoption(
+        "--p91-clock",
+        type=int,
+        default=18,
+        help="P9.1 drain gate: SPI master clock in MHz selected through "
+        "LINK_CFG (default 18, the measured clean ceiling on the current "
+        "wiring; 10 is the safe characterization rate)",
+    )
+    parser.addoption(
+        "--p91-drain-mb",
+        type=int,
+        default=64,
+        help="P9.1 drain gate: total MiB of verified payload (0 disables; "
+        "the plan gate uses 64)",
+    )

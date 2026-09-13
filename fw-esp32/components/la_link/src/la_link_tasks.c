@@ -9,6 +9,7 @@
 #include "esp_log.h"
 #include "esp_rom_sys.h"
 #include "esp_task_wdt.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/ringbuf.h"
@@ -30,6 +31,9 @@ static const char *TAG = "la_link";
  * SPI burst (up to ~2.5 MB/s) can fill it while LinkRxTask wakes on a short
  * UART-event timeout. */
 #define LA_LINK_SPI_RX_BYTES (16u * 1024u)
+/* P9.1: after this much SPI silence the parser state is dropped (a capture is
+ * seconds away from the next one, while a live stream never idles this long). */
+#define LA_LINK_SPI_IDLE_RESET_MS 50u
 /* P9.4: a control frame waits at most this long for relay-ring room before it
  * is dropped and counted. An unbounded wait parked LinkRxTask when the host
  * stopped reading; its full UART RX buffer then held RTS low, which stalled
@@ -49,6 +53,8 @@ typedef struct la_link_state {
     la_link_counters_t counters;
     uint8_t control_sequence;
     uint8_t overrun_sequence;
+    uint8_t spi_parser_active;   /* bytes were fed since the last idle gap */
+    uint32_t spi_last_rx_ms;     /* last SPI byte arrival (session boundary) */
     uint8_t frame[LA_PROTO_MAX_PAYLOAD + LA_PROTO_FRAME_OVERHEAD];
     uint8_t spi_frame[LA_PROTO_MAX_PAYLOAD + LA_PROTO_FRAME_OVERHEAD];
     uint8_t control_frame[LA_PROTO_MAX_PAYLOAD + LA_PROTO_FRAME_OVERHEAD];
@@ -72,6 +78,7 @@ static StackType_t s_tx_stack[LA_BOARD_LINK_TX_TASK_STACK];
 static StaticTask_t s_tx_tcb;
 static StackType_t s_spi_stack[LA_BOARD_SPI_TASK_STACK];
 static StaticTask_t s_spi_tcb;
+static volatile uint32_t s_spi_clock_request;
 
 static int to_net_capacity(void *context, size_t frame_bytes)
 {
@@ -160,9 +167,13 @@ static void relay_frame(la_link_state_t *link, uint8_t type, uint8_t sequence,
         report_link_overrun(link);
         return;
     }
-    if (decision == LA_RELAY_PRESSURE) {
-        /* Control frame: block until the net leg has room instead of dropping,
-         * but never forever (see LA_LINK_PRESSURE_TIMEOUT_MS). */
+    /* Control frame: block until the net leg has room instead of dropping, but
+     * never forever (see LA_LINK_PRESSURE_TIMEOUT_MS). The capacity check is
+     * optimistic for a NOSPLIT ring: when the ring wraps, xRingbufferSend can
+     * fail even with enough total free space, so both the pressure decision
+     * and a failed send retry here. A silent FWD_FAIL here dropped 39 of 94
+     * parsed frames in the 4 MB drain attempt (bench 2026-09-13). */
+    {
         TickType_t start = xTaskGetTickCount();
 
         for (;;) {
@@ -179,11 +190,6 @@ static void relay_frame(la_link_state_t *link, uint8_t type, uint8_t sequence,
                 return;
             }
         }
-    } else if (xRingbufferSend(link->to_net, scratch, frame_bytes, 0) != pdTRUE) {
-        /* The NOSPLIT ring can refuse a fragmented put after a positive
-         * capacity answer; report the real outcome, never a silent drop. */
-        (void)la_relay_report(&link->relay_uart_to_net, type, LA_RELAY_FWD_FAIL);
-        return;
     }
     (void)la_relay_report(&link->relay_uart_to_net, type, LA_RELAY_FWD_OK);
     mirror_frame(link, scratch, type, frame_bytes);
@@ -292,15 +298,30 @@ static void link_rx_task(void *argument)
          * Always drain the driver buffer so the RX path (and the RTS flow
          * control that depends on it) cannot deadlock with a stalled host. */
         drain_buffered(link, chunk, sizeof(chunk), handled_data == 0 ? 1 : 0);
-        /* P9.1: drain the SPI bulk bytes handed over by LinkSpiTask. */
+        /* P9.1: drain the SPI bulk bytes handed over by LinkSpiTask. The
+         * parser is reset after an idle gap so a partial frame left by an
+         * aborted capture can never swallow the next capture's DATA_BEGIN
+         * (the Zynq also flushes its ring at every burst job start). */
         for (;;) {
             size_t spi_bytes = xStreamBufferReceive(link->spi_rx_sb, chunk,
                                                     sizeof(chunk), 0);
             if (spi_bytes == 0u) {
                 break;
             }
+            link->spi_parser_active = 1u;
+            link->spi_last_rx_ms = (uint32_t)(esp_timer_get_time() / 1000);
             (void)la_proto_parser_feed(&link->spi_parser, chunk, spi_bytes,
                                        on_spi_frame, link);
+        }
+        if (link->spi_parser_active != 0u &&
+            ((uint32_t)(esp_timer_get_time() / 1000) - link->spi_last_rx_ms) >
+                LA_LINK_SPI_IDLE_RESET_MS) {
+            link->counters.spi_frames_total += link->spi_parser.frames;
+            link->counters.spi_crc_total += link->spi_parser.crc_errors +
+                                            link->spi_parser.format_errors;
+            la_proto_parser_init(&link->spi_parser);
+            link->spi_parser_active = 0u;
+            link->counters.spi_parser_resets += 1u;
         }
         link->counters.frames_parsed = link->parser.frames;
         link->counters.parse_crc_errors = link->parser.crc_errors;
@@ -335,12 +356,13 @@ static void link_tx_task(void *argument)
     }
 }
 
-/* P9.1 SPI master: while the JA-1 data-ready line is high it reads one whole
- * la_proto frame (5-byte header, then the body sized from the length field)
- * and hands the bytes to LinkRxTask through the SPI stream buffer (the relay
- * keeps a single producer). Frame-sized transactions are what keeps a
- * data-ready drop between frames from clocking zeros inside a frame; a
- * corrupted frame is still caught by the la_proto CRC and resynced. */
+/* P9.1 SPI master: while the JA-1 data-ready line is high it clocks fixed-size
+ * DMA chunks and hands every byte to LinkRxTask through the SPI stream buffer
+ * (the relay keeps a single producer). The incremental la_proto parser
+ * resyncs on the next SOF, so chunk boundaries, data-ready drops and underrun
+ * zeros cannot leave the master with a persistent framing offset (bench
+ * 2026-09-13: the old 5-byte header/body reader lost sync after one offset
+ * and collapsed to ~5 bytes per transaction, starving the Zynq ring). */
 static void link_spi_task(void *argument)
 {
     la_link_state_t *link = &s_link;
@@ -350,16 +372,14 @@ static void link_spi_task(void *argument)
         .sclk_io_num = LA_BOARD_SPI_SCK_GPIO,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
-        .max_transfer_sz = LA_BOARD_SPI_FRAME_BODY_MAX,
+        .max_transfer_sz = LA_BOARD_SPI_CHUNK_BYTES,
     };
     spi_device_interface_config_t device = {
         .clock_speed_hz = LA_BOARD_SPI_CLOCK_HZ,
         .mode = 0,
-        /* CS is driven manually around each transaction: the axi_quad_spi
-         * slave only enables its MISO driver after spisel asserts, and the
-         * driver's cs_ena_pretrans only applies to half-duplex transactions.
-         * Without the setup delay the first frame after idle is clocked
-         * before MISO is valid and is lost to CRC (bench 2026-09-13). */
+        /* CS is driven manually around each chunk: the axi_quad_spi slave only
+         * enables its MISO driver after spisel asserts, and the driver's
+         * cs_ena_pretrans only applies to half-duplex transactions. */
         .spics_io_num = -1,
         .queue_size = 1,
     };
@@ -378,7 +398,7 @@ static void link_spi_task(void *argument)
         .intr_type = GPIO_INTR_DISABLE,
     };
     spi_device_handle_t handle = NULL;
-    uint8_t *body = heap_caps_malloc(LA_BOARD_SPI_FRAME_BODY_MAX, MALLOC_CAP_DMA);
+    uint8_t *body = heap_caps_malloc(LA_BOARD_SPI_CHUNK_BYTES, MALLOC_CAP_DMA);
 
     (void)argument;
     esp_task_wdt_add(NULL);
@@ -395,10 +415,11 @@ static void link_spi_task(void *argument)
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
     }
-    ESP_LOGI(TAG, "SPI master %u Hz sck=%d mosi=%d miso=%d cs=%d ready=%d",
+    ESP_LOGI(TAG, "SPI master %u Hz sck=%d mosi=%d miso=%d cs=%d ready=%d chunk=%d",
              (unsigned)LA_BOARD_SPI_CLOCK_HZ, LA_BOARD_SPI_SCK_GPIO,
              LA_BOARD_SPI_MOSI_GPIO, LA_BOARD_SPI_MISO_GPIO,
-             LA_BOARD_SPI_CS_GPIO, LA_BOARD_SPI_READY_GPIO);
+             LA_BOARD_SPI_CS_GPIO, LA_BOARD_SPI_READY_GPIO,
+             (int)LA_BOARD_SPI_CHUNK_BYTES);
     {
         uint32_t last_bytes = 0u;
         TickType_t last_report = xTaskGetTickCount();
@@ -407,54 +428,56 @@ static void link_spi_task(void *argument)
             int level = gpio_get_level(LA_BOARD_SPI_READY_GPIO);
             int do_read = 1;
 
+            /* P9.1 bench: apply a LINK_CFG clock change before the next chunk.
+             * Re-adding the device is the only way to change the ESP-IDF SPI
+             * master clock; no transaction is in flight here. */
+            {
+                uint32_t requested = s_spi_clock_request;
+
+                if (requested != 0u &&
+                    requested != (uint32_t)device.clock_speed_hz) {
+                    if (spi_bus_remove_device(handle) == ESP_OK) {
+                        device.clock_speed_hz = (int)requested;
+                        if (spi_bus_add_device((spi_host_device_t)LA_BOARD_SPI_HOST,
+                                               &device, &handle) == ESP_OK) {
+                            ESP_LOGI(TAG, "SPI clock -> %u Hz",
+                                     (unsigned)requested);
+                        } else {
+                            ESP_LOGE(TAG, "SPI clock change failed");
+                        }
+                    }
+                    s_spi_clock_request = 0u;
+                }
+            }
+
 #if CONFIG_LA_SPI_READY_REQUIRED
             do_read = level != 0;
 #endif
             if (do_read != 0) {
-                uint8_t header[5];
-                spi_transaction_t header_tx = {
-                    .length = sizeof(header) * 8u,
-                    .rx_buffer = header,
+                spi_transaction_t chunk_tx = {
+                    .length = LA_BOARD_SPI_CHUNK_BYTES * 8u,
+                    .rx_buffer = body,
                 };
 
                 gpio_set_level(LA_BOARD_SPI_CS_GPIO, 0);
                 esp_rom_delay_us(2);
-                if (spi_device_transmit(handle, &header_tx) == ESP_OK) {
-                    uint16_t payload = (uint16_t)header[3] |
-                                       ((uint16_t)header[4] << 8u);
-                    size_t body_bytes = 0u;
+                if (spi_device_transmit(handle, &chunk_tx) == ESP_OK) {
+                    size_t written;
 
-                    if (header[0] == LA_PROTO_SOF &&
-                        payload <= LA_PROTO_MAX_PAYLOAD) {
-                        spi_transaction_t body_tx = {
-                            .length = (size_t)(payload + 2u) * 8u,
-                            .rx_buffer = body,
-                        };
-
-                        if (spi_device_transmit(handle, &body_tx) == ESP_OK) {
-                            body_bytes = (size_t)payload + 2u;
-                        }
+                    link->counters.spi_chunks += 1u;
+                    written = xStreamBufferSend(link->spi_rx_sb, body,
+                                                LA_BOARD_SPI_CHUNK_BYTES,
+                                                pdMS_TO_TICKS(100));
+                    link->counters.spi_bytes += (uint32_t)written;
+                    if (written != LA_BOARD_SPI_CHUNK_BYTES) {
+                        link->counters.spi_send_timeout += 1u;
                     }
-                    /* Always hand the header to the parser so the byte stream
-                     * stays continuous across resyncs; the body only when the
-                     * transaction completed. */
-                    {
-                        size_t written = xStreamBufferSend(
-                            link->spi_rx_sb, header, sizeof(header),
-                            pdMS_TO_TICKS(100));
-
-                        link->counters.spi_bytes += (uint32_t)written;
-                    }
-                    if (body_bytes != 0u) {
-                        size_t written = xStreamBufferSend(
-                            link->spi_rx_sb, body, body_bytes,
-                            pdMS_TO_TICKS(100));
-
-                        link->counters.spi_bytes += (uint32_t)written;
-                    }
+                } else {
+                    link->counters.spi_chunk_fail += 1u;
                 }
                 gpio_set_level(LA_BOARD_SPI_CS_GPIO, 1);
             } else {
+                link->counters.spi_ready_low += 1u;
                 vTaskDelay(pdMS_TO_TICKS(1));
             }
             if ((xTaskGetTickCount() - last_report) > pdMS_TO_TICKS(5000)) {
@@ -539,6 +562,15 @@ esp_err_t la_link_start(void)
              (unsigned)LA_LINK_NET_TO_LINK_BYTES,
              (unsigned)LA_LINK_LIVE_BYTES,
              (unsigned)LA_LINK_SPI_RX_BYTES);
+    return ESP_OK;
+}
+
+esp_err_t la_link_spi_set_clock(uint32_t hz)
+{
+    if (hz != 0u && hz < 100000u) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    s_spi_clock_request = hz;
     return ESP_OK;
 }
 

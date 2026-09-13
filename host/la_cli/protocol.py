@@ -236,11 +236,17 @@ def unpack_evt_cfg(payload: bytes) -> int:
     return event_format
 
 
-def pack_link_cfg(transport: int) -> bytes:
-    """LINK_CFG payload: transport:u8 plus three reserved zero bytes (P9.1)."""
+def pack_link_cfg(transport: int, spi_clock_mhz: int = 0) -> bytes:
+    """LINK_CFG payload: transport:u8, spi_clock_mhz:u8, reserved[2] (P9.1).
+
+    spi_clock_mhz is the ESP32 SPI master clock for the bulk link (0 keeps the
+    firmware default; 1..50 MHz accepted). The Zynq slave ignores the field;
+    the gateway applies it before forwarding the frame."""
     if transport not in (LINK_UART, LINK_SPI):
         raise ValueError(f"undefined link transport: {transport}")
-    return struct.pack("<BBBB", transport, 0, 0, 0)
+    if not 0 <= spi_clock_mhz <= 50:
+        raise ValueError(f"SPI clock out of range: {spi_clock_mhz} MHz")
+    return struct.pack("<BBBB", transport, spi_clock_mhz, 0, 0)
 
 
 def unpack_link_cfg(payload: bytes) -> int:

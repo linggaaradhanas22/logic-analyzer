@@ -77,14 +77,16 @@ static void ui_task(void *argument)
             continue;
         }
         ESP_LOGI(TAG,
-                 "link fwd=%u drop=%u press=%u mirror=%u/%u fifo_ovf=%u line_err=%u "
+                 "link fwd=%u ffail=%u drop=%u press=%u mirror=%u/%u fifo_ovf=%u line_err=%u "
                  "ptimeout=%u rrescue=%u touse=%u rep=%u rx_bytes=%u tx_bytes=%u "
                  "spi=%u/%u/%u | net %s clients=%u/%u "
                  "disc=%u wifiat=%u/%u wifidrop=%u rx_frames=%u tx_frames=%u to_host_discard=%u "
                  "open=%u accfail=%u/%d closefail=%u/%d closemax=%u sretry=%u "
                  "drains=%u loops=%u sready=%u serr=%u refresh=%u | "
-                 "rssi=%d heap=%u stacks rx=%u tx=%u net=%u ui=%u",
-                 (unsigned)up.frames_forwarded, (unsigned)up.best_effort_dropped,
+                 "rssi=%d heap=%u stacks rx=%u tx=%u net=%u ui=%u "
+                 "spi2 lo=%u ch=%u cf=%u sto=%u rst=%u frm=%u crc=%u",
+                 (unsigned)up.frames_forwarded, (unsigned)up.frames_forward_failed,
+                 (unsigned)up.best_effort_dropped,
                  (unsigned)up.control_pressure_events, (unsigned)up.frames_mirrored,
                  (unsigned)up.mirror_dropped, (unsigned)link.fifo_ovf_events,
                  (unsigned)link.line_error_events, (unsigned)link.pressure_timeouts,
@@ -107,7 +109,11 @@ static void ui_task(void *argument)
                  (unsigned)net.listener_refreshes, (int)net.rssi,
                  (unsigned)esp_get_free_heap_size(), (unsigned)link.rx_stack_hwm,
                  (unsigned)link.tx_stack_hwm, (unsigned)net.net_stack_hwm,
-                 (unsigned)uxTaskGetStackHighWaterMark(NULL));
+                 (unsigned)uxTaskGetStackHighWaterMark(NULL),
+                 (unsigned)link.spi_ready_low, (unsigned)link.spi_chunks,
+                 (unsigned)link.spi_chunk_fail, (unsigned)link.spi_send_timeout,
+                 (unsigned)link.spi_parser_resets,
+                 (unsigned)link.spi_frames_total, (unsigned)link.spi_crc_total);
         esp_task_wdt_reset();
     }
 }

@@ -50,7 +50,7 @@ where the receiver documents forward-compatible handling.
 | `0x17` | `PATGEN_CFG` | host -> Zynq | `patgen_ctrl:u32` (additive v1 extension) |
 | `0x18` | `TRACE_CTRL` | host -> Zynq | `action:u8`, reserved[3] (additive v1 extension) |
 | `0x19` | `EVT_CFG` | host -> Zynq | `format:u8`, reserved[3] (additive v1 extension) |
-| `0x1A` | `LINK_CFG` | host -> Zynq | `transport:u8`, reserved[3] (additive v1 extension) |
+| `0x1A` | `LINK_CFG` | host -> Zynq | `transport:u8`, `spi_clock_mhz:u8`, reserved[2] (additive v1 extension) |
 | `0x20` | `STATUS` | Zynq -> host | status snapshot, 52 bytes in v1 |
 | `0x21` | `EVT_TRIGGERED` | Zynq -> host | `trig_index:u64` |
 | `0x22` | `EVT_DECODED` | Zynq -> host | zero or more event records |
@@ -148,11 +148,14 @@ applies to the next `LIVE_START`; the Zynq acknowledges the frame.
 
 An additive v1 extension that selects the transport for burst `DATA_BEGIN` /
 `DATA_CHUNK` / `DATA_END` frames (P9.1). The payload is exactly 4 bytes:
-`transport:u8` plus 3 reserved zero bytes. Transport 0 (the default) keeps the
-burst on the UART; transport 1 routes it over the PL SPI slave
-(`docs/spi-link.md`). Commands, ACKs and every other frame always stay on the
-UART. The command is accepted only in IDLE, the selection latches until
-changed, and the Zynq acknowledges the frame.
+`transport:u8`, `spi_clock_mhz:u8`, plus 2 reserved zero bytes. Transport 0
+(the default) keeps the burst on the UART; transport 1 routes it over the PL
+SPI slave (`docs/spi-link.md`). `spi_clock_mhz` is the ESP32 SPI master clock
+for the bulk link (0 = keep the firmware default, accepted range 1-50 MHz); the
+gateway applies it before forwarding the frame and the Zynq slave ignores the
+field (it has no clock of its own). Commands, ACKs and every other frame always
+stay on the UART. The command is accepted only in IDLE, the selection latches
+until changed, and the Zynq acknowledges the frame.
 
 ### EVT_BLOCK, type `0x24`
 

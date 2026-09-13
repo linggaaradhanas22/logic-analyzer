@@ -130,9 +130,12 @@ def test_evt_cfg_layout() -> None:
 def test_link_cfg_layout() -> None:
     assert p.pack_link_cfg(p.LINK_SPI) == bytes([1, 0, 0, 0])
     assert p.pack_link_cfg(p.LINK_UART) == bytes([0, 0, 0, 0])
-    assert p.unpack_link_cfg(bytes([1, 0, 0, 0])) == p.LINK_SPI
+    assert p.pack_link_cfg(p.LINK_SPI, 20) == bytes([1, 20, 0, 0])
+    assert p.unpack_link_cfg(bytes([1, 20, 0, 0])) == p.LINK_SPI
     with pytest.raises(ValueError):
         p.pack_link_cfg(2)
+    with pytest.raises(ValueError):
+        p.pack_link_cfg(p.LINK_SPI, 51)
     with pytest.raises(p.FrameError):
         p.unpack_link_cfg(bytes([2, 0, 0, 0]))
     with pytest.raises(p.FrameError):

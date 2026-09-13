@@ -85,12 +85,13 @@
 #else
 #define LA_BOARD_SPI_CLOCK_HZ 10000000
 #endif
-/* Largest SPI frame body the master clocks in one transaction: one la_proto
- * payload (1024 B) plus its 2-byte CRC. LinkSpiTask reads the 5-byte header
- * first and sizes the body transaction from the frame length field, so a
- * data-ready drop between frames becomes an idle gap instead of zeros inside
- * a frame (P9.1 bench 2026-09-13). */
-#define LA_BOARD_SPI_FRAME_BODY_MAX 1026
+/* SPI master read chunk: the master clocks a fixed-size DMA chunk whenever
+ * the data-ready line is high and feeds it to the incremental la_proto parser.
+ * The parser resyncs on the next SOF, so a chunk boundary or an underrun can
+ * never leave the master with a persistent framing offset (P9.1 bench
+ * 2026-09-13: a 5-byte header/body reader lost sync after one offset and
+ * collapsed to ~5 bytes per transaction). */
+#define LA_BOARD_SPI_CHUNK_BYTES 1024
 #define LA_BOARD_SPI_TASK_CORE 1
 #define LA_BOARD_SPI_TASK_PRIO 19
 #define LA_BOARD_SPI_TASK_STACK 4096

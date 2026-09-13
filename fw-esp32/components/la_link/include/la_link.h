@@ -40,6 +40,14 @@ typedef struct la_link_counters {
     uint32_t spi_bytes;        /* P9.1: bytes read over the SPI bulk link */
     uint32_t spi_frames;       /* P9.1: frames parsed from the SPI link */
     uint32_t spi_crc_errors;   /* P9.1: SPI parser CRC/format failures */
+    /* P9.1 bench diagnostics: master-side read/relay failure sources. */
+    uint32_t spi_ready_low;    /* polls skipped because data-ready was low */
+    uint32_t spi_chunks;       /* fixed-size chunk transactions that completed */
+    uint32_t spi_chunk_fail;   /* chunk transaction returned an error */
+    uint32_t spi_send_timeout; /* bytes dropped because the RX stream buffer was full */
+    uint32_t spi_parser_resets; /* idle-gap parser resyncs at session boundaries */
+    uint32_t spi_frames_total; /* parsed SPI frames across parser resets */
+    uint32_t spi_crc_total;    /* SPI parser CRC/format errors across resets */
     uint32_t spi_stack_hwm;
     uint32_t rx_stack_hwm;
     uint32_t tx_stack_hwm;
@@ -56,6 +64,11 @@ esp_err_t la_link_send_control(uint8_t type);
 
 /* Queues a verbatim encoded frame for the Zynq leg. Called by NetServerTask. */
 esp_err_t la_link_send_to_zynq(const uint8_t *frame, size_t length, TickType_t timeout);
+
+/* P9.1: requests a new SPI master clock for the bulk link (Hz). The request is
+ * applied by LinkSpiTask before its next transaction (device re-add). A zero
+ * or too-low value is rejected. Used by the LINK_CFG clock byte. */
+esp_err_t la_link_spi_set_clock(uint32_t hz);
 
 /* Returns the next Zynq -> host frame, or 0 when the ring is empty. The
  * returned buffer stays valid until la_link_release_to_host(). */

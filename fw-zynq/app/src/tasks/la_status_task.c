@@ -72,11 +72,21 @@ void la_status_task(void *parameters)
             uint32_t spi_rx = 0u;
             uint32_t spi_underruns = 0u;
             uint32_t spi_errors = 0u;
+            la_spi_debug_t dbg;
 
             la_spi_snapshot(&spi_tx, &spi_rx, &spi_underruns, &spi_errors);
+            la_spi_debug(&dbg);
             xil_printf("LA status: spi tx=%u rx=%u underrun=%u err=%u\r\n",
                        (unsigned)spi_tx, (unsigned)spi_rx,
                        (unsigned)spi_underruns, (unsigned)spi_errors);
+            xil_printf("LA status: spi2 ring=%u fifo=%u ready=%u isr=%u ue=%u he=%u oth=%u rise=%u fall=%u drop=%u tdrop=%u pass=%u buf=%u\r\n",
+                       (unsigned)dbg.ring_used, (unsigned)dbg.fifo_occ,
+                       (unsigned)dbg.ready, (unsigned)dbg.isr_events,
+                       (unsigned)dbg.isr_underrun, (unsigned)dbg.isr_half_empty,
+                       (unsigned)dbg.isr_other, (unsigned)dbg.ready_rises,
+                       (unsigned)dbg.ready_falls, (unsigned)dbg.frames_dropped,
+                       (unsigned)app->tx_drops, (unsigned)dbg.task_passes,
+                       (unsigned)dbg.buffered);
         }
     }
 }

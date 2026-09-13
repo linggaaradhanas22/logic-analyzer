@@ -38,6 +38,14 @@
 
 #include <string.h>
 
+/* Data-ready rise thresholds (P9.1 bench 2026-09-13): the master starts a
+ * capture only once a head start is buffered, so the producer has time to keep
+ * the 256-byte FIFO fed while the first chunks leave. A small capture that
+ * never reaches the threshold is released once the producer has been quiet for
+ * LA_SPI_READY_QUIET_MS with data queued. */
+#define LA_SPI_READY_ON_BYTES 4096u
+#define LA_SPI_READY_QUIET_MS 5u
+
 typedef struct la_spi_ctx {
     la_app_t *app;
     la_spi_dev_t dev;
@@ -53,6 +61,16 @@ typedef struct la_spi_ctx {
     volatile uint32_t rx_overruns;
     volatile uint32_t errors;
     volatile uint32_t stack_hwm;
+    volatile uint32_t isr_tx_bytes;
+    /* P9.1 bench diagnostics: why the master read stalls and where the error
+     * bits come from (never a silent counter). */
+    volatile uint32_t irq_events;
+    volatile uint32_t isr_underrun;
+    volatile uint32_t isr_half_empty;
+    volatile uint32_t isr_other;
+    volatile uint32_t ready_rises;
+    volatile uint32_t ready_falls;
+    volatile uint32_t task_passes;
     uint8_t ready;
 } la_spi_ctx_t;
 
@@ -61,6 +79,9 @@ static StackType_t s_spi_stack[LA_STACK_SPI];
 static StaticTask_t s_spi_tcb;
 static StaticSemaphore_t s_space_sem;
 static SemaphoreHandle_t s_space;
+static volatile uint32_t s_flush_request;
+static volatile uint32_t s_flush_done;
+static volatile TickType_t s_last_enqueue;
 
 static uint32_t spi_read32(uintptr_t address)
 {
@@ -72,8 +93,41 @@ static void spi_write32(uintptr_t address, uint32_t value)
     Xil_Out32((UINTPTR)address, value);
 }
 
-/* Notification-only ISR: latch the write-1-to-clear status and wake the task
- * (the task counts and acts on it). */
+/* Push as many bytes as the TX FIFO can take straight from the ring. Safe in
+ * the ISR (IRQs are masked there) and in the task inside a critical section;
+ * the producer's la_spi_core_push also masks interrupts, so the ring stays
+ * consistent. Returns the number of bytes pushed.
+ *
+ * The task-only refill could not bridge the half-empty window at 10/20 MHz
+ * (GIC + scheduler latency before the first MMIO write): the sweep measured
+ * 2 underruns per 16 KB capture at 10 MHz and ~150 per capture at 20 MHz,
+ * corrupting whole chunks. Feeding in the ISR cuts that latency to the
+ * handler entry. */
+static uint32_t spi_feed_fifo(la_spi_ctx_t *ctx)
+{
+    uint8_t chunk[32];
+    uint32_t occupancy = la_spi_tx_occupancy(&ctx->dev);
+    uint32_t total = 0u;
+
+    while (occupancy < XPAR_XSPI_0_FIFO_SIZE &&
+           la_spi_core_ready(&ctx->core) != 0) {
+        size_t room = (size_t)(XPAR_XSPI_0_FIFO_SIZE - occupancy);
+        size_t want = room < sizeof(chunk) ? room : sizeof(chunk);
+        size_t count = la_spi_core_feed(&ctx->core, chunk, want);
+        size_t index;
+
+        for (index = 0u; index < count; ++index) {
+            la_spi_write32(&ctx->dev, LA_SPI_SPIDTR_OFFSET,
+                           (uint32_t)chunk[index]);
+        }
+        occupancy += (uint32_t)count;
+        total += (uint32_t)count;
+    }
+    return total;
+}
+
+/* Notification-only ISR for the status bookkeeping, plus the emergency FIFO
+ * refill that keeps the slave from underrunning between task wake-ups. */
 static void la_spi_isr(void *reference)
 {
     la_spi_ctx_t *ctx = (la_spi_ctx_t *)reference;
@@ -83,6 +137,21 @@ static void la_spi_isr(void *reference)
     if (status != 0u) {
         la_spi_irq_clear(&ctx->dev, status);
         ctx->isr_status |= status;
+        ctx->irq_events += 1u;
+        if ((status & LA_SPI_ISR_DTR_UNDERRUN) != 0u) {
+            ctx->isr_underrun += 1u;
+        }
+        if ((status & LA_SPI_ISR_TX_FIFO_HALF_EMPTY) != 0u) {
+            ctx->isr_half_empty += 1u;
+        }
+        if ((status & (LA_SPI_ISR_ERROR_MASK &
+                       ~(LA_SPI_ISR_DTR_UNDERRUN | LA_SPI_ISR_DRR_OVERRUN))) != 0u) {
+            ctx->isr_other += 1u;
+        }
+        if ((status & (LA_SPI_ISR_TX_FIFO_HALF_EMPTY | LA_SPI_ISR_DTR_UNDERRUN |
+                       LA_SPI_ISR_DTR_EMPTY)) != 0u) {
+            ctx->isr_tx_bytes += spi_feed_fifo(ctx);
+        }
     }
     vTaskNotifyGiveFromISR(ctx->task, &woken);
     portYIELD_FROM_ISR(woken);
@@ -96,6 +165,11 @@ static void spi_set_ready(la_spi_ctx_t *ctx, int ready)
         return;
     }
     ctx->ready = value;
+    if (value != 0u) {
+        ctx->ready_rises += 1u;
+    } else {
+        ctx->ready_falls += 1u;
+    }
     if (ctx->gpio_ok != 0u) {
         XGpioPs_WritePin(&ctx->gpio, LA_SPI_READY_GPIO_PIN, value);
     }
@@ -151,9 +225,25 @@ static void la_spi_task(void *parameters)
 
     for (;;) {
         uint32_t status;
-        uint32_t occupancy;
 
+        ctx->task_passes += 1u;
         (void)ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1));
+        if (s_flush_request != 0u) {
+            /* P9.1: a new burst job must never inherit a partial frame from an
+             * aborted capture (the ESP32 master would relay the stale tail as
+             * data). Drop the ring and reset both FIFOs; the master sees
+             * data-ready fall and its parser resyncs on the next SOF. */
+            s_flush_request = 0u;
+            la_spi_core_init(&ctx->core, ctx->ring, sizeof(ctx->ring));
+            (void)la_spi_reset(&ctx->dev);
+            (void)la_spi_start(&ctx->dev);
+            la_spi_irq_clear(&ctx->dev, 0xFFFFFFFFu);
+            ctx->irq_mask = LA_SPI_ISR_DTR_UNDERRUN;
+            la_spi_irq_enable(&ctx->dev, ctx->irq_mask);
+            spi_set_ready(ctx, 0);
+            s_flush_done = 1u;
+            continue;
+        }
         status = ctx->isr_status;
         ctx->isr_status = 0u;
         if ((status & LA_SPI_ISR_DTR_UNDERRUN) != 0u) {
@@ -171,25 +261,13 @@ static void la_spi_task(void *parameters)
          * to reset it mid-transfer disturbs the slave (bench 2026-09-13:
          * the resets correlated with TX underruns). The overrun flag is
          * excluded from the error count above. */
-        /* Bulk TX refill: read the FIFO room from TFO once and push that many
-         * bytes. The 10 MHz master leaves ~0.8 us per byte, so a per-byte
-         * status read (the la_spi_tx_push helper) would double the MMIO cost
-         * and starve the FIFO mid-burst. */
-        occupancy = la_spi_tx_occupancy(&ctx->dev);
-        while (occupancy < XPAR_XSPI_0_FIFO_SIZE &&
-               la_spi_core_ready(&ctx->core) != 0) {
-            size_t room = (size_t)(XPAR_XSPI_0_FIFO_SIZE - occupancy);
-            size_t want = room < sizeof(chunk) ? room : sizeof(chunk);
-            size_t count = la_spi_core_feed(&ctx->core, chunk, want);
-            size_t index;
-
-            for (index = 0u; index < count; ++index) {
-                la_spi_write32(&ctx->dev, LA_SPI_SPIDTR_OFFSET,
-                               (uint32_t)chunk[index]);
-                ctx->tx_bytes += 1u;
-            }
-            occupancy += (uint32_t)count;
-        }
+        /* Bulk TX refill (the ISR already bridges the half-empty window): the
+         * task tops the FIFO up whenever it runs, with the ring feed inside a
+         * critical section because TxTask's la_spi_core_push may compact the
+         * ring concurrently. */
+        taskENTER_CRITICAL();
+        ctx->tx_bytes += spi_feed_fifo(ctx);
+        taskEXIT_CRITICAL();
         {
             uint32_t mask = LA_SPI_ISR_DTR_UNDERRUN;
 
@@ -202,10 +280,10 @@ static void la_spi_task(void *parameters)
                 la_spi_irq_enable(&ctx->dev, mask);
             }
         }
-        /* Data-ready hysteresis: only start a master read once a full FIFO of
-         * data is buffered (the first frame alone is drained in ~20 us and
-         * the master then clocks the next header before the next frame has
-         * been queued - a one-byte underrun that costs the frame; bench
+        /* Data-ready hysteresis: start a capture only once a head start is
+         * buffered (a single frame is drained in ~200 us at 10 MHz, and the
+         * master then clocks zeros until the producer catches up - the
+         * underruns that corrupted chunks in the 64 KB gate; bench
          * 2026-09-13). Once started, stay ready until the ring and FIFO are
          * both empty so the capture tail (small END frames) still drains. */
         {
@@ -213,7 +291,15 @@ static void la_spi_task(void *parameters)
                                 la_spi_tx_occupancy(&ctx->dev);
 
             if (ctx->ready == 0u) {
-                spi_set_ready(ctx, buffered >= XPAR_XSPI_0_FIFO_SIZE);
+                int rise = buffered >= LA_SPI_READY_ON_BYTES;
+
+                if (rise == 0 && buffered > 0u &&
+                    (xTaskGetTickCount() - s_last_enqueue) >
+                        pdMS_TO_TICKS(LA_SPI_READY_QUIET_MS)) {
+                    /* Small capture: the producer is done, release the tail. */
+                    rise = 1;
+                }
+                spi_set_ready(ctx, rise);
             } else {
                 spi_set_ready(ctx, buffered > 0u);
             }
@@ -247,11 +333,37 @@ int la_spi_wait_space(TickType_t ticks)
     return xSemaphoreTake(s_space, ticks) == pdTRUE ? 0 : -1;
 }
 
+int la_spi_flush(TickType_t ticks)
+{
+    TickType_t start;
+
+    if (s_spi.task == NULL) {
+        return -1;
+    }
+    s_flush_done = 0u;
+    s_flush_request = 1u;
+    (void)xTaskNotifyGive(s_spi.task);
+    start = xTaskGetTickCount();
+    while (s_flush_done == 0u) {
+        if ((xTaskGetTickCount() - start) > ticks) {
+            return -1;
+        }
+        vTaskDelay(1);
+    }
+    return 0;
+}
+
 int la_spi_enqueue(const uint8_t *frame, size_t length)
 {
-    int result = la_spi_core_push(&s_spi.core, frame, length);
+    int result;
 
+    /* Mutual exclusion with the service task's la_spi_core_feed: the task can
+     * preempt this push during its wrap compaction (see the refill loop). */
+    taskENTER_CRITICAL();
+    result = la_spi_core_push(&s_spi.core, frame, length);
+    taskEXIT_CRITICAL();
     if (result == 0 && s_spi.task != NULL) {
+        s_last_enqueue = xTaskGetTickCount();
         /* Wake the service task so it re-enables the TX interrupt promptly. */
         (void)xTaskNotifyGive(s_spi.task);
     }
@@ -262,7 +374,7 @@ void la_spi_snapshot(uint32_t *tx_bytes, uint32_t *rx_bytes,
                      uint32_t *underruns, uint32_t *errors)
 {
     if (tx_bytes != NULL) {
-        *tx_bytes = s_spi.tx_bytes;
+        *tx_bytes = s_spi.tx_bytes + s_spi.isr_tx_bytes;
     }
     if (rx_bytes != NULL) {
         *rx_bytes = s_spi.rx_bytes;
@@ -273,4 +385,24 @@ void la_spi_snapshot(uint32_t *tx_bytes, uint32_t *rx_bytes,
     if (errors != NULL) {
         *errors = s_spi.errors + s_spi.rx_overruns;
     }
+}
+
+void la_spi_debug(la_spi_debug_t *out)
+{
+    if (out == NULL) {
+        return;
+    }
+    out->ring_used = (uint32_t)la_spi_core_used(&s_spi.core);
+    out->fifo_occ = la_spi_tx_occupancy(&s_spi.dev);
+    out->ready = s_spi.ready;
+    out->isr_events = s_spi.irq_events;
+    out->isr_underrun = s_spi.isr_underrun;
+    out->isr_half_empty = s_spi.isr_half_empty;
+    out->isr_other = s_spi.isr_other;
+    out->ready_rises = s_spi.ready_rises;
+    out->ready_falls = s_spi.ready_falls;
+    out->frames_dropped = s_spi.core.frames_dropped;
+    out->task_passes = s_spi.task_passes;
+    out->buffered = (uint32_t)la_spi_core_used(&s_spi.core) +
+                    la_spi_tx_occupancy(&s_spi.dev);
 }
