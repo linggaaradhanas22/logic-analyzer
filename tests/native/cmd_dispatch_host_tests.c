@@ -642,6 +642,43 @@ static int test_evt_cfg(void)
     return 0;
 }
 
+static int test_link_cfg(void)
+{
+    la_cmd_dispatch_t dispatch;
+    la_cmd_result_t result;
+    uint8_t payload[LA_PROTO_LINK_CFG_WIRE_SIZE];
+    uint8_t transport;
+
+    la_cmd_dispatch_init(&dispatch, TEST_FW_VERSION, TEST_PL_ID);
+    CHECK(la_cmd_dispatch_link_transport(&dispatch) == LA_PROTO_LINK_UART,
+          "link transport defaults to UART");
+    CHECK(la_proto_pack_link_cfg(LA_PROTO_LINK_SPI, payload, sizeof(payload)) ==
+              LA_PROTO_LINK_CFG_WIRE_SIZE,
+          "LINK_CFG packs");
+    CHECK(la_proto_unpack_link_cfg(&transport, payload, sizeof(payload)) == 0 &&
+              transport == LA_PROTO_LINK_SPI,
+          "LINK_CFG unpacks");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LINK_CFG, 0x41u, payload,
+                               LA_PROTO_LINK_CFG_WIRE_SIZE, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_LINK_CFG &&
+              result.transport == LA_PROTO_LINK_SPI && result.sequence == 0x41u,
+          "LINK_CFG SPI accepted");
+    CHECK(la_cmd_dispatch_link_transport(&dispatch) == LA_PROTO_LINK_SPI,
+          "link transport latched");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LINK_CFG, 0x42u, payload, 3u,
+                                0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_LENGTH,
+          "LINK_CFG bad length NAK");
+    payload[0] = 9u;
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LINK_CFG, 0x43u, payload, 4u,
+                                0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_FIELD,
+          "LINK_CFG undefined transport NAK bad field");
+    return 0;
+}
+
 static int test_arm_pool_capacity(void)
 {
     la_cmd_dispatch_t dispatch;
@@ -705,7 +742,8 @@ int main(void)
         test_get_status() != 0 || test_decoder_cfg() != 0 ||
         test_live_lifecycle() != 0 ||
         test_patgen_cfg() != 0 || test_trace_ctrl() != 0 ||
-        test_evt_cfg() != 0 || test_arm_pool_capacity() != 0 ||
+        test_evt_cfg() != 0 || test_link_cfg() != 0 ||
+        test_arm_pool_capacity() != 0 ||
         test_ack_nak_routing() != 0 || test_argument_guards() != 0) {
         return 1;
     }

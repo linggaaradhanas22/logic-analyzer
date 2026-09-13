@@ -248,6 +248,34 @@ static int handle_evt_cfg(la_cmd_dispatch_t *dispatch,
     return 0;
 }
 
+static int handle_link_cfg(la_cmd_dispatch_t *dispatch,
+                           uint8_t sequence,
+                           const uint8_t *payload,
+                           uint16_t length,
+                           la_cmd_result_t *result)
+{
+    uint8_t transport;
+
+    if (length != LA_PROTO_LINK_CFG_WIRE_SIZE) {
+        result_nak(result, LA_PROTO_LINK_CFG, sequence, LA_PROTO_ERROR_BAD_LENGTH);
+        return 0;
+    }
+    if (dispatch->view != LA_CMD_VIEW_IDLE) {
+        result_nak(result, LA_PROTO_LINK_CFG, sequence, LA_PROTO_ERROR_BUSY);
+        return 0;
+    }
+    if (la_proto_unpack_link_cfg(&transport, payload, length) != 0) {
+        result_nak(result, LA_PROTO_LINK_CFG, sequence, LA_PROTO_ERROR_BAD_FIELD);
+        return 0;
+    }
+    dispatch->link_transport = transport;
+    result->outcome = LA_CMD_OUT_LINK_CFG;
+    result->type = LA_PROTO_LINK_CFG;
+    result->sequence = sequence;
+    result->transport = transport;
+    return 0;
+}
+
 static uint8_t decoder_enabled_count(const la_cmd_dispatch_t *dispatch)
 {
     uint8_t count = 0u;
@@ -433,6 +461,9 @@ int la_cmd_dispatch_step(la_cmd_dispatch_t *dispatch,
     case LA_PROTO_EVT_CFG:
         return handle_evt_cfg(dispatch, sequence, payload, length, result);
 
+    case LA_PROTO_LINK_CFG:
+        return handle_link_cfg(dispatch, sequence, payload, length, result);
+
     case LA_PROTO_GET_STATUS:
         if (length != 0u) {
             result_nak(result, type, sequence, LA_PROTO_ERROR_BAD_LENGTH);
@@ -559,6 +590,14 @@ uint8_t la_cmd_dispatch_evt_format(const la_cmd_dispatch_t *dispatch)
         return LA_PROTO_EVT_FORMAT_RECORDS;
     }
     return dispatch->evt_format;
+}
+
+uint8_t la_cmd_dispatch_link_transport(const la_cmd_dispatch_t *dispatch)
+{
+    if (dispatch == NULL) {
+        return LA_PROTO_LINK_UART;
+    }
+    return dispatch->link_transport;
 }
 
 int la_cmd_dispatch_decoder(const la_cmd_dispatch_t *dispatch,

@@ -82,6 +82,18 @@ def test_patgen_cfg_acknowledged(analyzer) -> None:
         client.close()
 
 
+def test_link_cfg_acknowledged(analyzer) -> None:
+    mock = analyzer("ping")
+    client = _client(mock.uri)
+    try:
+        client.configure_link(p.LINK_SPI)
+        assert mock.last_link_transport == p.LINK_SPI
+        client.configure_link(p.LINK_UART)
+        assert mock.last_link_transport == p.LINK_UART
+    finally:
+        client.close()
+
+
 def test_arm_acks_config_and_arm(analyzer) -> None:
     mock = analyzer("ping")
     client = _client(mock.uri)

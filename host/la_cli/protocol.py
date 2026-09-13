@@ -20,6 +20,7 @@ DECODER_CFG, LIVE_START, LIVE_STOP = 0x14, 0x15, 0x16
 PATGEN_CFG = 0x17
 TRACE_CTRL = 0x18
 EVT_CFG = 0x19
+LINK_CFG = 0x1A
 STATUS, EVT_TRIGGERED, EVT_DECODED, EVT_OVERRUN = 0x20, 0x21, 0x22, 0x23
 EVT_BLOCK = 0x24
 DATA_BEGIN, DATA_CHUNK, DATA_END = 0x30, 0x31, 0x32
@@ -51,12 +52,16 @@ DECODER_CFG_SIZE = 20
 PATGEN_CFG_SIZE = 4
 TRACE_CTRL_SIZE = 4
 EVT_CFG_SIZE = 4
+LINK_CFG_SIZE = 4
 
 # TRACE_CTRL actions (protocol.md, additive v1 extension).
 TRACE_STOP, TRACE_START, TRACE_DUMP = 1, 2, 3
 
 # EVT_CFG formats (protocol.md, P9.2 additive v1 extension).
 EVT_FORMAT_RECORDS, EVT_FORMAT_BLOCK = 0, 1
+
+# LINK_CFG burst transports (protocol.md, P9.1 additive v1 extension).
+LINK_UART, LINK_SPI = 0, 1
 EVT_BLOCK_HEADER_SIZE = 12
 EVT_BLOCK_VERSION = 1
 EVT_BLOCK_DELTA_ESCAPE = 0xFFFF
@@ -229,6 +234,22 @@ def unpack_evt_cfg(payload: bytes) -> int:
     if event_format not in (EVT_FORMAT_RECORDS, EVT_FORMAT_BLOCK):
         raise FrameError(f"undefined event format: {event_format}")
     return event_format
+
+
+def pack_link_cfg(transport: int) -> bytes:
+    """LINK_CFG payload: transport:u8 plus three reserved zero bytes (P9.1)."""
+    if transport not in (LINK_UART, LINK_SPI):
+        raise ValueError(f"undefined link transport: {transport}")
+    return struct.pack("<BBBB", transport, 0, 0, 0)
+
+
+def unpack_link_cfg(payload: bytes) -> int:
+    if len(payload) != LINK_CFG_SIZE:
+        raise FrameError(f"LINK_CFG payload length {len(payload)}")
+    transport = payload[0]
+    if transport not in (LINK_UART, LINK_SPI):
+        raise FrameError(f"undefined link transport: {transport}")
+    return transport
 
 
 def pack_trace_ctrl(action: int) -> bytes:

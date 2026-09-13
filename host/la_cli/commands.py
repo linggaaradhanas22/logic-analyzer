@@ -384,6 +384,24 @@ def trace_cmd(target: str, do_start: bool, do_stop: bool, do_dump: bool,
         click.echo(f"trace tokens: {counts}")
 
 
+@cli.command(name="link", help="P9.1 bulk transport for burst frames: --spi or --uart (default).")
+@click.option("--target", "-t", required=True, help="analyzer link target URI")
+@click.option("--spi", "use_spi", is_flag=True, help="route burst DATA_* frames over the SPI slave")
+@click.option("--uart", "use_uart", is_flag=True, help="keep burst DATA_* frames on the UART (default)")
+def link_cmd(target: str, use_spi: bool, use_uart: bool) -> None:
+    if use_spi and use_uart:
+        raise click.BadParameter("choose only one of --spi or --uart")
+    transport = p.LINK_SPI if use_spi else p.LINK_UART
+    client = _make_client(target)
+    try:
+        client.configure_link(transport)
+    except (AnalyzerError, TransportError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    finally:
+        client.close()
+    click.echo(f"link: burst transport {'spi' if transport == p.LINK_SPI else 'uart'}")
+
+
 def main() -> int:
     try:
         return cli.main(prog_name="la-cli", standalone_mode=True)

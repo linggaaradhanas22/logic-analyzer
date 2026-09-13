@@ -423,6 +423,34 @@ int la_proto_unpack_evt_cfg(uint8_t *format,
     return 0;
 }
 
+size_t la_proto_pack_link_cfg(uint8_t transport,
+                              uint8_t *output,
+                              size_t output_capacity)
+{
+    if (output == NULL || output_capacity < LA_PROTO_LINK_CFG_WIRE_SIZE ||
+        transport > LA_PROTO_LINK_SPI) {
+        return 0u;
+    }
+    output[0] = transport;
+    output[1] = 0u;
+    output[2] = 0u;
+    output[3] = 0u;
+    return LA_PROTO_LINK_CFG_WIRE_SIZE;
+}
+
+int la_proto_unpack_link_cfg(uint8_t *transport,
+                             const uint8_t *input,
+                             size_t input_length)
+{
+    if (transport == NULL || input == NULL ||
+        input_length != LA_PROTO_LINK_CFG_WIRE_SIZE ||
+        input[0] > LA_PROTO_LINK_SPI) {
+        return -1;
+    }
+    *transport = input[0];
+    return 0;
+}
+
 size_t la_proto_pack_pong(const la_proto_pong_t *pong,
                           uint8_t *output,
                           size_t output_capacity)

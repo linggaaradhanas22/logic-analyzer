@@ -99,6 +99,25 @@ static int tx_write(la_tx_ctx_t *ctx, uint8_t type, uint8_t sequence,
         ctx->app->tx_drops++;
         return -1;
     }
+    if (ctx->app->spi_bulk != 0u &&
+        (type == LA_PROTO_DATA_BEGIN || type == LA_PROTO_DATA_CHUNK ||
+         type == LA_PROTO_DATA_END)) {
+        /* P9.1: LINK_CFG selected the SPI slave for burst frames. The 8 KiB
+         * frame ring can be full while the ACK window still has room, so
+         * retry briefly before reporting a drop; commands and ACKs stay on
+         * the UART. */
+        unsigned tries;
+
+        for (tries = 0u; tries < 100u; ++tries) {
+            if (la_spi_enqueue(wire, encoded) == 0) {
+                la_trace_mark(LA_TRACE_EVENT_MARK_TX_FRAME, type);
+                return 0;
+            }
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
+        ctx->app->tx_drops++;
+        return -1;
+    }
     sent = xStreamBufferSend(ctx->app->tx_sb, wire, encoded,
                              LA_TX_SEND_TIMEOUT);
     if (sent != encoded) {

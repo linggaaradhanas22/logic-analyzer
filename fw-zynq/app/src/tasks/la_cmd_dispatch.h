@@ -95,7 +95,8 @@ typedef enum la_cmd_outcome {
     LA_CMD_OUT_DECODER_CFG,
     LA_CMD_OUT_LIVE_START,
     LA_CMD_OUT_LIVE_STOP,
-    LA_CMD_OUT_TRACE
+    LA_CMD_OUT_TRACE,
+    LA_CMD_OUT_LINK_CFG
 } la_cmd_outcome_t;
 
 typedef struct la_cmd_result {
@@ -107,6 +108,7 @@ typedef struct la_cmd_result {
     uint8_t error;    /* LA_PROTO_ERROR_* code for NAK outcomes */
     uint8_t slot;     /* decoder slot for OUT_DECODER_CFG */
     uint8_t action;   /* LA_PROTO_TRACE_* action for OUT_TRACE */
+    uint8_t transport; /* LA_PROTO_LINK_* transport for OUT_LINK_CFG */
     uint8_t payload[LA_PROTO_PONG_WIRE_SIZE]; /* valid for OUT_PONG */
 } la_cmd_result_t;
 
@@ -119,6 +121,7 @@ typedef struct la_cmd_dispatch {
     uint32_t patgen_ctrl;
     uint8_t patgen_valid;
     uint8_t evt_format; /* LA_PROTO_EVT_FORMAT_* latched by EVT_CFG (P9.2) */
+    uint8_t link_transport; /* LA_PROTO_LINK_* latched by LINK_CFG (P9.1) */
     uint64_t pool_bytes; /* burst capture pool capacity; 0 disables the check */
     la_proto_decoder_config_t decoders[LA_PROTO_DECODER_MAX_SLOTS];
     uint8_t decoder_valid[LA_PROTO_DECODER_MAX_SLOTS];
@@ -163,6 +166,11 @@ LA_CMD_API uint32_t la_cmd_dispatch_patgen_ctrl(const la_cmd_dispatch_t *dispatc
 /* Live event encoding selected by EVT_CFG (0x19, P9.2). Defaults to
  * LA_PROTO_EVT_FORMAT_RECORDS and is forwarded on the next LIVE_START. */
 LA_CMD_API uint8_t la_cmd_dispatch_evt_format(const la_cmd_dispatch_t *dispatch);
+
+/* Bulk transport selected by LINK_CFG (0x1A, P9.1). Defaults to
+ * LA_PROTO_LINK_UART; TxTask routes burst DATA_* frames to the SPI slave when
+ * it reads LA_PROTO_LINK_SPI. */
+LA_CMD_API uint8_t la_cmd_dispatch_link_transport(const la_cmd_dispatch_t *dispatch);
 
 /* Validated decoder slot latch (P7.4). Returns 0 and copies the latched
  * configuration when slot holds one, -1 otherwise. decoder_count is the

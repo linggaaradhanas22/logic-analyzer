@@ -109,10 +109,11 @@ dump) and verifies every byte through the host parser.
   `spi_device_polling_transmit`/`spi_master_transmit_receive` in 4 KiB bursts),
   data-ready polling, incremental `la_proto` parser, frames pushed into the
   existing `to_net` relay ring with the same EVT_OVERRUN reporting.
-- **Routing:** TxTask (Zynq) sends bulk frames to SPI when the link is enabled
-  and keeps control/ACK frames on UART; the ESP32 merges the SPI and UART
-  streams into the single host relay. `LINK_CFG`/capability reporting is a
-  later additive protocol step if the routing must be switchable at run time.
+- **Routing:** `LINK_CFG` (0x1A, additive v1, `docs/protocol.md`) selects the
+  burst `DATA_*` transport at run time: 0 keeps them on the UART, 1 routes
+  them over the SPI slave. Commands, ACKs and every other frame stay on the
+  UART, and the ESP32 merges the SPI and UART streams into the single host
+  relay. TxTask retries a full 8 KiB SPI ring briefly before reporting a drop.
 
 ## Test plan
 

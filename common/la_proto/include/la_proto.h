@@ -19,6 +19,7 @@
 #define LA_PROTO_PATGEN_CFG_WIRE_SIZE ((uint16_t)4u)
 #define LA_PROTO_TRACE_CTRL_WIRE_SIZE ((uint16_t)4u)
 #define LA_PROTO_EVT_CFG_WIRE_SIZE ((uint16_t)4u)
+#define LA_PROTO_LINK_CFG_WIRE_SIZE ((uint16_t)4u)
 #define LA_PROTO_EVT_BLOCK_HEADER_SIZE ((uint16_t)12u)
 #define LA_PROTO_EVT_BLOCK_VERSION ((uint8_t)1u)
 #define LA_PROTO_EVT_BLOCK_DELTA_ESCAPE ((uint16_t)0xFFFFu)
@@ -44,6 +45,7 @@ typedef enum la_proto_message_type {
     LA_PROTO_PATGEN_CFG = 0x17,
     LA_PROTO_TRACE_CTRL = 0x18,
     LA_PROTO_EVT_CFG = 0x19,
+    LA_PROTO_LINK_CFG = 0x1A,
     LA_PROTO_STATUS = 0x20,
     LA_PROTO_EVT_TRIGGERED = 0x21,
     LA_PROTO_EVT_DECODED = 0x22,
@@ -271,6 +273,21 @@ LA_PROTO_API size_t la_proto_pack_evt_cfg(uint8_t format,
 LA_PROTO_API int la_proto_unpack_evt_cfg(uint8_t *format,
                                          const uint8_t *input,
                                          size_t input_length);
+
+/* LINK_CFG payload: transport:u8, reserved[3] zero (P9.1). Transport 0 keeps
+ * the burst DATA_* frames on the UART; transport 1 routes them over the PL
+ * SPI slave (commands and ACKs always stay on the UART). */
+typedef enum la_proto_link_transport {
+    LA_PROTO_LINK_UART = 0,
+    LA_PROTO_LINK_SPI = 1
+} la_proto_link_transport_t;
+
+LA_PROTO_API size_t la_proto_pack_link_cfg(uint8_t transport,
+                                           uint8_t *output,
+                                           size_t output_capacity);
+LA_PROTO_API int la_proto_unpack_link_cfg(uint8_t *transport,
+                                          const uint8_t *input,
+                                          size_t input_length);
 
 LA_PROTO_API size_t la_proto_pack_pong(const la_proto_pong_t *pong,
                                        uint8_t *output,

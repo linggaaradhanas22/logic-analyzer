@@ -127,6 +127,18 @@ def test_evt_cfg_layout() -> None:
         p.unpack_evt_cfg(b"\x00\x00\x00")
 
 
+def test_link_cfg_layout() -> None:
+    assert p.pack_link_cfg(p.LINK_SPI) == bytes([1, 0, 0, 0])
+    assert p.pack_link_cfg(p.LINK_UART) == bytes([0, 0, 0, 0])
+    assert p.unpack_link_cfg(bytes([1, 0, 0, 0])) == p.LINK_SPI
+    with pytest.raises(ValueError):
+        p.pack_link_cfg(2)
+    with pytest.raises(p.FrameError):
+        p.unpack_link_cfg(bytes([2, 0, 0, 0]))
+    with pytest.raises(p.FrameError):
+        p.unpack_link_cfg(b"\x01\x00\x00")
+
+
 def test_evt_block_round_trip() -> None:
     payload = bytearray([p.EVT_BLOCK_VERSION, 2])
     payload += struct.pack("<H", 4)

@@ -213,6 +213,10 @@ typedef struct la_app {
     /* Single Zynq sequence space shared by CmdTask and TxTask. */
     volatile uint8_t tx_sequence;
 
+    /* P9.1: LINK_CFG latch. 1 routes burst DATA_* frames over the PL SPI
+     * slave; 0 keeps them on the UART. Written by CmdTask, read by TxTask. */
+    volatile uint8_t spi_bulk;
+
     /* P7 live pipeline: the pool and ring are owned by AcqTask, the event
      * block queue is multi-producer (decoder tasks) / single-consumer
      * (TxTask), and the counters are written by the owning task and read

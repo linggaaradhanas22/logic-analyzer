@@ -247,6 +247,12 @@ static void cmd_handle_outcome(la_cmd_ctx_t *ctx, const la_cmd_result_t *result)
     case LA_CMD_OUT_BURST_NAK:
         cmd_post_ack_msg(ctx, result);
         break;
+    case LA_CMD_OUT_LINK_CFG:
+        /* P9.1: acknowledge, then latch the burst transport for TxTask. */
+        cmd_post_ack(ctx, result->type, result->sequence);
+        ctx->app->spi_bulk =
+            (result->transport == LA_PROTO_LINK_SPI) ? 1u : 0u;
+        break;
     default:
         break;
     }

@@ -69,6 +69,7 @@ class MockAnalyzer:
         self.last_decoder: bytes | None = None
         self.last_trace_action: int | None = None
         self.last_evt_format: int | None = None
+        self.last_link_transport: int | None = None
         self.parser = p.FrameParser()
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -166,6 +167,9 @@ class MockAnalyzer:
             elif message_type == p.EVT_CFG:
                 self.last_evt_format = p.unpack_evt_cfg(payload)
                 self._send(connection, p.ACK, p.pack_ack(p.EVT_CFG, sequence))
+            elif message_type == p.LINK_CFG:
+                self.last_link_transport = p.unpack_link_cfg(payload)
+                self._send(connection, p.ACK, p.pack_ack(p.LINK_CFG, sequence))
             elif message_type == p.TRACE_CTRL:
                 self.last_trace_action = p.unpack_trace_ctrl(payload)
                 self._send(connection, p.ACK, p.pack_ack(p.TRACE_CTRL, sequence))

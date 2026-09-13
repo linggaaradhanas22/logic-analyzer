@@ -50,6 +50,7 @@ where the receiver documents forward-compatible handling.
 | `0x17` | `PATGEN_CFG` | host -> Zynq | `patgen_ctrl:u32` (additive v1 extension) |
 | `0x18` | `TRACE_CTRL` | host -> Zynq | `action:u8`, reserved[3] (additive v1 extension) |
 | `0x19` | `EVT_CFG` | host -> Zynq | `format:u8`, reserved[3] (additive v1 extension) |
+| `0x1A` | `LINK_CFG` | host -> Zynq | `transport:u8`, reserved[3] (additive v1 extension) |
 | `0x20` | `STATUS` | Zynq -> host | status snapshot, 52 bytes in v1 |
 | `0x21` | `EVT_TRIGGERED` | Zynq -> host | `trig_index:u64` |
 | `0x22` | `EVT_DECODED` | Zynq -> host | zero or more event records |
@@ -142,6 +143,16 @@ selects the compact `EVT_BLOCK` encoding below. Only these two values are
 valid; anything else is rejected with NAK bad-field, and the command is only
 accepted in IDLE (like `DECODER_CFG`). The selection latches until changed and
 applies to the next `LIVE_START`; the Zynq acknowledges the frame.
+
+### LINK_CFG, type `0x1A`
+
+An additive v1 extension that selects the transport for burst `DATA_BEGIN` /
+`DATA_CHUNK` / `DATA_END` frames (P9.1). The payload is exactly 4 bytes:
+`transport:u8` plus 3 reserved zero bytes. Transport 0 (the default) keeps the
+burst on the UART; transport 1 routes it over the PL SPI slave
+(`docs/spi-link.md`). Commands, ACKs and every other frame always stay on the
+UART. The command is accepted only in IDLE, the selection latches until
+changed, and the Zynq acknowledges the frame.
 
 ### EVT_BLOCK, type `0x24`
 
