@@ -6,5 +6,5 @@ idf_component_register(
     INCLUDE_DIRS "include"
     PRIV_INCLUDE_DIRS "src"
     REQUIRES la_board la_proto esp_driver_uart esp_timer
-    PRIV_REQUIRES esp_ringbuf esp_driver_gpio
+    PRIV_REQUIRES esp_ringbuf esp_driver_gpio esp_driver_spi heap
 )

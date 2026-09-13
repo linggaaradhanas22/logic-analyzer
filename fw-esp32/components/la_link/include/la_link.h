@@ -37,6 +37,10 @@ typedef struct la_link_counters {
     uint32_t overrun_reports;  /* P8.4: EVT_OVERRUN(stage=2) frames sent */
     uint32_t pressure_timeouts; /* P9.4: control frames dropped after a bounded wait */
     uint32_t rx_rescue_bytes;  /* P9.4: bytes drained without a UART event */
+    uint32_t spi_bytes;        /* P9.1: bytes read over the SPI bulk link */
+    uint32_t spi_frames;       /* P9.1: frames parsed from the SPI link */
+    uint32_t spi_crc_errors;   /* P9.1: SPI parser CRC/format failures */
+    uint32_t spi_stack_hwm;
     uint32_t rx_stack_hwm;
     uint32_t tx_stack_hwm;
 } la_link_counters_t;

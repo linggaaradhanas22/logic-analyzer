@@ -78,7 +78,8 @@ static void ui_task(void *argument)
         }
         ESP_LOGI(TAG,
                  "link fwd=%u drop=%u press=%u mirror=%u/%u fifo_ovf=%u line_err=%u "
-                 "ptimeout=%u rrescue=%u touse=%u rep=%u rx_bytes=%u tx_bytes=%u | net %s clients=%u/%u "
+                 "ptimeout=%u rrescue=%u touse=%u rep=%u rx_bytes=%u tx_bytes=%u "
+                 "spi=%u/%u/%u | net %s clients=%u/%u "
                  "disc=%u wifiat=%u/%u wifidrop=%u rx_frames=%u tx_frames=%u to_host_discard=%u "
                  "open=%u accfail=%u/%d closefail=%u/%d closemax=%u sretry=%u "
                  "drains=%u loops=%u sready=%u serr=%u refresh=%u | "
@@ -89,7 +90,9 @@ static void ui_task(void *argument)
                  (unsigned)link.line_error_events, (unsigned)link.pressure_timeouts,
                  (unsigned)link.rx_rescue_bytes, (unsigned)link.to_net_max_used,
                  (unsigned)link.overrun_reports, (unsigned)link.uart_rx_bytes,
-                 (unsigned)link.uart_tx_bytes, policy_state_name(state),
+                 (unsigned)link.uart_tx_bytes, (unsigned)link.spi_bytes,
+                 (unsigned)link.spi_frames, (unsigned)link.spi_crc_errors,
+                 policy_state_name(state),
                  (unsigned)policy.clients_accepted, (unsigned)policy.clients_rejected,
                  (unsigned)policy.client_disconnects,
                  (unsigned)policy.wifi_attempts, (unsigned)policy.wifi_successes,

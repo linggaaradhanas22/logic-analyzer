@@ -30,4 +30,13 @@ menu "Logic analyzer gateway"
             and 2000000. The value lives in the generated, git-ignored
             build/esp32/sdkconfig.
 
+    config LA_SPI_CLOCK_HZ
+        int "P9.1 SPI bulk link clock (Hz)"
+        default 10000000
+        range 1000000 20000000
+        help
+            SPI master clock for the Zynq axi_quad_spi slave. P9.1 starts at
+            10 MHz and moves to 20 MHz only after the bench characterizes the
+            200 ohm series-resistor edges (docs/spi-link.md).
+
 endmenu

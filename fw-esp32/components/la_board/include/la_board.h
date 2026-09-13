@@ -71,4 +71,23 @@
 #define LA_BOARD_LED_GPIO 2
 #define LA_BOARD_LED_ACTIVE_LOW 1
 
+/* P9.1 SPI bulk link (docs/spi-link.md): the Zynq is the slave, the ESP32 is
+ * the master. The UART above keeps commands/ACKs; this link carries the bulk
+ * Zynq->ESP32 direction. Pins are provisional until the bench wiring check. */
+#define LA_BOARD_SPI_HOST 2 /* SPI3_HOST (VSPI) on the classic ESP32 */
+#define LA_BOARD_SPI_SCK_GPIO 18
+#define LA_BOARD_SPI_MOSI_GPIO 23
+#define LA_BOARD_SPI_MISO_GPIO 19
+#define LA_BOARD_SPI_CS_GPIO 4
+#define LA_BOARD_SPI_READY_GPIO 27
+#ifdef CONFIG_LA_SPI_CLOCK_HZ
+#define LA_BOARD_SPI_CLOCK_HZ CONFIG_LA_SPI_CLOCK_HZ
+#else
+#define LA_BOARD_SPI_CLOCK_HZ 10000000
+#endif
+#define LA_BOARD_SPI_BURST_BYTES 1024
+#define LA_BOARD_SPI_TASK_CORE 1
+#define LA_BOARD_SPI_TASK_PRIO 19
+#define LA_BOARD_SPI_TASK_STACK 4096
+
 #endif /* LA_BOARD_H */
