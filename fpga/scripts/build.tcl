@@ -158,8 +158,13 @@ set_property -dict [list \
   CONFIG.PCW_EN_QSPI {0} \
   CONFIG.PCW_QSPI_PERIPHERAL_ENABLE {0} \
   CONFIG.PCW_GPIO_EMIO_GPIO_ENABLE {1} \
-  CONFIG.PCW_GPIO_EMIO_GPIO_WIDTH {1} \
 ] $ps7
+
+# The EMIO GPIO width must be set in its own call after the enable:
+# applying both in one set_property -dict lets the enable transition reset
+# the width to its 64-bit default (verified on the P9.1 build), which left
+# a 64-bit GPIO_O and an undriven data-ready net on JA-1.
+set_property CONFIG.PCW_GPIO_EMIO_GPIO_WIDTH {1} $ps7
 
 # -- la_top as RTL module reference (acquisition datapath).
 set la_top [create_bd_cell -type module -reference la_top la_top_0]
@@ -295,7 +300,7 @@ try_net spi_probe/sck_i spi_sck
 try_net spi_probe/spisel spi_ss_n
 try_net spi_probe/io0_i spi_mosi
 try_net spi_probe/io1_o spi_miso
-try_net {ps7/GPIO_O[0]} spi_ready
+try_net {ps7/GPIO_O} spi_ready
 try_net const_hi/dout spi_probe/ss_i
 try_net const_lo/dout spi_probe/io1_i
 try_net const_lo/dout ps7/GPIO_I
