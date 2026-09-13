@@ -15,11 +15,13 @@
 #include "la_app.h"
 #include "la_mem_geom.h"
 #include "la_regs.h"
+#include "la_spi_link.h"
 #include "la_trace.h"
 
 #include "xil_io.h"
 #include "xil_mmu.h"
 #include "xil_printf.h"
+#include "xparameters.h"
 
 extern uint8_t __la_fw_end[];
 extern uint8_t __la_nc_base[];
@@ -130,6 +132,22 @@ int main(void)
     if (selftest != LA_REGS_SELFTEST_OK) {
         xil_printf("LA fatal: register selftest failed\r\n");
         for (;;) {
+        }
+    }
+
+    {
+        /* P9.1: the SPI slave must be present and report slave mode. This is
+         * a report, not a fatal gate: the P9.2 bitstream has no SPI core and
+         * the P9.1 bitstream/ELF pair is loaded together on the bench. */
+        la_spi_dev_t spi;
+        int spi_check;
+
+        la_spi_dev_init(&spi, XPAR_XSPI_0_BASEADDR, boot_read32, boot_write32);
+        spi_check = la_spi_check(&spi);
+        xil_printf("LA P9.1 SPI slave selftest: %s\r\n",
+                   la_spi_check_name(spi_check));
+        if (spi_check != LA_SPI_CHECK_OK) {
+            xil_printf("LA warning: SPI slave not ready (P9.1 bitstream?)\r\n");
         }
     }
 

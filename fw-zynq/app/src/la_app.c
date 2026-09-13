@@ -209,5 +209,8 @@ int la_app_init(la_app_t *app)
     if (la_irq_init(&app->irq, &app->regs, &app->dma, app->acq_task) != 0) {
         return -4;
     }
+    if (la_spi_service_start(app) != 0) {
+        return -5;
+    }
     return 0;
 }

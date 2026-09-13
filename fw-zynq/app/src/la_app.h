@@ -37,6 +37,7 @@
 #include "la_regs_drv.h"
 #include "la_segment_pool.h"
 
+#include <stddef.h>
 #include <stdint.h>
 
 /* Zynq UART0 analyzer link rate (plan: 921600 -> 2 Mbps with RTS/CTS). The
@@ -63,6 +64,15 @@
 #define LA_STACK_TX 1024u
 #define LA_STACK_STATUS 512u
 #define LA_STACK_DECODER 1024u
+#define LA_STACK_SPI 1024u
+
+/* P9.1 SPI slave service (la_spi_task.c): the task runs above AcqTask and
+ * wakes on the IP's TX-half-empty interrupt so the 256-byte FIFO (102 us at
+ * 20 MHz) is refilled before it drains. */
+#define LA_SPI_RING_BYTES 8192u
+#define LA_PRIO_SPI 7u
+#define LA_SPI_READY_GPIO_PIN 54u /* PS EMIO GPIO[0] -> bank 2 bit 0 (JA-1) */
+#define LA_SPI_INTR_ID 31u        /* xlconcat In2 -> IRQ_F2P[2] -> GIC 63 */
 
 /* P8.3 trace task numbers (stable ids in the trace dump). */
 #define LA_TRACE_TASK_ACQ 1u
@@ -258,5 +268,17 @@ void la_cmd_task(void *parameters);
 void la_tx_task(void *parameters);
 void la_status_task(void *parameters);
 void la_decoder_task(void *parameters);
+
+/* P9.1: creates the static SPI slave service task (the task owns the
+ * axi_quad_spi device, the frame ring and the JA-1 data-ready GPIO). */
+int la_spi_service_start(la_app_t *app);
+
+/* P9.1: queues one complete encoded frame for the SPI link. Producer context
+ * (TxTask or the boot path); all-or-nothing, returns 0 or -1 when full. */
+int la_spi_enqueue(const uint8_t *frame, size_t length);
+
+/* P9.1 counters for StatusTask/console reporting. */
+void la_spi_snapshot(uint32_t *tx_bytes, uint32_t *rx_bytes,
+                     uint32_t *underruns, uint32_t *errors);
 
 #endif /* LA_APP_H */
