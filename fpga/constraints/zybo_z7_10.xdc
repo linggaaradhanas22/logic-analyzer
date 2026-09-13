@@ -4,6 +4,8 @@
 #   JC-1/2/3/4/7/8/9/10  -> ch_in[0..7]   (acquisition inputs, LVCMOS33)
 #   JE-1/2/3/4/7/8/9/10  -> patgen_o[0..7] (pattern outputs, LVCMOS33)
 #   JD-1 TX (out), JD-2 RX (in), JD-3 RTS_N (out), JD-4 CTS_N (in)
+#   JD-7/8/9 SCLK/SS_N/MOSI (in), JD-10 MISO (out)   (P9.1 SPI slave)
+#   JA-1 data-ready (out)                            (P9.1 PS EMIO GPIO)
 # Package pin sites come from the pinned board files
 #   fpga/board_files/zybo-z7-10/A.0/part0_pins.xml.
 #
@@ -38,6 +40,16 @@ set_property -dict [list PACKAGE_PIN T14 IOSTANDARD LVCMOS33] [get_ports uart0_t
 set_property -dict [list PACKAGE_PIN T15 IOSTANDARD LVCMOS33] [get_ports uart0_rx]
 set_property -dict [list PACKAGE_PIN P14 IOSTANDARD LVCMOS33] [get_ports uart0_rtsn]
 set_property -dict [list PACKAGE_PIN R14 IOSTANDARD LVCMOS33] [get_ports uart0_ctsn]
+
+# ---- JD SPI slave link (P9.1: docs/spi-link.md) ---------------------------
+# JD-7 SCLK in, JD-8 SS_N in, JD-9 MOSI in, JD-10 MISO out.
+set_property -dict [list PACKAGE_PIN U14 IOSTANDARD LVCMOS33] [get_ports spi_sck]
+set_property -dict [list PACKAGE_PIN U15 IOSTANDARD LVCMOS33] [get_ports spi_ss_n]
+set_property -dict [list PACKAGE_PIN V17 IOSTANDARD LVCMOS33] [get_ports spi_mosi]
+set_property -dict [list PACKAGE_PIN V18 IOSTANDARD LVCMOS33] [get_ports spi_miso]
+
+# ---- JA-1 SPI data-ready output (P9.1, PS EMIO GPIO) ----------------------
+set_property -dict [list PACKAGE_PIN N15 IOSTANDARD LVCMOS33] [get_ports spi_ready]
 
 # ---- Blink heartbeat LED (P3.3 visual PL-alive check) ----------------------
 # LD0 = leds_4bits_tri_o_0 in the pinned board files (A.0/part0_pins.xml).

@@ -53,9 +53,25 @@ GPIO15 is a boot-strapping pin. `fw-esp32/components/la_board/include/la_board.h
 is the single source for this mapping and the ESP-IDF build compiles it.
 
 The ESP32 is powered from its own USB; do not connect the JD power pins. The
-ESP32 USB console (UART0 through the CP2102, `COMx`) is for logs only. JD-7
-through JD-10 remain reserved for the P9 SPI link and a separate verified
-data-ready signal is required for P9.
+ESP32 USB console (UART0 through the CP2102, `COMx`) is for logs only.
+
+### P9.1 SPI link (JD-7..10, JA-1)
+
+The bulk Zynq-to-ESP32 data path moves to a PL `axi_quad_spi` slave while the
+UART keeps commands/ACKs. `docs/spi-link.md` is the interface contract; the
+physical map is:
+
+| Zybo pin | Signal | ESP32 (provisional) |
+|---|---|---|
+| JD-7 | SPI SCLK (slave input) | GPIO18 |
+| JD-8 | SPI SS_N (slave input, active low) | GPIO4 |
+| JD-9 | SPI MOSI (slave input) | GPIO23 |
+| JD-10 | SPI MISO (slave output) | GPIO19 |
+| JA-1 | SPI data-ready (slave output) | GPIO27 |
+| JD-5/11, JA-5/11 | ground | GND |
+
+JD-7..10 and JA-1 are not yet wired on the bench; the 200 ohm series-resistor
+edge characterization and the 10/20 MHz steps are P9.1 bench gates.
 
 The Zybo FTDI console UART1 is for logs and is not the analyzer data endpoint.
 Use a separate Windows USB-UART adapter for direct UART0 bring-up, with its

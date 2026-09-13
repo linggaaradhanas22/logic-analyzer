@@ -157,6 +157,8 @@ set_property -dict [list \
   CONFIG.PCW_TTC0_PERIPHERAL_ENABLE {1} \
   CONFIG.PCW_EN_QSPI {0} \
   CONFIG.PCW_QSPI_PERIPHERAL_ENABLE {0} \
+  CONFIG.PCW_GPIO_EMIO_GPIO_ENABLE {1} \
+  CONFIG.PCW_GPIO_EMIO_GPIO_WIDTH {1} \
 ] $ps7
 
 # -- la_top as RTL module reference (acquisition datapath).
@@ -178,12 +180,26 @@ set_property -dict [list \
   CONFIG.C_SG_INCLUDE_STSCNTRL_STRM {0} \
 ] $dma
 
+# -- P9.1 SPI slave: axi_quad_spi in slave mode on JD-7..10 with a PS EMIO
+# -- GPIO data-ready on JA-1. The UART keeps commands/ACKs; this core carries
+# -- the bulk Zynq->ESP32 direction (docs/spi-link.md).
+set spi [bd_cell axi_quad_spi spi_probe]
+set_property -dict [list \
+  CONFIG.Master_mode {0} \
+  CONFIG.C_SPI_MODE {0} \
+  CONFIG.C_NUM_TRANSFER_BITS {8} \
+  CONFIG.C_FIFO_DEPTH {256} \
+  CONFIG.C_USE_STARTUP {0} \
+  CONFIG.C_DUAL_QUAD_MODE {0} \
+  CONFIG.C_SPI_MEMORY {0} \
+] $spi
+
 # -- AXI fabrics (SmartConnect: this Vivado 2026.1 install ships no
 # -- axi_interconnect definition - verified catalog probe; the on-disk
 # -- axi_interconnect_v2_1 IP is excluded from the served catalog).
 puts "AXI fabric candidates checked on install: axi_interconnect absent; using smartconnect"
 set lite_ic [bd_cell smartconnect sc_lite]
-set_property -dict [list CONFIG.NUM_SI {1} CONFIG.NUM_MI {2}] $lite_ic
+set_property -dict [list CONFIG.NUM_SI {1} CONFIG.NUM_MI {3}] $lite_ic
 set dma_ic [bd_cell smartconnect sc_dma]
 set_property -dict [list CONFIG.NUM_SI {2} CONFIG.NUM_MI {1}] $dma_ic
 
@@ -198,9 +214,9 @@ set_property -dict [list CONFIG.CONST_VAL {1}] $const_hi
 set const_lo [bd_cell xlconstant const_lo]
 set_property -dict [list CONFIG.CONST_VAL {0}] $const_lo
 
-# -- Interrupt fan-in (analyzer IRQ, DMA S2MM IRQ).
+# -- Interrupt fan-in (analyzer IRQ, DMA S2MM IRQ, SPI slave IRQ).
 set concat [bd_cell xlconcat xlconcat_irq]
-set_property -dict [list CONFIG.NUM_PORTS {2}] $concat
+set_property -dict [list CONFIG.NUM_PORTS {3}] $concat
 
 # Clocks: everything PL runs on FCLK_CLK0 (100 MHz).
 set fclk ps7/FCLK_CLK0
@@ -211,6 +227,7 @@ foreach pin {
   axi_dma_0/s_axi_lite_aclk axi_dma_0/m_axi_sg_aclk axi_dma_0/m_axi_s2mm_aclk
   rst_ps7/slowest_sync_clk
   la_top_0/clk
+  spi_probe/s_axi_aclk spi_probe/ext_spi_clk
 } {
   try_net $pin $fclk
 }
@@ -229,6 +246,7 @@ foreach pin {
   sc_lite/aresetn
   sc_dma/aresetn
   axi_dma_0/axi_resetn
+  spi_probe/s_axi_aresetn
 } {
   try_net $pin rst_ps7/peripheral_aresetn
 }
@@ -237,6 +255,7 @@ foreach pin {
 try_intf ps7/M_AXI_GP0 sc_lite/S00_AXI
 try_intf sc_lite/M00_AXI la_top_0/S_AXI
 try_intf sc_lite/M01_AXI axi_dma_0/S_AXI_LITE
+try_intf sc_lite/M02_AXI spi_probe/AXI_LITE
 try_intf la_top_0/M_AXIS axi_dma_0/S_AXIS_S2MM
 try_intf axi_dma_0/M_AXI_S2MM sc_dma/S00_AXI
 try_intf axi_dma_0/M_AXI_SG sc_dma/S01_AXI
@@ -245,10 +264,11 @@ try_intf sc_dma/M00_AXI ps7/S_AXI_HP0
 # Interrupts.
 try_net la_top_0/irq_o xlconcat_irq/In0
 try_net axi_dma_0/s2mm_introut xlconcat_irq/In1
+try_net spi_probe/ip2intc_irpt xlconcat_irq/In2
 try_net xlconcat_irq/dout ps7/IRQ_F2P
 
 # External ports: JC channel inputs, JE pattern outputs, blink LED (LD0),
-# JD UART0 EMIO.
+# JD UART0 EMIO, P9.1 SPI link (JD-7..10) and data-ready (JA-1).
 # (The ps7 UART0 EMIO scalars belong to the inferred UART_0 interface; the
 # override warnings below are expected and harmless: this script is the
 # source of truth and the BD is never regenerated from writ_bd_tcl.)
@@ -259,6 +279,11 @@ create_bd_port -dir O uart0_tx
 create_bd_port -dir I uart0_rx
 create_bd_port -dir O uart0_rtsn
 create_bd_port -dir I uart0_ctsn
+create_bd_port -dir I spi_sck
+create_bd_port -dir I spi_ss_n
+create_bd_port -dir I spi_mosi
+create_bd_port -dir O spi_miso
+create_bd_port -dir O spi_ready
 try_net la_top_0/ch_in ch_in
 try_net la_top_0/patgen_o patgen_o
 try_net la_top_0/blink_o blink_o
@@ -266,12 +291,23 @@ try_net ps7/UART0_TX uart0_tx
 try_net ps7/UART0_RX uart0_rx
 try_net ps7/UART0_RTSN uart0_rtsn
 try_net ps7/UART0_CTSN uart0_ctsn
+try_net spi_probe/sck_i spi_sck
+try_net spi_probe/spisel spi_ss_n
+try_net spi_probe/io0_i spi_mosi
+try_net spi_probe/io1_o spi_miso
+try_net {ps7/GPIO_O[0]} spi_ready
+try_net const_hi/dout spi_probe/ss_i
+try_net const_lo/dout spi_probe/io1_i
+try_net const_lo/dout ps7/GPIO_I
+# ps7/GPIO_T is driven by the PS (GPIO output-enable control); firmware sets
+# the data-ready pin as an output through the GPIO direction register.
 
 # Address assignment: control slaves at fixed GP0 offsets (la_top then DMA
 # register space); DMA masters map the whole DDR low range through HP0.
 # Address assignment: control slaves at fixed GP0 offsets (la_top registers
-# at 0x4000_0000, DMA register space at 0x4040_0000, both 64K); the DMA
-# masters map the full DDR low range (1G at 0) through HP0.
+# at 0x4000_0000, DMA register space at 0x4040_0000, SPI slave at
+# 0x4080_0000, all 64K); the DMA masters map the full DDR low range (1G at 0)
+# through HP0.
 set gp0_space [get_bd_addr_spaces -of_objects [get_bd_intf_pins ps7/M_AXI_GP0]]
 puts "GP0 address space: $gp0_space"
 if {[catch {
@@ -281,6 +317,12 @@ if {[catch {
     [get_bd_addr_segs {axi_dma_0/S_AXI_LITE/Reg}]
 } msg]} {
   puts "ADDR ASSIGN GP0 FAIL: $msg"
+}
+if {[catch {
+  assign_bd_address -offset 0x40800000 -range 64K -target_address_space $gp0_space \
+    [get_bd_addr_segs {spi_probe/AXI_LITE/Reg}]
+} msg]} {
+  puts "ADDR ASSIGN SPI FAIL: $msg"
 }
 foreach dma_master {axi_dma_0/M_AXI_S2MM axi_dma_0/M_AXI_SG} {
   set space [get_bd_addr_spaces -of_objects [get_bd_intf_pins $dma_master]]
