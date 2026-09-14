@@ -1,4 +1,4 @@
-import Link from 'next/link';
+/* oxlint-disable next/no-html-link-for-pages -- Vinext client Link navigation fails in production. */
 import { notFound } from 'next/navigation';
 import { Breadcrumbs } from '@/components/docs/breadcrumbs';
 import { ContextStrip } from '@/components/docs/context-strip';
@@ -113,11 +113,11 @@ export default async function SubsystemPage({ params }: { params: Promise<{ slug
           </h2>
           <div className="doc-index">
             {components.map((component) => (
-              <Link className="doc-index-card" href={`/components/${component.slug}`} key={component.slug}>
+              <a className="doc-index-card" href={`/components/${component.slug}`} key={component.slug}>
                 <strong>{component.name}</strong>
                 <p>{component.summary}</p>
                 <span className="order">{component.evidence[0]?.status.replace(/-/g, ' ')}</span>
-              </Link>
+              </a>
             ))}
           </div>
         </section>
@@ -134,16 +134,16 @@ export default async function SubsystemPage({ params }: { params: Promise<{ slug
 
         <nav className="doc-prevnext" aria-label="Subsystem order">
           {previous ? (
-            <Link href={`/subsystems/${previous.slug}`}>
+            <a href={`/subsystems/${previous.slug}`}>
               <span className="dir">Previous subsystem</span>
               <span className="name">{previous.name}</span>
-            </Link>
+            </a>
           ) : null}
           {next ? (
-            <Link className="next" href={`/subsystems/${next.slug}`}>
+            <a className="next" href={`/subsystems/${next.slug}`}>
               <span className="dir">Next subsystem</span>
               <span className="name">{next.name}</span>
-            </Link>
+            </a>
           ) : null}
         </nav>
       </div>

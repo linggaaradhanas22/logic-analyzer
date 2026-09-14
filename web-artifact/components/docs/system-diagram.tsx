@@ -1,7 +1,7 @@
 'use client';
+/* oxlint-disable next/no-html-link-for-pages -- Vinext client Link navigation fails in production. */
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { StatusBadge } from '@/components/docs/status-badge';
 import type { EvidenceStatus, SubsystemSlug } from '@/lib/docs/types';
 
@@ -96,7 +96,7 @@ export function SystemDiagram() {
           const to = index !== undefined && index < flow.order.length - 1 ? NODES.find((item) => item.slug === flow.order[index + 1]) : undefined;
           return (
             <li key={node.slug} style={{ display: 'contents' }}>
-              <Link
+              <a
                 className="doc-system-node"
                 data-active={active ? 'true' : undefined}
                 data-dim={active ? undefined : 'true'}
@@ -117,7 +117,7 @@ export function SystemDiagram() {
                 ) : (
                   <p className="doc-system-route">not part of the “{flow.label}” flow</p>
                 )}
-              </Link>
+              </a>
             </li>
           );
         })}

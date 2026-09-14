@@ -1,4 +1,4 @@
-import Link from 'next/link';
+/* oxlint-disable next/no-html-link-for-pages -- Vinext client Link navigation fails in production. */
 import { Breadcrumbs } from '@/components/docs/breadcrumbs';
 import { StatusBadge } from '@/components/docs/status-badge';
 
@@ -22,8 +22,8 @@ export default function UsingPage() {
             This guide covers the bench workflow: wire the boards, load the firmware, verify the
             link, capture signals, decode traffic live, and open the results. Development setup
             (toolchain, venv, ESP-IDF, Vivado/Vitis) is in{' '}
-            <Link className="inline-source" href="/tooling">tooling</Link>; the electrical contract is in{' '}
-            <Link className="inline-source" href="/reference/wiring">wiring</Link>.
+            <a className="inline-source" href="/tooling">tooling</a>; the electrical contract is in{' '}
+            <a className="inline-source" href="/reference/wiring">wiring</a>.
           </p>
           <div className="doc-status-row">
             <StatusBadge status="bench-verified" label="Burst capture and live decode verified on hardware" />
@@ -339,7 +339,7 @@ python tools\\run.py fw-esp32     # ESP32 gateway firmware (ESP-IDF)`}</Cmd>
           <p className="doc-prose">
             Known limits and their evidence are collected in{' '}
             <code className="doc-inline-code">docs/limits.md</code> and on the{' '}
-            <Link className="inline-source" href="/roadmap">roadmap</Link> page.
+            <a className="inline-source" href="/roadmap">roadmap</a> page.
           </p>
         </section>
       </div>

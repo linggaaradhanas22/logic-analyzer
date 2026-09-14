@@ -1,4 +1,4 @@
-import Link from 'next/link';
+/* oxlint-disable next/no-html-link-for-pages -- Vinext client Link navigation fails in production. */
 import { Breadcrumbs } from '@/components/docs/breadcrumbs';
 import { StatusBadge } from '@/components/docs/status-badge';
 import { ROADMAP } from '@/lib/docs/roadmap';
@@ -51,9 +51,9 @@ export default function RoadmapPage() {
                 const subsystem = subsystemBySlug(slug);
                 if (!subsystem) return null;
                 return (
-                  <Link className="doc-chip" href={`/subsystems/${slug}`} key={slug}>
+                  <a className="doc-chip" href={`/subsystems/${slug}`} key={slug}>
                     {subsystem.name}
-                  </Link>
+                  </a>
                 );
               })}
             </div>

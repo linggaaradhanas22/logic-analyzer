@@ -1,4 +1,4 @@
-import Link from 'next/link';
+/* oxlint-disable next/no-html-link-for-pages -- Vinext client Link navigation fails in production. */
 import { Breadcrumbs } from '@/components/docs/breadcrumbs';
 import { StatusBadge } from '@/components/docs/status-badge';
 
@@ -75,7 +75,7 @@ export default function ToolingPage() {
           </div>
           <p className="doc-scope">
             The full per-target validation boundary and current evidence are on the{' '}
-            <Link className="inline-source" href="/verification">verification</Link> page.
+            <a className="inline-source" href="/verification">verification</a> page.
           </p>
         </section>
 
@@ -116,7 +116,7 @@ export default function ToolingPage() {
             {' '}
             <code className="doc-inline-code">tools/board-lock.json</code>.
             {' '}
-            <Link className="inline-source" href="/reference/wiring">Wiring</Link>
+            <a className="inline-source" href="/reference/wiring">Wiring</a>
             {' '}
             and troubleshooting notes are in <code className="doc-inline-code">docs/windows-dev.md</code>.
           </p>

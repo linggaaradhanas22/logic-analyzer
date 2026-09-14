@@ -1,5 +1,5 @@
-import Link from 'next/link';
 
+/* oxlint-disable next/no-html-link-for-pages -- Vinext client Link navigation fails in production. */
 export type ContextItem = { label: string; href: string; current?: boolean };
 
 export function ContextStrip({ parent, items }: { parent?: ContextItem; items: ContextItem[] }) {
@@ -8,13 +8,13 @@ export function ContextStrip({ parent, items }: { parent?: ContextItem; items: C
       <strong>Where this sits</strong>
       {parent ? (
         <span>
-          Parent: <Link href={parent.href}>{parent.label}</Link>
+          Parent: <a href={parent.href}>{parent.label}</a>
         </span>
       ) : null}
       {items.map((item) => (
-        <Link className="doc-chip" data-current={item.current ? 'true' : undefined} href={item.href} key={item.href}>
+        <a className="doc-chip" data-current={item.current ? 'true' : undefined} href={item.href} key={item.href}>
           {item.label}
-        </Link>
+        </a>
       ))}
     </nav>
   );

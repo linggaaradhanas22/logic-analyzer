@@ -1,4 +1,4 @@
-import Link from 'next/link';
+/* oxlint-disable next/no-html-link-for-pages -- Vinext client Link navigation fails in production. */
 import { notFound } from 'next/navigation';
 import { Breadcrumbs } from '@/components/docs/breadcrumbs';
 import { ContextStrip } from '@/components/docs/context-strip';
@@ -24,7 +24,7 @@ function ReferenceList({ title, references }: { title: string; references: strin
           const link = resolveLink(reference);
           return (
             <li key={reference}>
-              {link ? <Link className="inline-source" href={link.href}>{link.label}</Link> : reference}
+              {link ? <a className="inline-source" href={link.href}>{link.label}</a> : reference}
             </li>
           );
         })}
@@ -158,16 +158,16 @@ export default async function ComponentPage({ params }: { params: Promise<{ slug
 
         <nav className="doc-prevnext" aria-label="Component order">
           {previous ? (
-            <Link href={`/components/${previous.slug}`}>
+            <a href={`/components/${previous.slug}`}>
               <span className="dir">Previous component</span>
               <span className="name">{previous.name}</span>
-            </Link>
+            </a>
           ) : null}
           {next ? (
-            <Link className="next" href={`/components/${next.slug}`}>
+            <a className="next" href={`/components/${next.slug}`}>
               <span className="dir">Next component</span>
               <span className="name">{next.name}</span>
-            </Link>
+            </a>
           ) : null}
         </nav>
       </div>

@@ -1,6 +1,6 @@
 'use client';
+/* oxlint-disable next/no-html-link-for-pages -- Vinext client Link navigation fails in production. */
 
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Binary, Menu } from 'lucide-react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -26,19 +26,19 @@ export function SiteHeader() {
   const pathname = usePathname();
   return (
     <header className="topbar doc-topbar">
-      <Link className="brand" href="/" aria-label="RTOS logic analyzer documentation home">
+      <a className="brand" href="/" aria-label="RTOS logic analyzer documentation home">
         <span className="brand-mark">
           <Binary aria-hidden="true" />
         </span>
         <span>
           LA<span className="brand-dim">/RTOS</span>
         </span>
-      </Link>
+      </a>
       <nav className="nav-links" aria-label="Documentation">
         {LINKS.map((link) => (
-          <Link key={link.href} href={link.href} aria-current={isActive(pathname, link.href) ? 'page' : undefined}>
+          <a key={link.href} href={link.href} aria-current={isActive(pathname, link.href) ? 'page' : undefined}>
             {link.label}
-          </Link>
+          </a>
         ))}
       </nav>
       <div className="doc-header-actions">
@@ -55,9 +55,9 @@ export function SiteHeader() {
             </SheetHeader>
             <nav className="doc-menu-list" aria-label="Documentation">
               {LINKS.map((link) => (
-                <Link key={link.href} href={link.href}>
+                <a key={link.href} href={link.href}>
                   {link.label}
-                </Link>
+                </a>
               ))}
             </nav>
           </SheetContent>

@@ -1,4 +1,4 @@
-import Link from 'next/link';
+/* oxlint-disable next/no-html-link-for-pages -- Vinext client Link navigation fails in production. */
 import { Check, Gauge, HardDrive, Radio } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SystemDiagram } from '@/components/docs/system-diagram';
@@ -185,8 +185,8 @@ export default function Home() {
                 ))}
               </ol>
               <p className="optional-route">
-                Full details are in the <Link className="inline-source" href="/roadmap">roadmap</Link> and
-                the <Link className="inline-source" href="/verification">verification</Link> pages; the
+                Full details are in the <a className="inline-source" href="/roadmap">roadmap</a> and
+                the <a className="inline-source" href="/verification">verification</a> pages; the
                 tracked limits document is <code className="doc-inline-code">docs/limits.md</code>.
               </p>
             </div>
@@ -197,13 +197,13 @@ export default function Home() {
           <h2>Subsystems</h2>
           <div className="doc-index">
             {SUBSYSTEMS.map((subsystem) => (
-              <Link className="doc-index-card" href={`/subsystems/${subsystem.slug}`} key={subsystem.slug}>
+              <a className="doc-index-card" href={`/subsystems/${subsystem.slug}`} key={subsystem.slug}>
                 <span className="order">
                   {String(subsystem.order).padStart(2, '0')} · {subsystem.components.length} components
                 </span>
                 <strong>{subsystem.name}</strong>
                 <p>{subsystem.responsibility}</p>
-              </Link>
+              </a>
             ))}
           </div>
         </section>

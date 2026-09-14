@@ -1,5 +1,5 @@
-import Link from 'next/link';
 
+/* oxlint-disable next/no-html-link-for-pages -- Vinext client Link navigation fails in production. */
 export type Crumb = { label: string; href?: string };
 
 export function Breadcrumbs({ items }: { items: Crumb[] }) {
@@ -9,7 +9,7 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
         {items.map((item, index) => (
           <li key={`${item.label}-${index}`}>
             {item.href ? (
-              <Link href={item.href}>{item.label}</Link>
+              <a href={item.href}>{item.label}</a>
             ) : (
               <span aria-current="page">{item.label}</span>
             )}

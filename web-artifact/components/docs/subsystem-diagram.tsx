@@ -1,5 +1,5 @@
-import Link from 'next/link';
 
+/* oxlint-disable next/no-html-link-for-pages -- Vinext client Link navigation fails in production. */
 export type DiagramNode = {
   label: string;
   slug?: string;
@@ -22,9 +22,9 @@ export function SubsystemDiagram({
           {nodes.map((node, index) => (
             <span key={`${node.label}-${index}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
               {node.slug ? (
-                <Link className="doc-flow-node" data-state={node.state} href={`/components/${node.slug}`}>
+                <a className="doc-flow-node" data-state={node.state} href={`/components/${node.slug}`}>
                   {node.label}
-                </Link>
+                </a>
               ) : (
                 <span className="doc-flow-node" data-state={node.state}>
                   {node.label}
