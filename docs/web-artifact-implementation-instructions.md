@@ -571,7 +571,7 @@ List all canonical runner targets:
 
 `gen`, `sim`, `lint`, `test-native`, `test-esp32-mocks`,
 `test-esp32-target`, `bit`, `fw-zynq`, `jtag-zynq`, `fw-esp32`, `boot`,
-`program`, `flash-esp`, `test-host`, `test-e2e`, `hil`, `release`,
+`package`, `program`, `flash-esp`, `test-host`, `test-e2e`, `hil`, `release`,
 `check-env`, and `query-board`.
 
 For each target, state what it validates, whether it requires hardware or a

@@ -159,7 +159,17 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
     requires: 'Python plus Bootgen from Vitis 2026.1; the ELF and bit artifacts from fw-zynq and bit.',
     report: 'build/reports/boot.json; BOOT.BIN under build/release (ignored local)',
     evidence:
-      'PASS 2026-09-06 (2,265,028-byte BOOT.BIN from fsbl + la_fw + bit). Recorded as tooling evidence on the then-current hello firmware, not a release candidate.',
+      'PASS 2026-09-14: BOOT.BIN 2,389,904 bytes rebuilt from the current FSBL, P9.1 bitstream and la_app.elf (1,039,624 bytes). Tooling evidence only; the [HUMAN] SD boot is not performed.',
+    status: 'host-tested',
+  },
+  {
+    target: 'package',
+    validates:
+      'Stages the ESP32 flash set (bootloader.bin, partition-table.bin, la_gateway.bin) and builds the host Python wheel; verifies the wheel contents and writes release-manifest.json with sizes and SHA-256 hashes.',
+    requires: 'Python venv plus the fw-esp32 build and BOOT.BIN artifacts; no hardware.',
+    report: 'build/reports/package.json; artifacts and release-manifest.json under build/release (ignored local)',
+    evidence:
+      'PASS 2026-09-14: bootloader 26,304 B, partition table 3,072 B, gateway 910,032 B, la_host-0.0.0 wheel 57,811 B, manifest written. The v1.0 tag still waits on the ESP32-S3 transport port.',
     status: 'host-tested',
   },
   {
