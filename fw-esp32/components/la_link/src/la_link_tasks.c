@@ -637,6 +637,27 @@ void la_link_release_to_host(uint8_t *frame)
     }
 }
 
+size_t la_link_receive_live(uint8_t **frame, TickType_t timeout)
+{
+    size_t length = 0u;
+
+    if (frame == NULL) {
+        return 0u;
+    }
+    *frame = xRingbufferReceive(s_link.live, &length, timeout);
+    if (*frame == NULL) {
+        return 0u;
+    }
+    return length;
+}
+
+void la_link_release_live(uint8_t *frame)
+{
+    if (frame != NULL) {
+        vRingbufferReturnItem(s_link.live, frame);
+    }
+}
+
 void la_link_stats(la_relay_stats_t *uart_to_net,
                    la_relay_stats_t *net_to_uart,
                    la_link_counters_t *counters)

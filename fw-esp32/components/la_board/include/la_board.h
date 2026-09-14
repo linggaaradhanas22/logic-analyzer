@@ -67,6 +67,14 @@
 #define LA_BOARD_UI_TASK_PRIO 5
 #define LA_BOARD_UI_TASK_STACK 3072
 
+/* P10.1 live web view: the HTTP server runs its own task; LiveViewTask only
+ * formats and broadcasts the mirrored events, so it stays below the relay. */
+#define LA_BOARD_WEB_TASK_CORE 0
+#define LA_BOARD_WEB_TASK_PRIO 5
+#define LA_BOARD_WEB_TASK_STACK 3072
+#define LA_BOARD_WEB_PORT 80
+#define LA_BOARD_WEB_MAX_CLIENTS 4
+
 /* Onboard blue LED of the DOIT DevKit V1, active low. */
 #define LA_BOARD_LED_GPIO 2
 #define LA_BOARD_LED_ACTIVE_LOW 1

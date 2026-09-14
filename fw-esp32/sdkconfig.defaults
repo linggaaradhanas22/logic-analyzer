@@ -30,3 +30,7 @@ CONFIG_LWIP_TCP_SND_BUF_DEFAULT=16384
 CONFIG_LWIP_TCP_WND_DEFAULT=16384
 
 CONFIG_MDNS_MAX_SERVICES=4
+
+# P10.1 live web view: the WebSocket endpoint at /ws needs the httpd WS
+# support compiled in (the APIs and the is_websocket handler field are gated).
+CONFIG_HTTPD_WS_SUPPORT=y

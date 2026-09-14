@@ -70,6 +70,14 @@ target_include_directories(la_esp32_mocks_net PRIVATE
   fw-esp32/components/la_net/include
 )
 
+add_executable(la_esp32_mocks_web
+  tests/native/esp32_web_host_tests.c
+  fw-esp32/components/la_web/src/la_web_core.c
+)
+target_include_directories(la_esp32_mocks_web PRIVATE
+  fw-esp32/components/la_web/include
+)
+
 add_executable(la_native_regs
   tests/native/regs_host_tests.c
   fw-zynq/app/src/drivers/la_regs_drv.c
@@ -182,6 +190,7 @@ add_test(NAME la_native_tests COMMAND la_native_tests)
 add_test(NAME la_esp32_mocks COMMAND la_esp32_mocks)
 add_test(NAME la_esp32_mocks_relay COMMAND la_esp32_mocks_relay)
 add_test(NAME la_esp32_mocks_net COMMAND la_esp32_mocks_net)
+add_test(NAME la_esp32_mocks_web COMMAND la_esp32_mocks_web)
 add_test(NAME la_native_regs COMMAND la_native_regs)
 add_test(NAME la_native_spi COMMAND la_native_spi)
 add_test(NAME la_native_spi_core COMMAND la_native_spi_core)

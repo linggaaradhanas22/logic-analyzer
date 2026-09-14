@@ -6,6 +6,7 @@
 
 #include "la_link.h"
 #include "la_net.h"
+#include "la_web.h"
 #include "ui_task.h"
 
 void app_main(void)
@@ -21,5 +22,6 @@ void app_main(void)
 
     ESP_ERROR_CHECK(la_link_start());
     ESP_ERROR_CHECK(la_net_start());
+    ESP_ERROR_CHECK(la_web_start());
     ESP_ERROR_CHECK(la_ui_start());
 }

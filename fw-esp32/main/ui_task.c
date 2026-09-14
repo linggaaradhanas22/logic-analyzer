@@ -10,6 +10,7 @@
 #include "la_board.h"
 #include "la_link.h"
 #include "la_net.h"
+#include "la_web.h"
 
 static const char *TAG = "la_ui";
 
@@ -40,6 +41,7 @@ static void ui_task(void *argument)
     la_net_policy_stats_t policy;
     la_net_policy_state_t state;
     la_net_counters_t net;
+    la_web_counters_t web;
     uint32_t led_phase = 0u;
     uint32_t stats_phase = 0u;
 
@@ -59,6 +61,7 @@ static void ui_task(void *argument)
         vTaskDelay(pdMS_TO_TICKS(250));
         la_link_stats(&up, &down, &link);
         la_net_stats(&policy, &state, &net);
+        la_web_stats(&web);
 
 #if LA_BOARD_LED_ACTIVE_LOW
         int level = (state == LA_NET_POLICY_CLIENT_ACTIVE) ? 0 : (int)(led_phase & 1u);
@@ -84,7 +87,8 @@ static void ui_task(void *argument)
                  "open=%u accfail=%u/%d closefail=%u/%d closemax=%u sretry=%u "
                  "drains=%u loops=%u sready=%u serr=%u refresh=%u | "
                  "rssi=%d heap=%u stacks rx=%u tx=%u net=%u ui=%u "
-                 "spi2 lo=%u ch=%u cf=%u sto=%u rst=%u frm=%u crc=%u",
+                 "spi2 lo=%u ch=%u cf=%u sto=%u rst=%u frm=%u crc=%u "
+                 "web=%u/%u/%u",
                  (unsigned)up.frames_forwarded, (unsigned)up.frames_forward_failed,
                  (unsigned)up.best_effort_dropped,
                  (unsigned)up.control_pressure_events, (unsigned)up.frames_mirrored,
@@ -113,7 +117,9 @@ static void ui_task(void *argument)
                  (unsigned)link.spi_ready_low, (unsigned)link.spi_chunks,
                  (unsigned)link.spi_chunk_fail, (unsigned)link.spi_send_timeout,
                  (unsigned)link.spi_parser_resets,
-                 (unsigned)link.spi_frames_total, (unsigned)link.spi_crc_total);
+                 (unsigned)link.spi_frames_total, (unsigned)link.spi_crc_total,
+                 (unsigned)web.ws_clients, (unsigned)web.frames_sent,
+                 (unsigned)web.frames_dropped);
         esp_task_wdt_reset();
     }
 }

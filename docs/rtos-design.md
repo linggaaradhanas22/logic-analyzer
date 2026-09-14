@@ -902,6 +902,41 @@ live session started while the patgen is already running (after a previous
 LIVE_STOP) streams almost no transitions; the P7.6 helper already toggles the
 patgen EN before every session and the P9.2 tests do the same.
 
+## P10.1 live web view (2026-09-14)
+
+The ESP32 gateway also serves a small browser UI so a phone or laptop on the
+same network can watch decoded traffic without the host CLI.
+
+- **Ownership.** LinkRxTask is the only producer into the 8 KiB `live` mirror
+  ring (it mirrors every `EVT_DECODED` frame it relays). `LiveViewTask` is the
+  only consumer: it takes one whole encoded frame at a time through
+  `la_link_receive_live`, feeds it to a local `la_proto` parser, and formats
+  the records with the pure `la_web_core` into
+  `{"s":slot,"e":[[t_sample,kind,"hex data"],...]}`. With no browser attached
+  the task drains and discards, so the mirror ring never applies backpressure
+  to the relay (a full ring is counted as `mirror_dropped`).
+- **Transport.** `esp_http_server` on port 80 serves the embedded
+  `index.html` (single file, no external assets) and a `/ws` WebSocket.
+  `httpd_ws_send_frame_async` transmits synchronously in the calling task, so
+  a dead client is pruned on its first failed send. Up to
+  `LA_BOARD_WEB_MAX_CLIENTS` (4) browsers are tracked under a spinlock; the
+  server's socket budget stays small (client table + 2).
+- **Page.** Per-decoder tabs (slots 0-2); BYTE records render as characters
+  (non-printables as `\xNN`), other kinds as `<START>`, `<ACK>`, ... labels;
+  each line carries the sample delta from the first event. A 1 s stats message
+  shows relay counters (`fwd`, `ffail`, relay drops, mirror drops) and free
+  heap, and the page reconnects automatically.
+- **Memory.** The JSON buffer (2560 B) and LiveView stack (3072 B) are static
+  and were trimmed after the first build overflowed DRAM by 320 bytes; the
+  page itself lives in flash. `CONFIG_HTTPD_WS_SUPPORT=y` is required (the WS
+  APIs and the `is_websocket` handler field are compiled only with it).
+- **Verification.** `la_web_core` is host-tested (`la_esp32_mocks_web`:
+  layout, hex, truncation, slot and unbound guards). The bench gate
+  `tests/e2e/test_p10_web.py` fetches the page over HTTP and, with a live
+  session running, requires the WebSocket to carry the decoded bytes and a
+  stats message; both passed on 2026-09-14 (phone hotspot, gateway
+  172.20.10.2).
+
 ## Windows Adapter Boundary
 
 The native adapter models static segment handles, synchronized reference

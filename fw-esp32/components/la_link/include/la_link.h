@@ -76,6 +76,12 @@ size_t la_link_receive_to_host(uint8_t **frame, TickType_t timeout);
 
 void la_link_release_to_host(uint8_t *frame);
 
+/* P10.1: returns the next mirrored EVT_DECODED frame (encoded la_proto frame)
+ * for the live web view, or 0 when the ring is empty. The returned buffer
+ * stays valid until la_link_release_live(). LinkRxTask is the only producer. */
+size_t la_link_receive_live(uint8_t **frame, TickType_t timeout);
+void la_link_release_live(uint8_t *frame);
+
 void la_link_stats(la_relay_stats_t *uart_to_net,
                    la_relay_stats_t *net_to_uart,
                    la_link_counters_t *counters);

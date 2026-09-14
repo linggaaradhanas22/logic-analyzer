@@ -180,6 +180,15 @@ once and retry (the known stale-client state); if it still fails, check the
 monitor log and `ping la-esp32.local`. The burst E2E gate then runs as
 `python tools\run.py test-e2e -- --target tcp://la-esp32.local:5555`.
 
+### Live web view (P10.1)
+
+The gateway also serves a browser UI on port 80. Open
+`http://la-esp32.local/` (or the IP from the boot log) while a live session
+runs (`la-cli live --decoder uart:rx=0,baud=115200`); decoded bytes appear in
+per-decoder tabs with a stats bar. The page is embedded in the firmware, so no
+external assets or internet access are needed. Bench gate:
+`python tools\run.py test-e2e -- --target tcp://la-esp32.local:5555 --live -k test_p10`.
+
 ## Troubleshooting
 
 - `cmake` missing: open a Visual Studio x64 Native Tools prompt or set
