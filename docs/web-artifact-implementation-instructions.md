@@ -151,6 +151,7 @@ from central content data, not copied into many hand-written page files.
 | Route | Purpose |
 |---|---|
 | `/` | Level 1 system context, operating modes, strongest evidence, current limits, and entry points. |
+| `/using` | Step-by-step operating guide: build/load, link verification, self-test and real captures, live decode, browser view, trace, SPI transport, command reference, troubleshooting. |
 | `/subsystems/[slug]` | Level 2 diagram and overview for one of the seven system blocks. |
 | `/components/[slug]` | Level 3 detail page generated from the component catalog. |
 | `/reference/registers` | All registers and fields from the normative map, grouped by purpose. |

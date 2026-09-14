@@ -7,6 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 
 const LINKS = [
   { label: 'Overview', href: '/' },
+  { label: 'Using', href: '/using' },
   { label: 'Subsystems', href: '/#subsystems' },
   { label: 'Reference', href: '/reference/registers' },
   { label: 'Verification', href: '/verification' },

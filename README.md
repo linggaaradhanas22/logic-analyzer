@@ -67,6 +67,7 @@ not-run, not pass.
 |---|---|
 | `docs/plan.md` | Normative implementation plan and design requirements |
 | `docs/status.md` | Execution ledger: phase state, verified gates, blockers |
+| `docs/using-the-analyzer.md` | Operating guide: load, verify, capture, live decode, web view, trace |
 | `docs/architecture.md` | Zynq/PL integration, constraints, resource use |
 | `docs/rtos-design.md` | Tasks, queues, ownership, cache contract, measurements |
 | `docs/protocol.md` | Frame format and every message payload |
@@ -79,6 +80,15 @@ not-run, not pass.
 | `docs/sigrok-bridge.md` | P10.2 SUMP bridge assessment and deferral |
 | `docs/windows-dev.md` | Native Windows setup and troubleshooting |
 | `docs/web-artifact-implementation-instructions.md` | Documentation-portal contract (`web-artifact/`) |
+
+For bench operation start with `docs/using-the-analyzer.md`; the same guide is on
+the portal at `/using`. Typical first commands:
+
+```text
+.venv\Scripts\la-cli.exe ping -t tcp://la-esp32.local:5555
+.venv\Scripts\la-cli.exe capture -t tcp://la-esp32.local:5555 --rate 10M --words 64k --out capture.sr
+.venv\Scripts\la-cli.exe live -t tcp://la-esp32.local:5555 --decoder uart:rx=0,baud=115200
+```
 
 ## Known limits
 

@@ -6,6 +6,7 @@ import zipfile
 
 from click.testing import CliRunner
 
+from host.la_cli import protocol as p
 from host.la_cli.commands import cli
 
 
@@ -45,6 +46,19 @@ def test_capture_command_raw(analyzer, tmp_path) -> None:
     assert "exported 3056 samples" in result.output
     with zipfile.ZipFile(output) as archive:
         assert "total samples=3056" in archive.read("metadata").decode()
+
+
+def test_capture_command_patgen_selftest(analyzer, tmp_path) -> None:
+    mock = analyzer("capture_raw")
+    output = tmp_path / "selftest.sr"
+    result = CliRunner().invoke(cli, [
+        "capture", "--target", mock.uri, "--rate", "10M", "--words", "3056",
+        "--patgen", "uart", "--out", str(output),
+    ])
+    assert result.exit_code == 0, result.output
+    assert mock.last_patgen == p.pack_patgen_cfg(p.PATGEN_EN_MASK | (3 << 4))
+    assert mock.last_config is not None
+    assert mock.last_config[0] & p.CTRL_SELFTEST_EN
 
 
 def test_capture_command_txn(analyzer, tmp_path) -> None:

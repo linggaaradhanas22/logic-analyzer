@@ -454,6 +454,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 
 .doc-muted { color: #7d918a; }
 .doc-inline-code { padding: 2px 6px; color: #d8eadf; border: 1px solid rgba(130,255,158,.16); background: #08110f; font-family: var(--font-geist-mono); font-size: 12.5px; }
+.doc-pre { margin: 14px 0; padding: 16px 18px; overflow-x: auto; border: 1px solid rgba(130,255,158,.16); background: #08110f; color: #d8eadf; font-family: var(--font-geist-mono); font-size: 13px; line-height: 1.6; white-space: pre; }
 
 @media (max-width: 960px) {
   .doc-grid.cols-3 { grid-template-columns: repeat(2, minmax(0,1fr)); }

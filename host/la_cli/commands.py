@@ -16,6 +16,7 @@ from .transport import TransportError, list_candidates, open_uri
 
 FS_HZ = 100_000_000  # la_top FCLK
 CHANNELS = 8
+PATGEN_MODES = {"counter": 0, "walking": 1, "prbs": 2, "uart": 3, "spi": 4, "i2c": 5}
 
 
 def _parse_size(text: str) -> int:
@@ -123,6 +124,10 @@ def status(target: str, timeout_s: float) -> None:
 @click.option("--mode", type=click.Choice(["raw", "txn"]), default="raw", show_default=True)
 @click.option("--pre", "pre_samples", default=0, show_default=True,
               help="pre-trigger samples")
+@click.option("--patgen", "patgen_mode",
+              type=click.Choice(["off", "counter", "walking", "prbs", "uart", "spi", "i2c"]),
+              default="off", show_default=True,
+              help="drive the on-board pattern generator into the capture (internal self-test mux)")
 @click.option("--trig-rise", "trig_rise", default=None, type=int,
               help="trigger channel for a rising edge")
 @click.option("--trig-fall", "trig_fall", default=None, type=int,
@@ -130,8 +135,8 @@ def status(target: str, timeout_s: float) -> None:
 @click.option("--out", "output", required=True, help="output file: capture.sr, .vcd or .png")
 @click.option("--timeout", "timeout_s", default=30.0, show_default=True, type=float)
 def capture(target: str, rate: str, words_text: str, mode: str, pre_samples: int,
-            trig_rise: int | None, trig_fall: int | None, output: str,
-            timeout_s: float) -> None:
+            patgen_mode: str, trig_rise: int | None, trig_fall: int | None,
+            output: str, timeout_s: float) -> None:
     rate_hz = _parse_size(rate)
     words = _parse_size(words_text)
     if words <= 0:
@@ -152,7 +157,7 @@ def capture(target: str, rate: str, words_text: str, mode: str, pre_samples: int
         trig_fall_bits = 1 << trig_fall
         trig_mask |= trig_fall_bits
     config = p.pack_config(
-        ctrl_flags=0,
+        ctrl_flags=p.CTRL_SELFTEST_EN if patgen_mode != "off" else 0,
         sample_div=sample_div,
         mode={"raw": 0, "txn": 1}[mode],
         chan_en=0xFF,
@@ -169,6 +174,8 @@ def capture(target: str, rate: str, words_text: str, mode: str, pre_samples: int
 
     client = _make_client(target)
     try:
+        if patgen_mode != "off":
+            client.configure_patgen(p.PATGEN_EN_MASK | (PATGEN_MODES[patgen_mode] << 4))
         result = client.capture(config, timeout_s=timeout_s)
         logs = client.log_lines
     except (AnalyzerError, TransportError) as exc:
@@ -314,12 +321,11 @@ def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int
         txn_max_run=0x00FFFFFF,
         live_flush_cycles=200_000,
     )
-    patgen_modes = {"counter": 0, "walking": 1, "prbs": 2, "uart": 3, "spi": 4, "i2c": 5}
 
     client = _make_client(target)
     try:
         if patgen_mode != "off":
-            client.configure_patgen(p.PATGEN_EN_MASK | (patgen_modes[patgen_mode] << 4))
+            client.configure_patgen(p.PATGEN_EN_MASK | (PATGEN_MODES[patgen_mode] << 4))
         try:
             events = client.live(
                 decoder_cfg, config=stream_config, count=count,
