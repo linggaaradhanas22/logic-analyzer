@@ -81,7 +81,9 @@ external-input proof. Preserve all claim corrections in
 - Do not register a new Site. Preserve the existing project ID in
   `web-artifact/.openai/hosting.json`.
 - Do not publish. A production build and local source review are required;
-  deployment is a separate user decision.
+  deployment is a separate user decision. (Superseded 2026-09-14: the user
+  requested publication of the current portal from Codex. Reuse the existing
+  Site project ID in `.openai/hosting.json`; never register a replacement.)
 - Do not modify the neighboring DDR3 PHY project.
 
 ## 4. Source-of-truth and evidence policy
