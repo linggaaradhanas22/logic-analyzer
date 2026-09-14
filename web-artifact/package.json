@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vinext dev",
     "build": "vinext build",
+    "validate": "esbuild scripts/validate-docs.ts --bundle --platform=node --format=esm --outfile=dist/validate-docs.mjs && node dist/validate-docs.mjs",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
     "format": "oxfmt"
