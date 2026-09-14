@@ -73,8 +73,10 @@ target_include_directories(la_esp32_mocks_net PRIVATE
 add_executable(la_esp32_mocks_web
   tests/native/esp32_web_host_tests.c
   fw-esp32/components/la_web/src/la_web_core.c
+  common/la_proto/src/la_proto.c
 )
 target_include_directories(la_esp32_mocks_web PRIVATE
+  common/la_proto/include
   fw-esp32/components/la_web/include
 )
 
