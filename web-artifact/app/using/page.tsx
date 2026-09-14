@@ -208,6 +208,55 @@ python tools\\run.py fw-esp32     # ESP32 gateway firmware (ESP-IDF)`}</Cmd>
         </section>
 
         <section className="doc-section">
+          <h2>Worked example: decoding an I2C bus</h2>
+          <p className="doc-prose">
+            Goal: watch an I2C bus live <strong>and</strong> save a full waveform on the PC.
+          </p>
+          <div className="doc-table-wrap">
+            <table className="doc-table">
+              <caption>Wiring: probe the two signal wires plus the target ground</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Signal</th>
+                  <th scope="col">Target</th>
+                  <th scope="col">Zybo</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td>SCL</td><td>I2C clock wire</td><td className="num">JC-1 = CH0</td></tr>
+                <tr><td>SDA</td><td>I2C data wire</td><td className="num">JC-2 = CH1</td></tr>
+                <tr><td>GND</td><td>target ground</td><td className="num">JC-5 or JC-11 (GND)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <ul className="doc-prose">
+            <li>Do <strong>not</strong> connect the bus VCC; the analyzer only senses the lines.</li>
+            <li>3.3 V only: if the bus pull-ups go to 5 V, use a level shifter.</li>
+            <li>Keep leads short and confirm common ground before powering.</li>
+            <li>This is separate from the PC link: the <strong>JD-1..4 + GND</strong> ribbon (or a 3.3 V USB-UART adapter on the same pins) carries the data, and <code className="doc-inline-code">la-cli ping</code> must answer first.</li>
+          </ul>
+          <p className="doc-prose"><strong>Live decode:</strong></p>
+          <Cmd>{`.venv\\Scripts\\la-cli.exe live -t tcp://la-esp32.local:5555 ^
+    --decoder i2c:scl=0,sda=1 --rate 10M`}</Cmd>
+          <p className="doc-prose">
+            Events print as START / ADDRESS / ACK / DATA / STOP. Stop with Ctrl+C or{' '}
+            <code className="doc-inline-code">--count N</code>; add{' '}
+            <code className="doc-inline-code">--csv</code> to save rows. A dry run without a real bus
+            uses the internal pattern generator (no jumpers):
+          </p>
+          <Cmd>{`.venv\\Scripts\\la-cli.exe live -t tcp://la-esp32.local:5555 ^
+    --patgen i2c --decoder i2c:scl=3,sda=4 --count 10`}</Cmd>
+          <p className="doc-prose"><strong>Full waveform capture:</strong></p>
+          <Cmd>{`.venv\\Scripts\\la-cli.exe capture -t tcp://la-esp32.local:5555 ^
+    --rate 10M --words 64k --mode raw --pre 1000 --out i2c.sr`}</Cmd>
+          <ul className="doc-prose">
+            <li><code className="doc-inline-code">64k</code> samples at 10 MS/s is a ~6.5 ms window; raise <code className="doc-inline-code">--words</code> or use <code className="doc-inline-code">--mode txn</code> for longer records.</li>
+            <li>Trigger: <code className="doc-inline-code">--trig-fall 1</code> catches an SDA falling edge (usually a START); without a trigger the capture starts immediately. The CLI exposes one edge channel, so a true &quot;SCL high and SDA falling&quot; START condition is not directly selectable.</li>
+            <li>Open <code className="doc-inline-code">i2c.sr</code> in PulseView (<code className="doc-inline-code">.vcd</code> in GTKWave, <code className="doc-inline-code">.png</code> for a snapshot).</li>
+          </ul>
+        </section>
+
+        <section className="doc-section">
           <h2>7. Browser live view</h2>
           <p className="doc-prose">
             The gateway serves an embedded page on port 80 while a live session runs. Start a live

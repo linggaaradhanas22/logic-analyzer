@@ -193,6 +193,57 @@ Qualified rates: 115200 UART (repeatable 60 s zero-drop gate) and 10 kHz SPI/I²
 reports and the system returns to IDLE. Overruns are always reported, never
 silent.
 
+## Worked example: decoding an I2C bus
+
+Goal: watch an I2C bus live **and** save a full waveform on the PC.
+
+### Wiring
+
+| Signal | Target | Zybo |
+|---|---|---|
+| SCL | I2C clock wire | JC-1 = CH0 |
+| SDA | I2C data wire | JC-2 = CH1 |
+| GND | target ground | JC-5 or JC-11 (GND) |
+
+- Probe the two signal wires plus the target ground. Do **not** connect the bus
+  VCC; the analyzer only senses the lines.
+- 3.3 V only: if the bus pull-ups go to 5 V, use a level shifter.
+- Keep leads short and confirm common ground before powering.
+- This is separate from the PC link: the **JD-1..4 + GND** ribbon to the ESP32
+  (or a 3.3 V USB-UART adapter on the same pins) carries the data, and
+  `la-cli ping -t tcp://la-esp32.local:5555` must answer first.
+
+### Live decode
+
+```powershell
+.\.venv\Scripts\la-cli.exe live -t tcp://la-esp32.local:5555 `
+    --decoder i2c:scl=0,sda=1 --rate 10M
+```
+
+Events print as START / ADDRESS / ACK / DATA / STOP. Stop with Ctrl+C or
+`--count N`; add `--csv` to save rows. A dry run without a real bus uses the
+internal pattern generator (no jumpers):
+
+```powershell
+.\.venv\Scripts\la-cli.exe live -t tcp://la-esp32.local:5555 `
+    --patgen i2c --decoder i2c:scl=3,sda=4 --count 10
+```
+
+### Full waveform capture
+
+```powershell
+.\.venv\Scripts\la-cli.exe capture -t tcp://la-esp32.local:5555 `
+    --rate 10M --words 64k --mode raw --pre 1000 --out i2c.sr
+```
+
+- `64k` samples at 10 MS/s is a ~6.5 ms window; raise `--words` or use
+  `--mode txn` for longer records.
+- Trigger: `--trig-fall 1` catches an SDA falling edge (usually a START).
+  Without a trigger the capture starts immediately. The CLI exposes one edge
+  channel, so a true "SCL high and SDA falling" START condition is not directly
+  selectable.
+- Open `i2c.sr` in PulseView (`.vcd` in GTKWave, `.png` for a snapshot).
+
 ## 7. Browser live view
 
 The gateway serves an embedded page on port 80 while a live session runs:
