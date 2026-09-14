@@ -175,6 +175,10 @@ def capture(target: str, rate: str, words_text: str, mode: str, pre_samples: int
     client = _make_client(target)
     try:
         if patgen_mode != "off":
+            # la_patgen latches mode/DIV on the EN rising edge; clear EN first
+            # so a repeated --patgen session relatches instead of keeping the
+            # previous mode.
+            client.configure_patgen(0)
             client.configure_patgen(p.PATGEN_EN_MASK | (PATGEN_MODES[patgen_mode] << 4))
         result = client.capture(config, timeout_s=timeout_s)
         logs = client.log_lines
@@ -325,6 +329,10 @@ def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int
     client = _make_client(target)
     try:
         if patgen_mode != "off":
+            # la_patgen latches mode/DIV on the EN rising edge; clear EN first
+            # so a repeated --patgen session relatches instead of keeping the
+            # previous mode.
+            client.configure_patgen(0)
             client.configure_patgen(p.PATGEN_EN_MASK | (PATGEN_MODES[patgen_mode] << 4))
         try:
             events = client.live(

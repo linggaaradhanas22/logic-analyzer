@@ -56,7 +56,10 @@ def test_capture_command_patgen_selftest(analyzer, tmp_path) -> None:
         "--patgen", "uart", "--out", str(output),
     ])
     assert result.exit_code == 0, result.output
-    assert mock.last_patgen == p.pack_patgen_cfg(p.PATGEN_EN_MASK | (3 << 4))
+    assert mock.patgen_history == [
+        p.pack_patgen_cfg(0),
+        p.pack_patgen_cfg(p.PATGEN_EN_MASK | (3 << 4)),
+    ]
     assert mock.last_config is not None
     assert mock.last_config[0] & p.CTRL_SELFTEST_EN
 

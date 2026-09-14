@@ -90,6 +90,29 @@ python tools\\run.py fw-esp32     # ESP32 gateway firmware (ESP-IDF)`}</Cmd>
         </section>
 
         <section className="doc-section">
+          <h2>Two independent modes</h2>
+          <div className="doc-panel">
+            <p>
+              Burst capture and live decode are alternatives, not steps. <code className="doc-inline-code">capture</code>{' '}
+              configures, arms, drains and stops its own session; you can use it without ever running{' '}
+              <code className="doc-inline-code">live</code>. <code className="doc-inline-code">live</code> configures the
+              stream, starts it and stops on its own (<code className="doc-inline-code">--count</code>,{' '}
+              <code className="doc-inline-code">--timeout</code> or Ctrl+C); it does <strong>not</strong> need a
+              preceding capture or ARM.
+            </p>
+            <p>
+              They cannot run at the same time: both use the same acquisition engine and memory pool. Finish or
+              abort one before starting the other; if a capture is armed, run{' '}
+              <code className="doc-inline-code">la-cli abort -t ...</code> first. Every command latches its own
+              configuration at CONFIG/ARM or DECODER_CFG/LIVE_START, so there is no &quot;assert once, then
+              use&quot; step. With <code className="doc-inline-code">--patgen</code>, the CLI clears the
+              pattern-generator enable before setting the new mode, so repeated self-test sessions relatch
+              instead of keeping the previous pattern.
+            </p>
+          </div>
+        </section>
+
+        <section className="doc-section">
           <h2>4. First capture without external signals</h2>
           <p className="doc-prose">
             The pattern generator can drive the capture input internally, so you can prove the whole

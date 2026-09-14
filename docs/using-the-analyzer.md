@@ -83,6 +83,24 @@ retry once: the first TCP session can need a listener refresh.
 `la-cli ports` lists USB-UART candidates (CP210x/CH340/FTDI) when you use a
 direct `serial://COMx` link instead of the gateway.
 
+## Two independent modes
+
+Burst capture and live decode are alternatives, not steps:
+
+- `capture` configures, arms, drains and stops its own session; you can use it
+  without ever running `live`.
+- `live` configures the stream, starts it, streams decoded events and stops on
+  its own (`--count`, `--timeout` or Ctrl+C); it does **not** need a preceding
+  capture or ARM.
+- They cannot run at the same time: both use the same acquisition engine and
+  memory pool. Finish or abort one before starting the other; if a capture is
+  armed, run `la-cli abort -t ...` first.
+- Every command latches its own configuration at CONFIG/ARM or
+  DECODER_CFG/LIVE_START, so there is no "assert once, then use" step.
+- With `--patgen`, the CLI clears the pattern-generator enable before setting
+  the new mode, so repeated self-test sessions relatch instead of keeping the
+  previous pattern.
+
 ## 4. First capture without external signals (self-test)
 
 The pattern generator can drive the capture input internally, so you can prove

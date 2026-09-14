@@ -66,6 +66,7 @@ class MockAnalyzer:
         self.received_acks: list[tuple[int, int]] = []
         self.last_config: bytes | None = None
         self.last_patgen: bytes | None = None
+        self.patgen_history: list[bytes] = []
         self.last_decoder: bytes | None = None
         self.last_trace_action: int | None = None
         self.last_evt_format: int | None = None
@@ -163,6 +164,7 @@ class MockAnalyzer:
                     capture_state["ack_wanted"] = 0
             elif message_type == p.PATGEN_CFG:
                 self.last_patgen = payload
+                self.patgen_history.append(payload)
                 self._send(connection, p.ACK, p.pack_ack(p.PATGEN_CFG, sequence))
             elif message_type == p.EVT_CFG:
                 self.last_evt_format = p.unpack_evt_cfg(payload)
