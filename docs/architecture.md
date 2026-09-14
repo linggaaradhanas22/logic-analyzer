@@ -28,15 +28,25 @@ Block design `system` (top `system_wrapper`):
   patgen_o (JE) are external vector ports.
 - `axi_dma_0`: S2MM only (`C_INCLUDE_MM2S=0`), SG enabled
   (`C_INCLUDE_SG=1`, ordinary descriptor chains; cyclic is not supported on
-  SG cores), `C_SG_LENGTH_WIDTH=26`, 64-bit M_AXI, 32-bit AXIS input.
+  SG cores), `C_SG_LENGTH_WIDTH=26`, 64-bit M_AXI, 32-bit AXIS input, and
+  `C_SG_INCLUDE_STSCNTRL_STRM=0` because the status stream is tied off in this
+  design (leaving the Vivado default stalled every S2MM transfer until the
+  2026-09-10 bench diagnosis).
+- `axi_quad_spi_0` (P9.1): `xilinx.com:ip:axi_quad_spi:3.2` in slave mode,
+  standard 8-bit, 256-deep FIFO, `ext_spi_clk`/`s_axi_aclk` on FCLK_CLK0, AXI4-Lite
+  at 0x4080_0000 through `sc_lite`; `ip2intc_irpt` joins `xlconcat_irq` In2.
+  JD-7..10 carry SCLK/SS_N/MOSI/MISO; the JA-1 data-ready output is PS EMIO
+  GPIO bit 0 (the EMIO width is set after the enable, or the width resets to
+  64; see the 2026-09-13 session log). `docs/spi-link.md` is the interface
+  contract.
 - AXI fabrics: two SmartConnect instances (`sc_lite`: GP0 -> la_top S_AXI +
   axi_dma S_AXI_LITE; `sc_dma`: DMA M_AXI_S2MM/SG -> S_AXI_HP0). This
   Vivado 2026.1 install ships no `axi_interconnect` definition (catalog
   probe; the on-disk `axi_interconnect_v2_1` IP is excluded from the served
   catalog), so the plan's fabric requirement is met with the supported
   SmartConnect equivalent.
-- Interrupts: `xlconcat_irq` fans `la_top.irq_o` and `axi_dma.s2mm_introut`
-  into PS `IRQ_F2P`.
+- Interrupts: `xlconcat_irq` fans `la_top.irq_o`, `axi_dma.s2mm_introut` and
+  `axi_quad_spi.ip2intc_irpt` into PS `IRQ_F2P` (three inputs).
 - External UART0 EMIO pins `uart0_tx/rx/rtsn/ctsn` -> JD (see XDC below).
 
 Address map (assigned in `build.tcl` with explicit offsets/ranges):
@@ -45,6 +55,7 @@ Address map (assigned in `build.tcl` with explicit offsets/ranges):
 |---|---|---|---|
 | ps7 GP0 | la_top registers | 0x4000_0000 | 64K |
 | ps7 GP0 | axi_dma S_AXI_LITE | 0x4040_0000 | 64K |
+| ps7 GP0 | axi_quad_spi AXI4-Lite (P9.1) | 0x4080_0000 | 64K |
 | axi_dma S2MM | ps7 DDR (HP0) | 0x0000_0000 | 1G |
 | axi_dma SG | ps7 DDR (HP0) | 0x0000_0000 | 1G |
 
@@ -76,32 +87,40 @@ Two P2 blocks were reworked so the memories map to block RAM (the ring needs
   computed from `div_i` and latched at the enable edge instead of feeding
   DSP multipliers into the per-cycle compare path (timing closure).
 
-## Measured Resource Use (P3, routed, xc7z010clg400-1, 2026-09-06)
+## Measured Resource Use (routed, xc7z010clg400-1)
 
-`build/release/utilization.rpt` (top-level design, slow corner):
+Latest signoff build (P9.1, 2026-09-13, `build/release/utilization.rpt` and
+`timing_summary.rpt`):
 
 | Resource | Used | Available | Utilization |
 |---|---|---|---|
-| Slice LUTs | 5897 | 17600 | 33.5 % |
-| LUT as Memory | 679 | 6000 | 11.3 % |
-| Slice Registers | 8510 | 35200 | 24.2 % |
-| Block RAM Tile | 36 | 60 | 60.0 % |
-| RAMB36E1 / RAMB18E1 | 17 / 38 | 60 / 120 | 28.3 % / 31.7 % |
+| Slice LUTs | 6466 | 17600 | 36.7 % |
+| Block RAM Tile | 37 | 60 | 61.7 % |
+| Bonded IOB | 26 | 100 | 26 % |
 
-Timing: `build/release/timing_summary.rpt` reports zero failing endpoints,
-WNS +0.278 ns at 100 MHz after the `la_patgen` period-latch rework. DRC:
-`build/release/drc.rpt` has no errors; the only advisory (REQP-181,
-write-first BRAM mode inside the Xilinx AXI DMA IP) is a stock IP note.
+Timing: zero failing endpoints, WNS +0.247 ns and WHS +0.019 ns at 100 MHz;
+DRC zero errors. The P3 baseline (before the SPI slave, ring/patgen rework and
+DMA fixes) was 33.5 % LUT and 60.0 % BRAM with WNS +0.278 ns; the P3.3
+reset-fix build measured WNS +0.255 ns / WHS +0.024 ns. Consult
+`build/release/*.rpt` on the current checkout for the exact numbers, since each
+signoff run replaces them.
 
 ## Artifacts and Next Steps
 
 - `build/release/logic_analyzer.xsa` (write_hw_platform -fixed -include_bit)
-  and `build/release/logic_analyzer.bit` are the P4 platform inputs.
-- P3.3 `fpga/scripts/program.tcl` is the [HUMAN] JTAG programming step;
-  blink/bench checks are not yet performed.
+  and `build/release/logic_analyzer.bit` are the firmware platform inputs; the
+  current pair is the P9.1 build with the SPI slave and the JA-1 data-ready.
+- P3.3 `fpga/scripts/program.tcl` is the [HUMAN] JTAG programming step; it was
+  exercised on 2026-09-10 (LD0 heartbeat observed). `jtag-zynq` is the
+  scripted load used for every later bench session.
+- The P9.1 SPI link is bench-verified for framed transfers at 5/10/18 MHz; the
+  64 MB / 1.5 MB/s drain gate is blocked on the ESP32 Wi-Fi host transport
+  (0.28 MB/s measured) and waits for the ESP32-S3 USB-OTG port.
 - Remaining honest caveats: PS DDR behavior with the board-preset negative
   DQS-to-CLK skew values is only verified at boot/bring-up on hardware;
-  `IRQ_F2P` carries both analyzer and DMA interrupts through the fabric and
-  the driver must distinguish them by status reads; the SmartConnect
-  auto-configuration warnings for ps7/axi_dma widths were reviewed (endpoint
-  widths are explicit: GP0 32-bit lite, S2MM 64-bit, SG 32-bit, HP0 64-bit).
+  `IRQ_F2P` carries three sources (analyzer, DMA, SPI) and the drivers must
+  distinguish them by status reads; the SmartConnect auto-configuration
+  warnings for ps7/axi_dma widths were reviewed (endpoint widths are explicit:
+  GP0 32-bit lite, S2MM 64-bit, SG 32-bit, HP0 64-bit); 19/20 MHz SPI loses
+  chunks to slave FIFO underruns, so 18 MHz is the measured burst ceiling on
+  the current wiring.

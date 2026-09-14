@@ -1,47 +1,105 @@
 # RTOS Logic Analyzer
 
-This is the Zybo Z7-10 plus ESP32 logic-analyzer project. The implementation
-root is this existing `Source_Code` directory. The project targets native
-Windows tools only: Vivado/Vitis 2026.1, Questa, MSVC/CMake/Ninja, CPython and
-native ESP-IDF.
+A logic analyzer records when digital signals are high or low so you can debug
+timing and communication. This project builds one from a Zybo Z7-10
+(Zynq-7010), an ESP32 Wi-Fi gateway and a native-Windows Python host tool. Eight
+3.3 V channels are sampled in the FPGA at up to 100 MS/s, captured around a
+trigger into DDR through ordinary AXI DMA scatter-gather descriptors, relayed
+over a CRC-protected link, and exported or live-decoded by the host.
 
-The implementation source of truth is `docs/plan.md`. Phase 0 establishes the
-runner, environment checks, register-map generation, native C ABI tests and
-simulation harness. Hardware gates remain explicit until the required tools,
-boards and wiring are available.
+The implementation source of truth is `docs/plan.md`. The execution ledger,
+measured evidence, blockers and next actions are in `docs/status.md`.
 
-The detailed execution state and next-session handoff are maintained in
-`docs/status.md`. Update that file when a development session changes a phase,
-gate result or blocker.
+## What exists today
 
-Tracked changes follow the status, commit and push workflow defined there;
-completed changes are pushed to `origin/main` and verified against the remote.
+| Area | State |
+|---|---|
+| FPGA capture pipeline (`fpga/rtl`, 12 RTL blocks) | Implemented; 12/12 self-checking Questa tests |
+| Vivado integration, Zybo bitstream/XSA | Built and on bench; timing closed, DRC clean |
+| Zynq FreeRTOS core (acquisition, commands, TX, status, live decoders) | Bench-verified burst and live paths |
+| ESP32 gateway (UART + SPI bulk link, TCP relay, web live view) | Bench-verified; Wi-Fi drain is the open performance limit |
+| Host `la-cli` (capture, `.sr`/VCD/PNG export, live decode, trace) | Host-tested; burst and live used on bench |
+| Live web view on the ESP32 (HTTP + WebSocket) | Bench-verified (P10.1) |
+| Release packaging (BOOT.BIN tooling, ESP32 bin set, Python wheel) | Tooling present; final release waits on the P9.1 transport port |
+
+## Specifications
+
+- Eight LVCMOS33 acquisition channels on Zybo JC (3.3 V only; never 5 V).
+- Sample rate `100 MHz / (SAMPLE_DIV + 1)`; 100 MS/s is the design target and
+  the current MVP is qualified at that clock.
+- Level and edge trigger, 32,768 maximum pre-trigger samples, post-trigger
+  count, timeout and abort.
+- Raw packing (four samples per word) or transition encoding
+  (`{run[23:0], sample[7:0]}`).
+- UART, SPI and I²C live decoders (shared C library, host-tested and wired to
+  the target decoder tasks).
+- Framed link protocol with CRC16 frames, CRC32 whole-capture checks,
+  sequence/ACK windowing and explicit overrun reporting.
+- Host exports `.sr` (PulseView), VCD, PNG, text and CSV.
 
 ## Canonical commands
 
-Run these commands from the project root; `tools/run.py` derives the project
-root from its own location. An absolute path to the runner may be used from
-elsewhere.
+Run from the project root; `tools/run.py` resolves paths from its own location.
 
 ```text
-python tools/check_env.py
+python tools/run.py check-env -- --write-lock
 python tools/run.py gen
 python tools/run.py test-native
+python tools/run.py test-esp32-mocks
 python tools/run.py test-host
-python tools/run.py lint
+python tools/run.py lint          # run lint and sim sequentially
 python tools/run.py sim
+python tools/run.py bit           # Vivado bitstream/XSA
+python tools/run.py fw-zynq       # Vitis firmware
+python tools/run.py fw-esp32      # ESP-IDF gateway
+python tools/run.py boot          # BOOT.BIN packaging
+python tools/run.py test-e2e -- --target tcp://la-esp32.local:5555
+python tools/run.py release
 ```
 
-Use `python tools/run.py --help` for all targets. Each invocation writes a
-machine-readable result under `build/reports` and returns the child process's
-nonzero status. Missing licensed tools or hardware are named precisely.
+`program`, `flash-esp` and `hil` are human-operated hardware gates. Reports are
+written under ignored `build/reports`; a missing report on another checkout is
+not-run, not pass.
 
-## Phase 0 status
+## Documentation map
 
-The local native gates currently pass for the environment checker, register-map
-generation, MSVC/CMake/CTest, ESP32 mocks, host pytest, Questa compile/simulation
-and the ESP-IDF v5.5.2 hello-world build. Vivado 2026.1 resolves the pinned
-Zybo Z7-10 board part. Vivado implementation, Vitis application integration and
-physical programming/HIL remain later-phase or human hardware gates.
+| Document | Contents |
+|---|---|
+| `docs/plan.md` | Normative implementation plan and design requirements |
+| `docs/status.md` | Execution ledger: phase state, verified gates, blockers |
+| `docs/architecture.md` | Zynq/PL integration, constraints, resource use |
+| `docs/rtos-design.md` | Tasks, queues, ownership, cache contract, measurements |
+| `docs/protocol.md` | Frame format and every message payload |
+| `docs/regmap.yaml` / `docs/regmap.md` | Normative register map and generated view |
+| `docs/decoders.md` | UART/SPI/I²C transition-decoder specification |
+| `docs/wiring.md` | JC/JE/JD pin maps, loopback wiring, power rules |
+| `docs/spi-link.md` | P9.1 SPI bulk-link contract and measured results |
+| `docs/test-plan.md` | Acceptance matrices per phase |
+| `docs/limits.md` | Known limits and unverified gates |
+| `docs/sigrok-bridge.md` | P10.2 SUMP bridge assessment and deferral |
+| `docs/windows-dev.md` | Native Windows setup and troubleshooting |
+| `docs/web-artifact-implementation-instructions.md` | Documentation-portal contract (`web-artifact/`) |
 
-See `docs/windows-dev.md` for setup, isolated project paths and troubleshooting.
+## Known limits
+
+See `docs/limits.md`. The headline items: 3.3 V inputs only; the released MVP
+is 100 MS/s with the 200 MS/s stretch unproven; the ESP32 Wi-Fi relay caps the
+host drain at ~0.28 MB/s today, so the P9.1 64 MB/1.5 MB/s gate is blocked on
+the ESP32-S3 USB transport port; and Wi-Fi jitter can delay the isolated-byte
+latency gate.
+
+## Workflow rules
+
+- Native Windows only; no WSL, Linux containers, Make or Verilator fallback.
+- Edit `docs/regmap.yaml`, then `python tools/run.py gen`; never hand-edit
+  generated register files.
+- Every RTL block has a self-checking Questa test; protocol and decoder
+  changes require `test-native`.
+- ISRs only notify or use ISR-safe sends; buffers move by handle with
+  documented ownership and queue full policies.
+- AXI DMA uses ordinary scatter-gather descriptors only; cyclic mode and
+  simple-transfer calls are not permitted.
+- Hardware and licensed-tool steps that cannot run locally are reported as
+  blocked or unverified, never as passing.
+- Update `docs/status.md` with every tracked change; commit and push to
+  `origin/main` as described there.

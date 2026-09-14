@@ -165,6 +165,26 @@ they differ; `docs/status.md` is the authoritative ledger.
 | P6.4 PulseView export | open the `.sr` in PulseView 0.4.2 | PASS 2026-09-11: `docs/images/p6-pulseview-uart.png`; the export writer gained `capturefile=logic-1`, `total probes=8` and `probe1..8` |
 | Tag | `v0.1-burst` | annotated tag on the P6 close-out commit |
 
+### P7–P10 Acceptance
+
+`docs/status.md` is the authoritative ledger for these phases; the rows below
+name the gates that closed them and the ones still open.
+
+| Requirement | Check | Evidence |
+|---|---|---|
+| P7 live decode pipeline | `test-e2e --live` (bench) | PASS 2026-09-11..13: 60 s zero-drop UART gate (repeatable), SPI/I²C 10 kHz gates, isolated-byte 428 us worst case over 20 shots, SPI overload with stage-1 loss reports, decoded-pattern stop (`EVT_TRIGGERED` match); full live suite 55 passed. Tag `v0.2-live` |
+| P8 hardening and measurement | fault-injection tests, soak, A/B throughput | PASS: TCP kill 4/4, garbage resync, WDT reset, 3 s read-stall link-overrun report, 500-capture soak, cached-pool A/B (1.29 M words/s vs 0.98 M, ~30 % fewer drops), trace dump with annotated zoom |
+| P9.1 SPI link | `test-e2e -k test_p91_spi_*` (bench) | PASS for framed bursts: 4 KB–256 KB bit-exact at 10 MHz, 20/20 at 18 MHz, 4 MiB byte-verified, 40 MHz fault injection recovers. BLOCKED: `test_p91_spi_drain_rate` (0.28 MB/s vs 1.5 MB/s target; ESP32 Wi-Fi relay) |
+| P9.2 compact events | `test-native`, `test-host`, bench comparison | PASS: `EVT_CFG`/`EVT_BLOCK` round trips; measured 51.6–53.3 % wire-byte saving with identical decoded data |
+| P9.3 200 MS/s stretch | not started | Open decision; MVP remains 100 MS/s |
+| P10.1 live web view | `test-e2e -k test_p10` (bench) | PASS 2026-09-14: page served over HTTP and `/ws` carried decoded `LA-TEST\n` bytes plus stats during a live session |
+| P10.2 sigrok bridge | driver availability assessment | Deferred: no signed virtual-COM pair driver installed; see `docs/sigrok-bridge.md`. `.sr`/VCD export remains the required integration |
+| P10.3 docs | source review | Tracked `docs/` set plus the `web-artifact/` portal; portal validation and production build recorded in `docs/status.md` |
+| P10.4 release | `python tools/run.py boot`, release packaging | Tooling PASS on current artifacts; final BOOT.BIN + [HUMAN] SD boot + `v1.0` tag wait for the ESP32-S3 transport port |
+
+Human-operated programming and bench checks must remain explicitly marked
+`[HUMAN]` until observed. A green local build is not target evidence.
+
 Native tests are functional agreement checks. They do not establish target
 FreeRTOS task timing, A9 decoder throughput, DMA descriptor coherency, UART
 flow-control behavior, FPGA timing, electrical levels or physical wiring.

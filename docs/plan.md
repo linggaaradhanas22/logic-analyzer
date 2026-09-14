@@ -231,6 +231,37 @@ The decoders live in `common/la_decode/` on purpose: the same C runs on the Zynq
 
 Order: P0→P1→{P2 ∥ native tests of P4/P5/P7 decoders ∥ P6 host package}→P3→P4→P5→P6→P7→P8→P9→P10.
 
+### Implementation status (2026-09-14)
+
+This section keeps the plan honest about what is built; `docs/status.md` is the
+authoritative evidence ledger and phase status.
+
+- P0–P6 are complete, including the P6.4 PulseView evidence and the
+  `v0.1-burst` tag.
+- P7 is complete on bench: UART/SPI/I²C live decoders, the segment pool and
+  live SG DMA, compact-adjacent event batching, the 60 s zero-drop gate, the
+  isolated-byte latency gate (428 us worst case against the 25 ms p99 budget)
+  and the P7.7 decoded-pattern stop. Tag `v0.2-live`.
+- P8 is complete (P8.6 documented skip), including fault injection, the 500
+  capture soak, the cached live pool (+28 % decoder throughput) and the trace
+  pipeline with an annotated live-UART trace.
+- P9.2 is complete (compact `EVT_BLOCK` events, measured 51.6–53.3 % wire
+  saving on the 115200 live stream). P9.1 is bench-clean for framed bursts at
+  5/10/18 MHz and a 4 MiB byte-verified capture; the >=1.5 MB/s 64 MB drain
+  gate is blocked on the ESP32 Wi-Fi host transport (0.28 MB/s measured), and
+  the plan already names the ESP32-S3 USB-OTG path as the replacement. P9.3
+  remains a stretch decision; the MVP stays at 100 MS/s. P9.4 Wi-Fi tuning
+  remains open.
+- P10.1 is bench-verified (embedded HTTP page plus `/ws` decoded-event
+  stream). P10.2 is deferred by this plan's own condition: no currently
+  compatible signed virtual-COM pair driver is installed, so the SUMP bridge
+  cannot be verified without changing driver/security state; the assessment is
+  recorded in `docs/sigrok-bridge.md`. P10.3 documentation is consolidated in
+  the tracked `docs/` set and the `web-artifact/` portal. P10.4 tooling exists
+  (`python tools/run.py boot` plus the release packaging step) but the final
+  BOOT.BIN, the [HUMAN] SD boot and the `v1.0` tag wait for the ESP32-S3
+  transport port, per the recorded bench decision.
+
 ---
 
 ## 5. Phase Details

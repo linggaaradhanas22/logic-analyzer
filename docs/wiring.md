@@ -55,6 +55,10 @@ is the single source for this mapping and the ESP-IDF build compiles it.
 The ESP32 is powered from its own USB; do not connect the JD power pins. The
 ESP32 USB console (UART0 through the CP2102, `COMx`) is for logs only.
 
+The gateway also serves the P10.1 live web view on TCP port 80 (HTTP page plus
+a `/ws` WebSocket) while the analyzer link runs; see `docs/windows-dev.md` for
+the browser procedure. The page needs no extra wiring beyond the UART link.
+
 ### P9.1 SPI link (JD-7..10, JA-1)
 
 The bulk Zynq-to-ESP32 data path moves to a PL `axi_quad_spi` slave while the
@@ -70,8 +74,14 @@ physical map is:
 | JA-1 | SPI data-ready (slave output) | GPIO27 |
 | JD-5/11, JA-5/11 | ground | GND |
 
-JD-7..10 and JA-1 are not yet wired on the bench; the 200 ohm series-resistor
-edge characterization and the 10/20 MHz steps are P9.1 bench gates.
+JD-7..10 and JA-1 were wired and bench-characterized on 2026-09-13: framed
+captures are bit-exact at 5, 10 and 18 MHz (20/20 runs at 18 MHz), 19/20 MHz
+lose chunks to slave FIFO underruns, and the sustained host-verified drain is
+0.28 MB/s because the ESP32 Wi-Fi relay is the bottleneck. The 200 ohm series
+resistor edge characterization and the 64 MB drain gate are recorded in
+`docs/spi-link.md` and `docs/status.md`. Reassembly note: the SPI jumpers are
+separate from the UART ribbon and must be reconnected after any rewiring; the
+`test_p91_*` gates fail honestly (no frames) when they are missing.
 
 The Zybo FTDI console UART1 is for logs and is not the analyzer data endpoint.
 Use a separate Windows USB-UART adapter for direct UART0 bring-up, with its

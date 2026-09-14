@@ -1,9 +1,11 @@
 # Three-level web artifact implementation instructions
 
-Prepared: 2026-09-11, Asia/Jakarta.
+Prepared: 2026-09-11, Asia/Jakarta. Revised: 2026-09-14 (P7–P10.1 landed; the
+statuses, component lists, evidence snapshot and roadmap emphasis below were
+reconciled with `docs/status.md` and the current source before implementation).
 
-Repository baseline: `e7828c711769e4c4277dcd73b951799e4da95ecf`
-(`origin/main` at preparation time).
+Repository baseline: `748d966` (`origin/main` at revision time; the current
+ledger in `docs/status.md` supersedes older statements).
 
 These instructions are the implementation contract for expanding the existing
 `web-artifact/` explainer into a complete, navigable explanation of the RTOS
@@ -122,11 +124,13 @@ external JE→JC and the complete 100 MS/s matrix remain open.”
 
 ### 4.2 Evidence snapshot
 
-Create one exported constant for the evidence snapshot. Initially use:
+Create one exported constant for the evidence snapshot. Use:
 
-- content review date: `11 Sep 2026`;
-- latest bench evidence date represented by the site: `10 Sep 2026`;
-- implementation baseline: `e7828c711769e4c4277dcd73b951799e4da95ecf`;
+- content review date: `14 Sep 2026`;
+- latest bench evidence date represented by the site: `14 Sep 2026` (P10.1
+  live web view; the newest P9.1 SPI bench run is 13 Sep 2026);
+- implementation baseline: `748d966` (replace with the portal commit hash in a
+  follow-up data-only update so every source link resolves);
 - repository: `https://github.com/linggaaradhanas22/logic-analyzer`.
 
 Do not calculate these values from the viewer's clock. Generate source links
@@ -184,13 +188,13 @@ Use these seven nodes in this order:
 
 | Order | Slug | Visible name | One-line responsibility | Primary status |
 |---:|---|---|---|---|
-| 1 | `physical-io` | Signals and physical I/O | Accept eight 3.3 V digital inputs and provide self-test and board-to-board wiring. | `implemented-unverified` |
-| 2 | `fpga-capture` | FPGA capture pipeline | Synchronize, sample, trigger, retain history, encode, and packetize signals at fabric speed. | `bench-verified` with internal-source qualification |
-| 3 | `dma-memory` | AXI DMA and DDR | Move complete AXI-stream packets into bounded DDR buffers through ordinary scatter-gather descriptors. | `bench-verified` for burst mode |
-| 4 | `zynq-rtos` | Zynq FreeRTOS control | Coordinate acquisition, commands, interrupts, transmission, status, and ownership on the ARM processor. | `bench-verified` for burst; live path `planned` |
-| 5 | `protocol-link` | Framed UART link | Carry commands, status, events, and capture chunks over a CRC-protected RTS/CTS UART protocol. | `bench-verified` for burst protocol |
-| 6 | `esp32-gateway` | ESP32 wireless gateway | Relay framed traffic between UART and one Wi-Fi TCP client while exposing health counters. | `bench-verified` with `known-issue` recovery caveat |
-| 7 | `host-tools` | Host tools and capture files | Configure captures, validate transfers, reconstruct samples, and export `.sr`, VCD, PNG, text, or CSV. | `host-tested`; burst also used on bench |
+| 1 | `physical-io` | Signals and physical I/O | Accept eight 3.3 V digital inputs and provide self-test and board-to-board wiring. | `bench-verified` for JE→JC loopback; external-source matrix `implemented-unverified` |
+| 2 | `fpga-capture` | FPGA capture pipeline | Synchronize, sample, trigger, retain history, encode, and packetize signals at fabric speed. | `bench-verified` (internal and JE→JC sources); external-input rate matrix open |
+| 3 | `dma-memory` | AXI DMA and DDR | Move complete AXI-stream packets into bounded DDR buffers through ordinary scatter-gather descriptors. | `bench-verified` for burst and live |
+| 4 | `zynq-rtos` | Zynq FreeRTOS control | Coordinate acquisition, commands, interrupts, transmission, status, and ownership on the ARM processor. | `bench-verified` for burst and live decode |
+| 5 | `protocol-link` | Framed UART + SPI link | Carry commands, status, events, and capture chunks over a CRC-protected RTS/CTS UART protocol, with a best-effort SPI bulk path. | `bench-verified` for burst/live UART; SPI framed transfers bench-verified, drain rate `blocked` |
+| 6 | `esp32-gateway` | ESP32 wireless gateway | Relay framed traffic between UART/SPI and one Wi-Fi TCP client while exposing health counters and the live web view. | `bench-verified` with a Wi-Fi throughput `known-issue` |
+| 7 | `host-tools` | Host tools and capture files | Configure captures, validate transfers, reconstruct samples, and export `.sr`, VCD, PNG, text, or CSV; stream live decoded events. | `host-tested`; burst and live used on bench |
 
 Every node is a native link to `/subsystems/<slug>`. The entire card must be
 keyboard focusable, show a visible focus state, and include its order, name,
@@ -219,11 +223,16 @@ Keep the corrected current-page content, reorganized into these sections:
 1. Burst capture and planned live decode tabs.
 2. Calculated capture-versus-transport capacity and separately labeled measured
    gateway loopback results.
-3. Evidence cards: 7/7 burst E2E, 5/5 ESP32 target Unity, 12/12 FPGA simulation,
-   and the current host-test count only after rechecking the latest ledger.
-4. Open work: full P6 rate/stimulus matrix, external JE→JC loopback, PulseView
-   evidence/release gate, stale-client recovery, gateway profiling, and target
-   live decode.
+3. Evidence cards: the current burst/live E2E counts, 5/5 ESP32 target Unity,
+   12/12 FPGA simulation, the 500-capture soak and the current host-test count,
+   each rechecked against the newest ledger row rather than copied from this
+   document.
+4. Open work: the external-input rate/stimulus matrix, the P9.1 drain transport
+   port (ESP32-S3 USB-OTG), the P9.3 200 MS/s decision, P9.4 Wi-Fi tuning, the
+   200 Ω SPI edge characterization, P10.2 sigrok deferral, and P10.4 release
+   (final BOOT.BIN, [HUMAN] SD boot, `v1.0` tag). The stale-client issue is
+   resolved (2026-09-13); the remaining gateway limit is Wi-Fi drain rate and
+   jitter, which must be described as measured, not as a root cause.
 
 ## 7. Level 2 — subsystem pages
 
@@ -267,7 +276,7 @@ Required topics:
 Component slugs:
 
 `jc-inputs`, `input-cdc`, `je-pattern-output`, `jd-uart-wiring`,
-`esp32-loopback-wiring`, `power-and-level-safety`.
+`jd-spi-wiring`, `esp32-loopback-wiring`, `power-and-level-safety`.
 
 Primary sources: `docs/wiring.md`, `docs/architecture.md`,
 `fpga/constraints/zybo_z7_10.xdc`, `fw-esp32/components/la_board/include/la_board.h`.
@@ -335,10 +344,10 @@ Primary sources: `docs/architecture.md`, `docs/rtos-design.md`,
 
 Diagram arrangement:
 
-- Put `CmdTask`, `AcqTask`, `TxTask`, and `StatusTask` as the implemented burst
-  core.
-- Put planned `DecodeUartTask`, `DecodeSpiTask`, and `DecodeI2cTask` in a
-  visually separate dashed region labeled “target live path not wired yet.”
+- Put `CmdTask`, `AcqTask`, `TxTask`, and `StatusTask` as the core tasks, and
+  the implemented `DecodeUartTask`, `DecodeSpiTask` and `DecodeI2cTask` as the
+  live path. Both paths are wired and bench-verified; show the live path in a
+  visually distinct region because it runs only while a live session is armed.
 - Draw only documented queues/notifications. Do not invent task-to-task calls.
 
 Component slugs:
@@ -349,16 +358,17 @@ Component slugs:
 | `acq-task` | `AcqTask` | `ctrl_q`, CONFIG/ARM/ABORT handling, register programming, DMA ownership, trigger/completion notices, buffer-busy gate, timeout, and soft-reset cleanup. |
 | `acq-fsm` | Acquisition state machine | IDLE/ARMED/CAPT transitions, configure/arm/trigger/timeout/abort/complete guards, and host-tested pure-core role. |
 | `cmd-task` | `CmdTask` | UART RX parsing, one dispatch step per frame, queueing results, and why it does not transmit directly or touch DMA payloads. |
-| `cmd-dispatch` | Command dispatcher | Configuration latch, optimistic acquisition view, error mapping, inbound ACK/NAK routing, PATGEN support, and current live-command rejection. |
-| `tx-task` | `TxTask` | Sole UART TX writer, control/data priorities, burst-job processing, sequence assignment, ACK handling, retransmission, and job release. |
+| `cmd-dispatch` | Command dispatcher | Configuration latch, optimistic acquisition view, error mapping, inbound ACK/NAK routing, PATGEN, live DECODER_CFG/LIVE_START/LIVE_STOP, EVT_CFG, LINK_CFG and TRACE_CTRL support. |
+| `tx-task` | `TxTask` | Sole UART TX writer, control/data priorities, burst-job processing, SPI bulk routing, sequence assignment, ACK handling, retransmission, stalled-job abandon, and job release. |
 | `tx-packer` | Burst frame packer | DATA_BEGIN/CHUNK/END generation, 1016-byte chunks, streaming CRC32, deterministic chunk rebuild, and empty job behavior. |
 | `tx-window` | Transmit window | Maximum 16 outstanding chunks, sequence uniqueness, ACK clear, NAK retransmit marking, stale responses, and no count inflation. |
-| `status-task` | `StatusTask` | Periodic watermarks, counters, CPU/stack/IRQ reporting, heartbeat, and what STATUS v1 does not carry. |
-| `rtos-queues` | Queues and stream buffers | Producer, consumer, capacity, handle-versus-payload semantics, and full/failure policy for every implemented and planned object. |
-| `isr-policy` | ISR policy | PL/DMA notifications, UART ISR-safe byte movement, prohibited ISR work, interrupt priority, and interrupted-task stack implications. |
-| `irq-statistics` | Interrupt timing statistics | ISR duration and ISR-exit-to-task-wake measurements, min/avg/max calculation, console visibility, and pending P8 measurement goals. |
-| `segment-pool` | Planned live segment pool | 16 × 256 KiB handles, FREE→DMA_OWNED→CPU_OWNED→FREE, generation/sequence checks, refcounts, queue-full release, and target integration status. |
-| `decoder-tasks` | Planned decoder tasks | One task per UART/SPI/I²C decoder, segment handle consumption, static event blocks, multi-producer event queue, discontinuity reset, and current absence from the target path. |
+| `status-task` | `StatusTask` | Periodic watermarks, counters, CPU/stack/IRQ reporting, heartbeat, live latency counters, and what STATUS v1 does not carry. |
+| `rtos-queues` | Queues and stream buffers | Producer, consumer, capacity, handle-versus-payload semantics, and full/failure policy for every implemented object. |
+| `isr-policy` | ISR policy | PL/DMA/UART/SPI notifications, ISR-safe byte movement, prohibited ISR work, interrupt priority, and interrupted-task stack implications. |
+| `irq-statistics` | Interrupt timing statistics | ISR duration and ISR-exit-to-task-wake measurements, min/avg/max calculation, and console visibility. |
+| `segment-pool` | Live segment pool | 16 × 256 KiB handles, FREE→DMA_OWNED→CPU_OWNED→FREE, generation/sequence checks, refcounts, queue-full release, and bench status. |
+| `decoder-tasks` | Decoder tasks | One task per UART/SPI/I²C decoder, segment handle consumption, static event blocks, multi-producer event queue, discontinuity reset, and the measured rates. |
+| `live-event-batch` | Live event batching | `EVT_DECODED` v1 versus compact `EVT_BLOCK` (`EVT_CFG`), delta timestamps with a u64 escape, and the measured wire-byte saving. |
 
 Primary sources: `docs/rtos-design.md`, `fw-zynq/FreeRTOSConfig.h`, and all
 files under `fw-zynq/app/src/`. Use the current source to distinguish the four
@@ -376,6 +386,11 @@ Overlay the burst exchange:
 `CONFIG/ACK → ARM/ACK → EVT_TRIGGERED → DATA_BEGIN → DATA_CHUNK × N →
 batched ACKs → DATA_END`.
 
+Add the P9.1 SPI bulk path as a second transport under the same frame format:
+`TxTask → spi_to_esp ring → axi_quad_spi slave (JD-7..10) → ESP32 SPI master
+→ incremental parser → same relay ring`, with `LINK_CFG` selecting the
+transport and clock at run time and the UART retaining commands/ACKs.
+
 Component slugs:
 
 | Slug | Visible name | Required explanation |
@@ -384,13 +399,17 @@ Component slugs:
 | `incremental-parser` | Incremental parser | Byte-at-a-time operation, ownership of callback payload, length/CRC rejection, SOF resynchronization, and counters. |
 | `message-catalog` | Message catalog | All message types 0x01–0x7F, direction, payload purpose, and current support boundary. |
 | `config-payload` | Acquisition configuration | Exact 37-byte layout, validation, control flags, channels, trigger fields, pre/post samples, timeout, encoding, and flush settings. |
-| `decoder-config-payload` | Decoder configuration | Exact 20-byte union, three slots, UART/SPI/I²C layouts, channel rules, and current target rejection. |
-| `status-and-events` | Status and event payloads | STATUS v1 layout, EVT_TRIGGERED, EVT_DECODED record batching, EVT_OVERRUN stages, LOG, and missing latency field. |
+| `decoder-config-payload` | Decoder configuration | Exact 20-byte union, three slots, UART/SPI/I²C layouts, channel rules, `stop_on` pattern bytes, and live-session validation. |
+| `status-and-events` | Status and event payloads | STATUS v1 layout, EVT_TRIGGERED, EVT_DECODED record batching, compact EVT_BLOCK, EVT_OVERRUN stages, LOG, and missing latency field. |
 | `burst-transfer` | Burst transfer | DATA_BEGIN metadata, chunk offsets and size, DATA_END CRC32, ordered reconstruction, timeout/disconnect discard, and exact-size checks. |
 | `ack-window` | ACK/NAK flow control | Endpoint sequence spaces, 16-chunk window, batch ACK behavior, retransmission sequence reuse, stale responses, and reserved control capacity. |
 | `protocol-errors` | Error model | Bad length/field/state, unsupported, busy, overflow, CRC, and how each layer exposes failures. |
-| `zynq-uart-driver` | Zynq UART0 driver | EMIO UART0, 921600 8N1, RTS/CTS, RX/TX stream buffers, ISR callbacks, TX staging, and floating-input caveat. |
+| `zynq-uart-driver` | Zynq UART0 driver | EMIO UART0, 2 Mbps 8N1 since the P7.6 gate, RTS/CTS, RX/TX stream buffers, ISR callbacks, TX staging, and floating-input caveat. |
 | `shared-protocol-library` | Shared C protocol library | Allocation-free CRC, validation, pack/unpack, encoding, parsing, common use across Zynq/ESP32/tests, and Python parity. |
+| `spi-bulk-link` | SPI bulk link | `axi_quad_spi` v3.2 slave, 256-byte FIFO, data-ready EMIO, whole-frame ring, underrun/CRC resync, 5/10/18 MHz measured ceiling, and the blocked drain rate. |
+| `zynq-spi-driver` | Zynq SPI service | `la_spi_link` register driver, `la_spi_core` whole-frame ring, `SpiLinkTask` ISR FIFO refill, TX-only interrupt mask, and ring-space semaphore. |
+| `esp32-spi-master` | ESP32 SPI master | SPI3 pins, manual CS setup delay, continuous 1 KiB DMA chunks into the incremental parser, idle-gap resync, and data-ready polling. |
+| `link-cfg-routing` | Transport routing | `LINK_CFG` (0x1A) transport and clock bytes, IDLE-only latch, TxTask SPI routing with bounded retry, and commands/ACKs staying on UART. |
 
 The `/reference/protocol` page is the authoritative visual table. Component
 pages explain concepts and link back to the relevant table section rather than
@@ -401,8 +420,9 @@ duplicating every payload row.
 Diagram order:
 
 `UART2 driver ↔ LinkRxTask/LinkTxTask ↔ static rings ↔ NetServerTask ↔ Wi-Fi
-TCP client`; branch valid frames to `live_rb`; show Wi-Fi/mDNS and UiTask as
-management services.
+TCP client`; branch valid frames to `live_rb`; show the SPI master merging into
+the same relay; show the HTTP server/WebSocket live view, Wi-Fi/mDNS and UiTask
+as services.
 
 Component slugs:
 
@@ -420,8 +440,9 @@ Component slugs:
 | `tcp-server` | Single-client TCP server | Port 5555, `TCP_NODELAY`, select loop, second-client rejection, relay staging, disconnect ABORT/LIVE_STOP, and stale-ring handling. |
 | `mdns-service` | mDNS service | `la-esp32.local`, `_la-analyzer._tcp`, discovery purpose, and dependency version boundary. |
 | `esp32-ui-watchdog` | UI, health, and watchdog | LED states, periodic counters, stack/heap reporting, task watchdog subscriptions, and reset purpose. |
-| `esp32-live-view` | Planned embedded live view | `live_rb` consumer, HTTP/WebSocket intent, per-decoder tabs/history, P10 status, and the fact that no running UI exists yet. |
-| `stale-client-issue` | Stale-client recovery issue | Recorded symptom after a host timeout, what is known, what is not proven, and the required P8.4 fault-injection/profile work. |
+| `esp32-web-server` | Embedded web server | `esp_http_server` on port 80, the single-page UI embedded in flash, `CONFIG_HTTPD_WS_SUPPORT`, and the no-external-assets rule. |
+| `esp32-live-view` | Live view task | `live_rb` consumer, `/ws` broadcast to up to four clients, compact JSON event framing, 1 s stats message, dead-socket pruning, and the measured bench gate. |
+| `wifi-drain-limit` | Wi-Fi drain and jitter limit | The measured 0.28 MB/s host drain, the resolved stale-client history, and the remaining P9.4 jitter/throughput work. Do not invent a root cause. |
 
 Primary sources: `docs/rtos-design.md`, `docs/wiring.md`,
 `fw-esp32/main/`, and `fw-esp32/components/`. Do not turn the near-40 kB/s echo
@@ -528,8 +549,10 @@ and segment-gap behavior. Then give UART, SPI, and I²C separate sections with:
 - emitted event kinds and timestamp meaning;
 - error behavior;
 - functional native-test coverage;
-- clear “library implemented and host-tested; target decoder tasks not wired”
-  boundary.
+- clear boundary: the libraries are native/host-tested, wired into the target
+  decoder tasks, and bench-verified at the recorded rates (115200 UART,
+  10 kHz SPI/I²C); the 1 MHz SPI case is a deliberate overload test, and the
+  isolated-byte latency gate carries a Wi-Fi-jitter caveat.
 
 ### 9.4 Wiring
 
@@ -554,7 +577,10 @@ List all canonical runner targets:
 For each target, state what it validates, whether it requires hardware or a
 licensed tool, and where its ignored local report is written. Do not display an
 ignored report as a public link. Use the current ledger for pass counts and
-dates; state “not run in this checkout” when evidence is absent.
+dates; state “not run in this checkout” when evidence is absent. Note that
+`boot` packages BOOT.BIN and that the release packaging step stages the ESP32
+`.bin` set and the Python wheel; the `[HUMAN]` SD boot and the `v1.0` tag are
+still pending the ESP32-S3 transport port.
 
 Include the 12 RTL block-to-testbench mappings and the major native/host/E2E
 test suites. Explain that mocks and compilation are not target scheduling,
@@ -566,13 +592,20 @@ Render P0 through P10 individually, not as a single vague progress bar. Each
 phase needs intended outcome, current status, completed evidence, remaining
 gate, and links to affected subsystems. Current emphasis must remain:
 
-- P4 and P5 burst/gateway work is bench proven within recorded scope.
-- P6 full rate/stimulus matrix, physical loopback, PulseView evidence, and
-  `v0.1-burst` remain open.
-- P7 host live support and decoder libraries exist locally; the target live
-  pipeline is open.
-- P8 hardening, P9 performance, and P10 live web/release work remain.
-- BOOT.BIN tooling passing is not a finished v1.0 product release.
+- P0–P6 are complete, including the full P6.2/P6.3 matrices, the PulseView
+  `.sr` evidence and the `v0.1-burst` tag.
+- P7 is complete on bench: live UART/SPI/I²C decode, the segment pool and live
+  SG DMA, the 60 s zero-drop gate, the isolated-byte latency gate and the P7.7
+  decoded-pattern stop; `v0.2-live` tag.
+- P8 is complete (P8.6 documented skip): fault injection, the 500-capture
+  soak, the cached live pool and the trace pipeline with an annotated trace.
+- P9.2 is complete; P9.1 is bench-clean for framed bursts at 5/10/18 MHz with
+  the drain gate blocked on the ESP32 Wi-Fi relay (0.28 MB/s) and the
+  ESP32-S3 USB-OTG port on order; P9.3 and P9.4 remain open.
+- P10.1 is bench-verified. P10.2 is deferred (no signed virtual-COM pair
+  driver). P10.3 documentation is this contract plus the tracked docs and the
+  portal. P10.4 tooling exists; the final BOOT.BIN, [HUMAN] SD boot and
+  `v1.0` tag wait for the ESP32-S3 transport port.
 
 ### 9.7 Tooling
 
@@ -749,16 +782,20 @@ component, reference page, or tooling page:
 - `fpga/rtl/*.sv`, `fpga/tb/*.sv`, `fpga/scripts/*.tcl`,
   `fpga/constraints/*.xdc`, and `fpga/board_files/**`;
 - `common/la_proto/**` and `common/la_decode/**`;
-- `fw-zynq/app/src/**`, `fw-zynq/FreeRTOSConfig.h`,
+- `fw-zynq/app/src/**` (including `live/la_spi_core.*`, `live/la_event_batch.*`,
+  `drivers/la_spi_link.*`, `tasks/la_spi_task.c`), `fw-zynq/FreeRTOSConfig.h`,
   `fw-zynq/lscript.ld`, `fw-zynq/translation_table.S`, and
   `fw-zynq/scripts/**`;
-- `fw-esp32/main/**`, `fw-esp32/components/**`, `fw-esp32/tests/**`,
-  `fw-esp32/sdkconfig.defaults`, and `fw-esp32/scripts/**`;
+- `fw-esp32/main/**`, `fw-esp32/components/**` (including `la_web/**` and
+  `la_spi_link` paths), `fw-esp32/tests/**`, `fw-esp32/sdkconfig.defaults`, and
+  `fw-esp32/scripts/**`;
 - `host/la_cli/**`, `host/la_sigrok_bridge/**`, and `host/tests/**`;
-- `tests/native/**`, `tests/hil/**`, and `tests/e2e/**`;
+- `tests/native/**`, `tests/hil/**`, and `tests/e2e/**` (including
+  `test_p91_spi.py` and `test_p10_web.py`);
 - `tools/*.py`, `tools/models/**`, `tools/win/**`, tool/board locks,
   `CMakeLists.txt`, `pyproject.toml`, `Justfile`, and workflow files;
-- all normative documentation under `docs/`.
+- all normative documentation under `docs/` (including `docs/spi-link.md`,
+  `docs/limits.md` and `docs/sigrok-bridge.md`).
 
 Exclude generated, dependency, cache, build, captured-data, and Site-output
 directories. A file may map to multiple pages. A placeholder directory or file
@@ -839,12 +876,14 @@ The implementation is complete only when every box below is true:
 - [ ] All 21 registers and all protocol message types are present with exact values.
 - [ ] All 12 RTL tests map to their RTL blocks.
 - [ ] Every canonical runner target is explained with its actual validation boundary.
-- [ ] Implemented burst behavior and planned live behavior are never blended.
-- [ ] Internal self-test evidence is never presented as external-input validation.
-- [ ] 100 MS/s remains a design target; the open rate/external-loopback matrix is visible.
-- [ ] Calculated throughput and measured round-trip echo results remain separate.
-- [ ] The ESP32 stale-client symptom is described as a known issue without inventing a root cause.
-- [ ] The segment-pool/decoder-task/live-view pages are clearly labeled planned where target integration is absent.
+- [ ] Implemented burst/live behavior and deferred or open work are never
+      blended; the sigrok bridge and P9.3 stretch are labeled deferred/open.
+- [ ] JE→JC loopback evidence is not presented as external-source or 100 MS/s
+      input validation; the external-input matrix remains visible as open.
+- [ ] The ESP32 gateway is described with the measured Wi-Fi drain/jitter
+      limit; the resolved stale-client history is labeled historical.
+- [ ] The segment-pool, decoder-task and live-view pages reflect the
+      bench-verified implementation, with their open limits explicit.
 - [ ] Essential warnings and evidence qualifications are visible without hover.
 - [ ] Navigation, breadcrumbs, related links, and previous/next links form no dead ends.
 - [ ] Mobile diagrams become ordered vertical flows and the page has no intentional horizontal overflow.
