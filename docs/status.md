@@ -55,11 +55,41 @@ commit, and the worktree is clean.
 
 ## Snapshot
 
+### USB migration planning (2026-09-17)
+
+**In progress; documentation verified, commit/push pending.** Prepared
+`docs/usb-migration-implementation-instructions.md` and `docs/usb-link.md`,
+with navigation/authority updates in `docs/plan.md` and `README.md` and this
+ledger. The user authorized writing the planning package, not USB firmware,
+bench execution, adoption, website publication or release. Baseline:
+`b30adfd` on `main`; `git fetch origin` succeeded after retrying the sandbox's
+`.git/FETCH_HEAD` permission failure with approved access. Existing untracked
+`docs/hardwarex/` and `docs/learning/` belong to earlier work and are excluded.
+Acceptance: inspect local integration points and primary USB references,
+check document links and execution gates, run `git diff --check`, review the
+five-file change, commit/push and verify the remote. No hardware result is
+claimed. The package defines U00-U09 and preserves `docs/plan.md` as normative;
+the root v0.4 copy is now explicitly historical. Local inspection confirms USB0
+and `usbps` / `XUsbPs` (including the generated library); first-party references
+clarify J10 device mode, separate J12 power and the older AMD bare-metal CDC
+example. No new firmware, test implementation or bench result exists.
+Verification: `.venv/Scripts/python.exe build/reports/usb-planning-review.py`
+PASS (20 local links, U00-U09 ordering/entry/exit gates, balanced code fences,
+intended tracked scope and whitespace); report
+`build/reports/usb-planning-review.json`. The review helper/report are ignored
+local artifacts. Bare `python` was absent from PATH; the existing project
+environment ran successfully with approved access after the sandbox could not
+launch its base interpreter. `git diff --check` PASS. Manual source/contract
+review checked driver family, port/power distinctions, transport routing,
+ACK-window dependencies, packet prerequisites and honest evidence boundaries.
+Native/firmware/bench tests are not run for this documentation-only change.
+Next: commit the five intended documentation files, push and verify origin.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |
 | Project root | `C:\Users\lingg\Projects\KCCI_technical\Embedded\Logic-Analyzer\Source_Code` |
-| Plan source | `docs/plan.md`, verified identical to `logic-analyzer-implementation-plan-v0.4.md`; the plan now carries an "Implementation status (2026-09-14)" note |
+| Plan source | `docs/plan.md` is normative; the root `logic-analyzer-implementation-plan-v0.4.md` is the historical v0.4 snapshot. The 2026-09-17 USB planning addendum is in `docs/plan.md` only. |
 | Branch | `main` |
 | Last implementation change | `2e08ea3 P10: add the release packaging step`; session commits: docs `7a9df09`, portal `10660e9`, packaging `2e08ea3`, snapshot sync `4a74a08`, package-target docs `0b32655`, plus status-only follow-ups (run `git log --oneline -8` for the exact tip) |
 | Remote | `origin` -> `https://github.com/linggaaradhanas22/logic-analyzer.git` |
@@ -295,6 +325,15 @@ the implementation is not present.
 
 ## Next Session Checklist
 
+**USB planning handoff (2026-09-17):** the user authorized documentation only.
+Before choosing between the historical gateway continuation below and direct
+USB work, read `docs/usb-migration-implementation-instructions.md` and
+`docs/usb-link.md` and follow the user's current execution instruction. No U00-U09
+implementation packet has started. The first implementation action, once
+authorized, is U00 baseline preservation and local checks; U01 physical
+confirmation precedes any candidate load. Older dated bench/portal instructions
+below are historical context, not new authorization to flash or publish.
+
 1. Read `AGENTS.md`, `docs/plan.md` and this file before editing.
 2. Confirm the checkout root and run `python tools/run.py check-env -- --write-lock`.
 3. Run `python tools/run.py query-board -- --write-lock` and confirm the board lock still matches the installed board files.
@@ -310,6 +349,8 @@ the implementation is not present.
 |---|---|
 | Normative requirements | `docs/plan.md` |
 | Session state and blockers | `docs/status.md` |
+| Proposed direct USB execution sequence | `docs/usb-migration-implementation-instructions.md` (U00-U09, execution not started) |
+| Proposed direct USB interface and feasibility evidence | `docs/usb-link.md` |
 | Canonical commands and environment import | `tools/run.py` |
 | Tool versions and smoke state | `tools/toolchain-lock.json` |
 | Board part and source commit | `tools/board-lock.json` |
@@ -324,6 +365,7 @@ the implementation is not present.
 
 | Date | Work completed | Result |
 |---|---|---|
+| 2026-09-17 | Prepared the direct-Zynq USB planning package: new `docs/usb-migration-implementation-instructions.md` (U00-U09) and `docs/usb-link.md`; linked from `docs/plan.md` and `README.md`; updated this ledger and clarified the root v0.4 snapshot. Reviewed preset/generated BSP/installed `usbps_v2_9`, app routing and primary AMD/Digilent/Microsoft references. Corrected the proposed driver, power and CDC-example assumptions; specified ownership/IRQ feasibility, failure recovery, exact performance measurement, adoption, documentation and release gates. | Documentation checks PASS: `.venv/Scripts/python.exe build/reports/usb-planning-review.py` (20 local links, ten ordered packets with entry/exit gates; `build/reports/usb-planning-review.json`), `git diff --check`; manual scope and technical review complete. Firmware and hardware unverified; no implementation authorized or started. Commit/push pending. Existing untracked `docs/hardwarex/` and `docs/learning/` preserved and excluded. Next implementation action, when authorized: U00. |
 | 2026-09-17 | P9.1 ESP32-S3 bench bring-up (CDC host transport works; SPI bulk link still open). (a) CDC: `la-cli ping/status/capture` work over `serial://COM11` on a **direct PC USB port**; behind a Genesys Logic USB hub every usbser.sys CDC device (ours and the ESP32 ROM's USB-Serial-JTAG) fails (`GetCommState` hangs, then errors 22/31 with re-enumeration) while the vendor-driver CH343/FTDI ports work - the hub is unusable for the CDC link. (b) Power: with only the CH343 cable connected the S3 browns out (`E BOD: Brownout detector was triggered`, `rst:0x3`) under Wi-Fi TX peaks; both USB cables must be connected. (c) Two stack overflows found on the bench: LiveView (the ~1 KiB `la_proto_parser_t` on its 3 KiB stack; now a static parser) and UiTask (3072 B with <120 B headroom; now 4096 B) - both panicked and re-enumerated USB. (d) `host/la_cli/transport.py` imported `serial` inside `__init__`, so its exception handlers raised `NameError` on any serial fault; now a module-level import. (e) The DevKitC-1 RGB LED (WS2812) is cleared with one black frame at boot (RMT, both known GPIOs). (f) New Kconfig `LA_SPI_LOOPBACK_TEST` (MOSI<->MISO jumper, Zynq SPI wires off) proves the S3 SPI master and GPIO11/GPIO13: **0/64 mismatches**. (g) Bench results: a 4 KB UART+CDC burst capture is bit-exact; the **SPI bulk link still fails** - the S3 receives the payload with every other byte dropped (the chunk dump matches the known-good UART stream's even bytes plus a constant phase), the five SPI wires pass a continuity check, the Zynq slave shows tx/underrun/half-empty activity, and the same slave delivered bit-exact captures with the classic ESP32 on 2026-09-13; root cause not yet identified (mode 0/1, 64/1024-byte chunks, an explicit TX DMA buffer and ready-optional reads all still fail). | Local gates PASS: `fw-esp32` (`build/reports/fw-esp32.json`), `test-esp32-mocks`, `test-native`, `test-host` (84 passed), compileall clean. Bench PASS: CDC ping/status/abort, UART+CDC 4 KB capture, SPI loopback self-test. Bench OPEN: the SPI bulk link (evidence above); next step is signal-level instrumentation (scope or the Zybo's own analyzer) or an A/B rerun with the classic ESP32 to find the byte-drop cause. |
 | 2026-09-17 | P9.1 ESP32-S3 transport port (implementation complete, bench gates pending). Scope: switch `fw-esp32` to the `esp32s3` target (16 MB flash, single-app-large partition, console on UART0 so the native USB port stays free), add the target-conditional S3 pin map in `la_board.h` matching the bench wiring (UART TX17/RX16/RTS15/CTS14, SPI2/FSPI SCK12/MOSI11/MISO13/CS10/ready9, `LA_BOARD_SPI_HOST` 2->1), and add a TinyUSB CDC-ACM host leg (new `la_usb` component, `espressif/esp_tinyusb` managed component gated to esp32s3) that owns the analyzer stream while the host has the CDC port open; the TCP leg yields to it. Host side needs no change (`la-cli`/e2e already accept `serial://COMx`). Intended files: `fw-esp32/sdkconfig.defaults`, `la_board.h`, `main/{main.c,ui_task.c,CMakeLists.txt,Kconfig.projbuild}`, new `components/la_usb/`, `la_link` (shared host-frame forward), `la_net` (arbitration + counters), plus `docs/{wiring,spi-link,architecture,limits,using-the-analyzer}.md` and this file. Acceptance: `fw-esp32` builds for esp32s3 and flashes; `test-esp32-mocks`, `test-native`, `test-host` stay PASS; bench `la-cli ping -t serial://COMx` then the P9.1 capture/clock gates over the USB CDC port; the 64 MB drain is measured and recorded honestly. Known risk: ESP32-S3 USB-OTG is full-speed (12 Mbps, bulk ceiling ~1.2 MB/s), so the plan's >=1.5 MB/s drain gate cannot be met over this transport; the measured ceiling is recorded instead. | PASS locally: `fw-esp32` builds for esp32s3 (`build/reports/fw-esp32.json`; `la_gateway.bin` 0xe7280 bytes, 38% of the 1500K partition free; the target switch used `idf.py set-target esp32s3` after backing up the ignored sdkconfig and the Wi-Fi lines survived); `test-esp32-mocks` 4/4, `test-native` 15/15, `test-host` 84/84, `git diff --check` clean. Bench gates not yet run: flash the S3 over the CP2102 "UART" COM port, `la-cli ping -t serial://COMx` on the native USB CDC port, then `test-e2e --target serial://COMx -k test_p91` and the 64 MB drain. Risk recorded before the work: the S3 USB-OTG is full-speed only (12 Mbps, bulk ceiling ~1.2 MB/s), so the plan's >=1.5 MB/s drain gate cannot be met over this transport; the measured ceiling is to be recorded honestly. |
 | 2026-09-17 | HardwareX documentation package (WIP, not yet committed). (a) `docs/hardwarex/template.md`: Markdown rendering of the HardwareX article template (Version 2, June 2021) with all sections and italic instructions preserved. (b) `docs/hardwarex/diagrams/system-block-diagram.drawio`: new 10-page draw.io block diagram in the skill's hardware-architecture house style - L1 system context, L2 physical deployment, L2 end-to-end data and control paths, and one Level-3 page per subsystem (signals and physical I/O, FPGA capture pipeline, AXI DMA and DDR, Zynq FreeRTOS control, framed UART + SPI link, ESP32 wireless gateway, host tools); per-page legends are generated only from the roles actually used. (c) `docs/hardwarex/diagrams/figures/`: 10 PNG (scale 2) and 10 SVG exports. (d) `docs/hardwarex/manuscript.md`: filled manuscript with all ten figures embedded as relative Markdown image links (verified resolvable), the specifications table, design-file summary, a 12-row bill of materials priced in IDR from Indonesian marketplaces (Zybo Z7-10 Rp 13,800,000 Tokopedia pre-order, ESP32 DevKit V1 Rp 45,000, USB cables Rp 25,750 each, jumper set Rp 20,700, microSD 16 GB Rp 82,500, 5 V adapter Rp 37,050, Wi-Fi router Rp 218,000; required subtotal Rp 14,254,750 = about US$805, Rp 14,408,550 = about US$814 with optional/planned items; reference rate US$1 = Rp 17,699.87), build and operation instructions, and the validation summary taken from this ledger. | Diagram: `validate.py --score` reports 0 errors (1250 score; remaining warnings are enclosure-boundary and edge-crossing notices expected for enclosed block diagrams); all 10 pages rendered with the draw.io CLI and visually reviewed through two fix rounds (legend collisions, labels wider than column gaps, edges routed through unrelated boxes). Prices sourced from Tokopedia listings on 2026-09-17 (Zybo Z7-10 Rp 13,800,000 pre-order at Invok Lab, in-stock alternative Rp 14,500,000; ESP32 DevKit V1 CP2102 Rp 45,000; micro-USB 1 m Rp 25,750; jumper set Rp 20,700; microSD 16 GB class 10 Rp 82,500; 5 V 2 A adapter Rp 37,050; Mercusys MW306R router Rp 218,000; ESP32-S3-DevKitC-1 Rp 115,000; CP2102 USB-UART Rp 25,000; breadboard Rp 13,800); reference rate US$1 = Rp 17,699.87 from open.er-api.com; the BOM notes the Digilent overseas alternative (US$314 board = about Rp 5,557,800 before shipping/import duty). WIP: files are uncommitted pending the user's review; the open license row, author/affiliation/CRediT fields, funding statement and the repository DOI deposit remain [HUMAN] items. |

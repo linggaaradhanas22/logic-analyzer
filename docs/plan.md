@@ -5,6 +5,37 @@
 
 This document specifies future deliverables; filenames and commands below do not imply that the scaffolding or implementation already exists. Work phase by phase. Steps requiring physical wiring, programming approval or bench observation are tagged **[HUMAN]**.
 
+### Proposed direct USB migration (2026-09-17)
+
+The documentation-only USB planning package is in
+[usb-migration-implementation-instructions.md](usb-migration-implementation-instructions.md),
+with its proposed interface contract in [usb-link.md](usb-link.md). Read these
+with [status.md](status.md) before starting related work. This file remains the
+normative overall plan; the package does not itself authorize implementation or
+replace the existing gateway architecture. The user approved preparation of the
+plan only. A later execution instruction and the recorded U07 adoption decision
+control implementation scope and any change to the product baseline.
+
+The candidate connects Zynq PS USB0 directly to the PC through CDC-ACM, bypassing
+the ESP gateway in that profile. U00-U06 cover baseline, feasibility, contract,
+enumeration, integration, correctness and measured performance. U07 decides
+adoption and the wireless/browser feature scope; U08-U09 reconcile documentation
+and release. P9.1's >=1.5 MB/s drain objective is retained for evaluation, with
+explicit byte counts and timing; passing USB does not mark the SPI fault fixed.
+P9.2 remains required, P9.3 stays separate stretch work, and P9.4/P10.1 need an
+explicit optional-profile or deferral decision. The P10.4 release hold remains
+until the chosen transport, final image and SD-boot gates are resolved.
+
+The local preset/BSP exposes USB0 and the `usbps` / `XUsbPs` driver, but device
+enumeration, physical configuration and throughput are unverified. The new
+contract corrects the initial driver and power assumptions and retains the
+existing ISR, ownership and ordinary-SG requirements. Do not treat projected
+USB speeds as evidence. Preserve the historical P0-P10 results in the ledger.
+
+The root `logic-analyzer-implementation-plan-v0.4.md` is the earlier v0.4
+snapshot; it does not contain this addendum. Execute this `docs/plan.md` and
+its explicitly linked work instructions, with current evidence in `status.md`.
+
 ### Changes in v0.4
 
 | Change | Implementation consequence |
