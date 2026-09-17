@@ -13,6 +13,8 @@ import struct
 import time
 from abc import ABC, abstractmethod
 
+import serial
+
 TCP_URI = re.compile(r"^tcp://([^:/]+):(\d+)$")
 SERIAL_URI = re.compile(r"^serial://(.+)$")
 
@@ -105,8 +107,6 @@ class TcpTransport(Transport):
 
 class SerialTransport(Transport):
     def __init__(self, port: str, baud: int = 921600, timeout_s: float = 1.0) -> None:
-        import serial
-
         try:
             self._serial = serial.Serial(port=port, baudrate=baud, timeout=timeout_s)
         except serial.SerialException as exc:

@@ -58,6 +58,15 @@ menu "Logic analyzer gateway"
             the data-ready wire is absent (bring-up fallback; the SPI bus
             stays busy).
 
+    config LA_SPI_LOOPBACK_TEST
+        bool "P9.1 SPI loopback self-test at boot"
+        default n
+        help
+            Bring-up aid: jumper the ESP32-S3 MOSI (GPIO11) to MISO (GPIO13)
+            and remove the Zynq SPI wires, then check the boot log for the
+            mismatch count. Proves the SPI master and the two data pins
+            independently of the Zynq slave.
+
     config LA_LINK_UART_SELFTEST
         bool "UART2 internal loopback self-test at boot"
         default n

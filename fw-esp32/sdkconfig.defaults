@@ -47,12 +47,17 @@ CONFIG_MDNS_MAX_SERVICES=4
 # support compiled in (the APIs and the is_websocket handler field are gated).
 CONFIG_HTTPD_WS_SUPPORT=y
 
-# P9.1 USB CDC host transport (espressif/esp_tinyusb). The endpoint buffer has
-# the largest throughput impact; the component help requires the RX FIFO to be
-# at least the endpoint buffer size.
+# P9.1 USB CDC host transport (espressif/esp_tinyusb). The endpoint buffer is
+# the USB wMaxPacketSize: a full-speed device is limited to 64 bytes, so the
+# component's "set to 8192 for best performance" advice does not apply to the
+# FS-only ESP32-S3. An 8192 endpoint makes Windows enumerate the device but
+# fail to configure the port ("device does not recognize the command" /
+# "device attached to the system is not functioning"). The FIFOs stay larger;
+# the component help requires RX >= the endpoint size.
 CONFIG_TINYUSB_CDC_ENABLED=y
-CONFIG_TINYUSB_CDC_RX_BUFSIZE=8192
-CONFIG_TINYUSB_CDC_TX_BUFSIZE=8192
-CONFIG_TINYUSB_CDC_EP_BUFSIZE=8192
+CONFIG_TINYUSB_CDC_RX_BUFSIZE=1024
+CONFIG_TINYUSB_CDC_TX_BUFSIZE=4096
+CONFIG_TINYUSB_CDC_EP_BUFSIZE=64
 CONFIG_TINYUSB_DESC_PRODUCT_STRING="RTOS logic analyzer gateway"
 CONFIG_TINYUSB_DESC_CDC_STRING="LA gateway CDC"
+CONFIG_TINYUSB_DESC_SERIAL_STRING="la-gw-s3-01"

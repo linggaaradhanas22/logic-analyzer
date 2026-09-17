@@ -91,7 +91,11 @@ captures are bit-exact at 5, 10 and 18 MHz (20/20 runs at 18 MHz), 19/20 MHz
 lose chunks to slave FIFO underruns, and the sustained host-verified drain is
 0.28 MB/s because the ESP32 Wi-Fi relay was the bottleneck. The 2026-09-17 S3
 port replaces that host leg with USB CDC (`la_usb`); the drain is measured over
-the native USB port. The 200 ohm series resistor edge characterization and the
+the native USB port. **Bench note (2026-09-17): with the ESP32-S3 gateway the
+SPI link is currently open** - the S3's SPI master passes the loopback
+self-test and the five jumpers pass a continuity check, but the S3 receives
+every other payload byte (see `docs/status.md`); the classic ESP32 on the same
+wiring was bit-exact. The 200 ohm series resistor edge characterization and the
 64 MB drain gate are recorded in `docs/spi-link.md` and `docs/status.md`.
 Reassembly note: the SPI jumpers are separate from the UART ribbon and must be
 reconnected after any rewiring; the `test_p91_*` gates fail honestly (no

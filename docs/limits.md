@@ -42,13 +42,21 @@ authoritative execution ledger is `docs/status.md`.
 - **SPI bulk link: 18 MHz measured ceiling** on the current wiring. The wire
   delivers ~1.25 MB/s at 10 MHz and ~2.25 MB/s at 18 MHz; 19/20 MHz lose
   chunks to 256-byte slave FIFO underruns. The 200 Ω series-resistor SCK/MISO
-  edge characterization with a scope is still open.
+  edge characterization with a scope is still open. **With the ESP32-S3 gateway
+  the link is currently open**: the S3 receives every other payload byte even
+  though its SPI master passes the loopback self-test and the Zynq slave was
+  bit-exact with the classic ESP32 (`docs/status.md`, 2026-09-17).
 - **Host drain via the ESP32 Wi-Fi relay: ~0.28 MB/s measured.** The 2026-09-17
   ESP32-S3 port adds a USB CDC-ACM host leg (`la_usb`, native USB port,
   `serial://COMx`). The S3 USB-OTG is **full-speed only** (12 Mbps), so its
   bulk ceiling is about 1.2 MB/s: the drain is measured against that physical
   ceiling, and the plan's `>=1.5 MB/s over 64 MB` target cannot be met over
   this transport. The SPI wire is not the bottleneck.
+- **S3 USB caveats (bench 2026-09-17).** The native-USB cable must go
+  **directly into a PC port**: behind a USB hub every usbser.sys CDC device
+  (the gateway's and the ESP32 ROM's) fails to open with `GetCommState` hangs
+  or errors 22/31. Keep **both** USB cables connected: with only one cable the
+  S3 browns out (`E BOD`) under Wi-Fi transmit peaks.
 - **Gateway loopback echo: ~40–44 kB/s round trip**, unchanged from 921600 to
   2 Mbps. This is a relay-processing measurement, not a universal one-way
   limit or a profiled root cause.

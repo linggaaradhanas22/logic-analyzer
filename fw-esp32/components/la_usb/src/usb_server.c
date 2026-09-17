@@ -174,9 +174,13 @@ static void usb_host_task(void *argument)
         .callback_rx = cdc_rx_callback,
         .callback_line_state_changed = cdc_line_state_callback,
     };
-    const tinyusb_config_t tusb = TINYUSB_DEFAULT_CONFIG();
+    tinyusb_config_t tusb = TINYUSB_DEFAULT_CONFIG();
 
     (void)argument;
+    /* The default TinyUSB task priority (5) is below every network task; a
+     * Wi-Fi reconnect storm has been observed to keep the control endpoint
+     * unresponsive while the host tries to open the port. */
+    tusb.task.priority = LA_BOARD_USB_TINYUSB_TASK_PRIO;
     if (tinyusb_driver_install(&tusb) != ESP_OK ||
         tinyusb_cdcacm_init(&acm) != ESP_OK) {
         ESP_LOGE(TAG, "USB CDC init failed");

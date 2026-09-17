@@ -47,9 +47,12 @@
 #define LA_BOARD_SPI_READY_GPIO 9
 
 /* The DevKitC-1 RGB LED is a WS2812 (GPIO38 on v1.1, GPIO48 on v1.0), not a
- * plain GPIO LED, so the UI heartbeat is disabled on this board. */
+ * plain GPIO LED, so the UI heartbeat is disabled on this board and the LED
+ * is cleared once at boot. */
 #define LA_BOARD_LED_GPIO (-1)
 #define LA_BOARD_LED_ACTIVE_LOW 0
+#define LA_BOARD_RGB_LED_GPIO 38
+#define LA_BOARD_RGB_LED_GPIO_ALT 48
 
 #else
 
@@ -119,21 +122,28 @@
 
 #define LA_BOARD_UI_TASK_CORE 0
 #define LA_BOARD_UI_TASK_PRIO 5
-#define LA_BOARD_UI_TASK_STACK 3072
+/* The periodic stats log formats ~70 values in one call; 3072 left under
+ * 120 bytes of headroom and overflowed when a field was added (2026-09-17). */
+#define LA_BOARD_UI_TASK_STACK 4096
 
 /* P10.1 live web view: the HTTP server runs its own task; LiveViewTask only
- * formats and broadcasts the mirrored events, so it stays below the relay. */
+ * formats and broadcasts the mirrored events, so it stays below the relay.
+ * The LiveView stack was raised from 3072 after a bench stack overflow
+ * (2026-09-17). */
 #define LA_BOARD_WEB_TASK_CORE 0
 #define LA_BOARD_WEB_TASK_PRIO 5
-#define LA_BOARD_WEB_TASK_STACK 3072
+#define LA_BOARD_WEB_TASK_STACK 4096
 #define LA_BOARD_WEB_PORT 80
 #define LA_BOARD_WEB_MAX_CLIENTS 4
 
 /* P9.1 USB CDC host transport (la_usb): drains the relay ring into the native
- * USB port. Core 0 keeps it off the Zybo link core. */
+ * USB port. Core 0 keeps it off the Zybo link core. The TinyUSB device stack
+ * runs above NetServer so a Wi-Fi reconnect storm cannot starve the USB
+ * control endpoint (bench observation, 2026-09-17). */
 #define LA_BOARD_USB_TASK_CORE 0
 #define LA_BOARD_USB_TASK_PRIO 13
 #define LA_BOARD_USB_TASK_STACK 4096
+#define LA_BOARD_USB_TINYUSB_TASK_PRIO 15
 
 /* P9.1 SPI bulk link (docs/spi-link.md): the Zynq is the slave, the ESP32 is
  * the master. The UART above keeps commands/ACKs; this link carries the bulk

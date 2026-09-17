@@ -35,6 +35,10 @@ static int s_clients[LA_BOARD_WEB_MAX_CLIENTS];
 static portMUX_TYPE s_client_lock = portMUX_INITIALIZER_UNLOCKED;
 static la_web_counters_t s_counters;
 static char s_json[LA_WEB_JSON_BYTES];
+/* P9.1 bench fix (2026-09-17): the ~1 KiB parser payload lived on the
+ * LiveViewTask stack and overflowed it (panic + USB re-enumeration). The task
+ * is the only user, so the parser is static now. */
+static la_proto_parser_t s_live_parser;
 static StackType_t s_view_stack[LA_BOARD_WEB_TASK_STACK];
 static StaticTask_t s_view_tcb;
 
@@ -268,11 +272,10 @@ static void live_view_task(void *argument)
             if (client_count() > 0) {
                 la_web_core_t core;
                 live_ctx_t ctx = { &core, 1 };
-                la_proto_parser_t parser;
 
                 la_web_core_init(&core, s_json, sizeof(s_json));
-                la_proto_parser_init(&parser);
-                (void)la_proto_parser_feed(&parser, frame, length,
+                la_proto_parser_init(&s_live_parser);
+                (void)la_proto_parser_feed(&s_live_parser, frame, length,
                                            on_live_frame, &ctx);
                 if (ctx.ok != 0 && core.length > 0u &&
                     la_web_core_end(&core) == 0) {

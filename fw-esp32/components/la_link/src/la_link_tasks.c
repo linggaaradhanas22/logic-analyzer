@@ -420,6 +420,40 @@ static void link_spi_task(void *argument)
              LA_BOARD_SPI_MOSI_GPIO, LA_BOARD_SPI_MISO_GPIO,
              LA_BOARD_SPI_CS_GPIO, LA_BOARD_SPI_READY_GPIO,
              (int)LA_BOARD_SPI_CHUNK_BYTES);
+#if CONFIG_LA_SPI_LOOPBACK_TEST
+    /* P9.1 bring-up: with MOSI jumpered to MISO and the Zynq SPI wires off,
+     * verify the master and the two data pins independently of the slave. */
+    {
+        uint8_t loop_tx[64];
+        uint8_t loop_rx[64];
+        spi_transaction_t loop = {
+            .length = sizeof(loop_tx) * 8u,
+            .tx_buffer = loop_tx,
+            .rx_buffer = loop_rx,
+        };
+        int index;
+        int mismatches = 0;
+
+        for (index = 0; index < (int)sizeof(loop_tx); ++index) {
+            loop_tx[index] = (uint8_t)(index * 7 + 1);
+        }
+        gpio_set_level(LA_BOARD_SPI_CS_GPIO, 0);
+        esp_rom_delay_us(2);
+        if (spi_device_transmit(handle, &loop) == ESP_OK) {
+            for (index = 0; index < (int)sizeof(loop_tx); ++index) {
+                if (loop_rx[index] != loop_tx[index]) {
+                    mismatches += 1;
+                }
+            }
+            ESP_LOGW(TAG, "SPI loopback test: %d/%d mismatches",
+                     mismatches, (int)sizeof(loop_tx));
+            ESP_LOG_BUFFER_HEXDUMP(TAG, loop_rx, 16, ESP_LOG_WARN);
+        } else {
+            ESP_LOGE(TAG, "SPI loopback transaction failed");
+        }
+        gpio_set_level(LA_BOARD_SPI_CS_GPIO, 1);
+    }
+#endif
     {
         uint32_t last_bytes = 0u;
         TickType_t last_report = xTaskGetTickCount();
