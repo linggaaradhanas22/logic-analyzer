@@ -120,6 +120,24 @@ basis: pid.codes test PID `0x1209:0x0001` for in-house development only, with
 the release identity recorded as an open U07/U09 gate. Evidence:
 `build/reports/usb-u01-feasibility.md`. No hardware PASS is claimed. Next: U02.
 
+### USB migration execution - U02 (2026-09-18)
+
+**U02 complete; contract frozen.** `docs/usb-link.md` section 9 is the frozen
+integration contract: `usbps`/`XUsbPs` init sequence and GIC ID 53
+(`0x4015`), notification-only endpoint callbacks with the bounded
+`XUsbPs_EpBufferReceive` pop required by the vendor cursor advance, deferred
+class processing in UsbTask, stale-generation dropping, CDC-ACM descriptor
+set with IAD/`wTotalLength` 66 and automatic `usbser.sys` binding, test
+identity `0x1209:0x0001` with release identity open, line-coding/DTR policy,
+non-cached 64 KiB DMA pool at NC offset `0x00900000`, 8 x 1088-byte TX pool,
+16-entry completion ring, `rx_sb` NAK backpressure, gateway-default build
+profiles (`fw-zynq -- --profile usb`), and `test_usb_*` selectors. Portable
+`la_usb_core.{h,c}` models the session lifecycle and completion ring; the new
+`la_native_usb_core` host test covers generation bumps, action sets, invalid
+transitions, suspend/resume, FIFO order, overflow counting, wrap and stale
+drops. Evidence: `build/reports/usb-u02-contract.md`, `test-native` 16/16.
+Next: U03 implementation, then a [HUMAN] JTAG enumeration session.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |
@@ -360,15 +378,15 @@ the implementation is not present.
 
 ## Next Session Checklist
 
-**USB execution handoff (2026-09-18):** U00 and U01 are complete - baseline
-preserved at `b611390` (hashes under `build/usb-migration/baseline/`,
-`test-native` 15/15, `test-host` 84/84) and platform/physical feasibility
-recorded in `build/reports/usb-u01-feasibility.md` (REV D.0, JP2 open, J10 via
-hub by user direction, pid.codes test PID `0x1209:0x0001` for development only).
-The gateway profile stays the default and rollback; nothing was flashed and the
-S3 SPI fault remains open. Execution is continuous per the user's 2026-09-18
-instruction (stop on request): the next packet is U02 contract freeze, then U03
-implementation and a [HUMAN] JTAG enumeration session. Read
+**USB execution handoff (2026-09-18):** U00-U02 are complete - baseline
+preserved at `b611390`, feasibility recorded in
+`build/reports/usb-u01-feasibility.md`, and the integration contract frozen in
+`docs/usb-link.md` section 9 with the portable `la_usb_core` host-tested
+(`build/reports/usb-u02-contract.md`, `test-native` 16/16). The gateway profile
+stays the default and rollback; nothing was flashed and the S3 SPI fault
+remains open. Execution is continuous per the user's 2026-09-18 instruction
+(stop on request): the next packet is U03 (driver, UsbTask, profiles and local
+builds), then a [HUMAN] JTAG enumeration session. Read
 `docs/usb-migration-implementation-instructions.md` and `docs/usb-link.md` and
 follow the user's current execution instruction. Older dated bench/portal
 instructions below are historical context, not new authorization to flash or
@@ -389,7 +407,7 @@ publish.
 |---|---|
 | Normative requirements | `docs/plan.md` |
 | Session state and blockers | `docs/status.md` |
-| Direct USB execution sequence | `docs/usb-migration-implementation-instructions.md` (U00/U01 complete 2026-09-18; U02 next) |
+| Direct USB execution sequence | `docs/usb-migration-implementation-instructions.md` (U00-U02 complete 2026-09-18; U03 next) |
 | Proposed direct USB interface and feasibility evidence | `docs/usb-link.md` |
 | Canonical commands and environment import | `tools/run.py` |
 | Tool versions and smoke state | `tools/toolchain-lock.json` |
@@ -405,6 +423,7 @@ publish.
 
 | Date | Work completed | Result |
 |---|---|---|
+| 2026-09-18 | U02 integration contract frozen (continuous execution, stop on request). Audited the generated `XUsbPs` driver: `EpBufferReceive` pops without re-activating, the vendor RX dispatcher advances its descriptor cursor per callback (so the pop must stay in interrupt context), `EpBufferRelease` re-activates, the reset path has an infinite fallback unless a general handler is registered, and `EpStall`/`EpBufferSendWithZLT` exist. Froze `docs/usb-link.md` section 9: GIC ID 53 via `la_irq_connect`, notification-only callbacks with deferred class processing and stale-generation dropping, CDC-ACM descriptors with IAD/`wTotalLength` 66 and automatic `usbser.sys` binding, test identity `0x1209:0x0001` (release identity open), advisory line coding/DTR, no-ZLP byte stream, non-cached 64 KiB DMA pool at NC offset `0x00900000`, 8 x 1088-byte TX pool, 16-entry completion ring, `rx_sb` NAK backpressure, gateway-default `fw-zynq -- --profile usb` builds and `test_usb_*` selectors. Added portable `la_usb_core.{h,c}` and host tests. | PASS (local): `test-native` 16/16 including the new `la_native_usb_core`; report `build/reports/usb-u02-contract.md`, canonical `build/reports/test-native.json`. No target code, build, load or hardware run; U03 not started. Next: U03 driver/task implementation and local profile builds, then the [HUMAN] JTAG enumeration session. |
 | 2026-09-18 | U01 board and platform feasibility complete (continuous execution authorized by the 2026-09-18 user instruction, stop on request). Inspected the actual `logic_analyzer.xsa` (`system.hwh`: USB0 enabled, 60 MHz, MIO 28..39, reset MIO 46, USB1 disabled), the generated FreeRTOS BSP (`XPAR_XUSBPS_0_BASEADDR 0xe0002000`, encoded IRQ `0x4015`, MIT-licensed `usbps`/`XUsbPs` sources, no CDC example) and the installed `usbps_v2_9` examples; evaluated the old AMD CDC techtip (bare-metal SDK 2015.1, custom Windows driver, click-through RefDesLicense, AR#61313 ULPI caveat) as reference only. Recorded the physical checklist: REV D.0, JP1 unsoldered/open, JP2 shunt removed, JP5=JTAG, JP6=USB (power from J12), J11 empty, J10 on the USB hub by user direction (direct PC port is the first isolation step), FTDI `COM7` serial `210351BE7ACEB`, no board modification, fresh power with no image. Identity basis: pid.codes test PID `0x1209:0x0001` for in-house use only; release identity open. Host check: `la-cli ports` shows only COM7 and the gateway is not attached, so the optional gateway baseline is BLOCKED, not failed. | PASS (local evidence + checklist): `build/reports/usb-u01-feasibility.md`. No firmware built, no image loaded, no hardware PASS claimed. Open: HS vs FS until U03, release VID/PID, hub-first deviation recorded in the report. Next: U02 contract freeze. |
 | 2026-09-18 | U00 execution baseline complete (first authorized U packet). Authorized scope: execute the first incomplete eligible U packet (U00) of `docs/usb-migration-implementation-instructions.md`; hardware load, product adoption, publication and release were not authorized. Synced: `git fetch` clean, `main` at `b611390` matching `origin/main`, worktree clean except the preserved untracked `docs/hardwarex/` and `docs/learning/`. Preserved and hashed the rollback identity under ignored `build/usb-migration/baseline/` (P9.1 JA-1-fixed bitstream `06488a9...`, XSA `0719cbd...`, loaded Zynq ELF `9067cfa...`, BOOT.BIN `bc1d1a1...`, S3 gateway `0c96ed8...`, classic package set, timing/DRC/utilization, toolchain/board locks) with `SHA256SUMS.txt`; no rebuild ran, so `build/vitis/ws` is untouched. Ran the required off-board baseline checks. | PASS: `test-native` 15/15 (`build/reports/test-native.json`) and `test-host` 84/84 (`build/reports/test-host.json`), copies under `build/reports/usb-migration/U00/`; report `build/reports/usb-u00-baseline.md`; no pre-existing failures to isolate. No flash, JTAG load, E2E or bench step ran. Open blockers carried: S3 SPI 2:1 byte drop (open, not relabeled fixed), S3 USB-OTG full-speed ~1.2 MB/s below the 1.5 MB/s gate, U01 `[HUMAN]` board/power/identity checklist, U02 ISR-deferral/identity decisions, P10.4 release hold. Next: U01 local feasibility evidence plus the physical checklist; U02 design may proceed locally, no U03 load until U01/U02 gates pass. Committed and pushed as `72a4bc3 U00: establish the USB migration execution baseline`; `git ls-remote origin refs/heads/main` matched `git rev-parse HEAD`, and this status-only close-out records that verified push. |
 | 2026-09-17 | Prepared the direct-Zynq USB planning package: new `docs/usb-migration-implementation-instructions.md` (U00-U09) and `docs/usb-link.md`; linked from `docs/plan.md` and `README.md`; updated this ledger and clarified the root v0.4 snapshot. Reviewed preset/generated BSP/installed `usbps_v2_9`, app routing and primary AMD/Digilent/Microsoft references. Corrected the proposed driver, power and CDC-example assumptions; specified ownership/IRQ feasibility, failure recovery, exact performance measurement, adoption, documentation and release gates. | Planning complete, pushed as `8eaf3ea`; remote hash verified. Documentation checks PASS: `.venv/Scripts/python.exe build/reports/usb-planning-review.py` (20 local links, ten ordered packets with entry/exit gates; `build/reports/usb-planning-review.json`), `git diff --check`, `git diff --cached --check`; manual scope and technical review complete. Firmware and hardware unverified; no implementation authorized or started. Tracked worktree clean after push; existing untracked `docs/hardwarex/` and `docs/learning/` preserved and excluded. This status-only close-out records the push. Next implementation action, when authorized: U00. |

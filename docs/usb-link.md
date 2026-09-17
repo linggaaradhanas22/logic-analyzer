@@ -214,3 +214,87 @@ Decisions still open: usable USB identity; demonstrated ISR deferral; static
 memory sizing and cache arrangement; exact descriptor bytes; board/power bench
 confirmation; host tuning justified by measurements; optional wireless support
 and the live browser-view scope. None is a passing implementation result.
+
+## 9. Frozen integration contract (U02, 2026-09-18)
+
+U02 resolved the decisions required before U03 coding. This section is the
+frozen contract for the direct-USB profile; `la_usb_core.{h,c}` implements the
+portable session and completion model and its host tests are part of
+`test-native`.
+
+**Driver and interrupt path.** Use `usbps` / `XUsbPs` only (never `usbpsu` or
+DWC2 register code). Init: `XUsbPs_LookupConfig(0xE0002000)` (the BSP
+value; U03 confirms the controller registers on target), `CfgInitialize`,
+`XUsbPs_DeviceMemRequired`, `ConfigureDevice`, `IntrSetHandler`,
+`EpSetHandler`, `IntrEnable(UR|UI)`, `Start`. The GIC line is derived from
+`XPAR_XUSBPS_0_INTERRUPTS` `0x4015` = SPI 21 = GIC ID 53, installed through
+`la_irq_connect()` at priority `0xA0`, handler `XUsbPs_IntrHandler`.
+
+**ISR deferral.** The vendor dispatcher does bounded register work and invokes
+our endpoint callbacks. Our callbacks are notification-only: EP0 setup copies
+the 8-byte setup packet (`XUsbPs_EpGetSetupData`) and notifies; OUT data pops
+the completed buffer with `XUsbPs_EpBufferReceive` (required because the
+vendor RX handler advances its descriptor cursor per callback) and pushes a
+`{generation, ptr, len, handle}` record; IN completion pushes a record. No
+class processing, bulk copy, parser feed, allocation, blocking or console I/O
+runs in interrupt context. A general handler is registered so the vendor reset
+fallback never spins. All class requests, copies, `rx_sb` writes, submissions
+and re-priming run in UsbTask. Records carry the session generation; the task
+drops stale records and counts them. After a bus reset/unconfigure the driver
+has already flushed its descriptors, so stale RX handles are discarded, never
+released.
+
+**Endpoints and descriptors.** EP0 control 64 B (2 buffers); EP1 OUT/IN bulk,
+16 x 512 B buffers each at HS, 64-byte packets at FS; EP2 IN interrupt 16 B
+for CDC notifications. One CDC-ACM function with IAD: device class `0x02`,
+control interface `0x02/0x02/0x01` with header/call-management/ACM/union
+functional descriptors, data interface `0x0A`; device, configuration,
+other-speed, device-qualifier and string descriptors, `wTotalLength` fixed at
+66 bytes. Automatic `usbser.sys` binding is the gate (the old AMD techtip
+needed a custom driver and is not copied).
+
+**Identity.** Development/test identity `0x1209:0x0001` (pid.codes test PID)
+with a fixed serial string and a warning in source that it is not universally
+unique and must not ship. Release identity remains open for U07/U09; the test
+PID must not appear in release artifacts.
+
+**Class behavior.** `SET_LINE_CODING` (7-byte OUT data) is latched but never
+changes the sampling clock or throttles USB; `GET_LINE_CODING` returns it;
+`SET_CONTROL_LINE_STATE` is advisory (DTR/RTS never reset the board or cancel
+a capture); `SEND_BREAK` is accepted and ignored consistently with the
+advertised ACM capabilities. Unsupported requests stall EP0 cleanly and the
+next setup recovers. Bulk IN uses `XUsbPs_EpBufferSend` without ZLT: the
+analyzer stream is byte-oriented, tests must not depend on transfer
+boundaries, and exact max-packet multiples are terminated by host read counts.
+USB transfer boundaries are not `la_proto` frame boundaries; split and
+coalesced command frames are accepted.
+
+**Buffers, ownership and cache.** USB DMA memory is a 64 KiB pool in the
+existing non-cached window at offset `0x00900000` (after the 8 MiB capture and
+1 MiB SG pools), 64-byte aligned, sized against `XUsbPs_DeviceMemRequired` at
+init; U03 adds it to `la_mem_geom` with host tests. TX frames use a static
+8 x 1088-byte pool: TxTask fills a complete frame and hands the handle to
+UsbTask; UsbTask owns it until IN completion, then returns it. Admission is
+all-or-nothing with a bounded wait inside the existing 2 s no-progress limit;
+a partial frame is never submitted. RX completions go through the 16-entry
+ring into `app->rx_sb` (8 KiB, single writer UsbTask, single reader CmdTask);
+a full `rx_sb` stops pops/re-primes so the controller NAKs. Ring capacities
+match the descriptor counts so a full ring cannot lose completions; overflow
+is counted, never silent. Payloads live in non-cached DDR, so no application
+cache maintenance is needed; if a buffer is ever moved to cached memory,
+invalidate-before-CPU-read with cache-line-rounded lengths applies.
+
+**Build profiles.** Build-time selection, gateway default:
+`python tools/run.py fw-zynq -- --profile usb` defines `LA_TRANSPORT_USB=1`
+and builds app component `la_app_usb`; the default builds `la_app` unchanged.
+`jtag-zynq -- --profile usb` loads the matching ELF. The build report and
+console banner record the active profile. In the USB profile UART0 analyzer
+RX/TX and SPI service initialization are skipped, the debug console stays on
+UART1, every frame class is routed to USB through the single TxTask writer,
+and `LINK_CFG` returns the existing unsupported response before any state
+change.
+
+**Test selectors.** USB tests are named `test_usb_*` and run with
+`python tools/run.py test-e2e -- --target serial://COMx -k test_usb`; common
+tests stay unmodified, and ESP/TCP/SPI-only tests are excluded by name and
+never counted as passed. A zero-selection or all-skipped run is not a pass.
