@@ -13,8 +13,9 @@ console script installed in the project environment:
 
 - Zybo Z7-10 with the project bitstream and firmware (JTAG development load or
   SD release boot).
-- ESP32 DOIT DevKit V1 gateway, flashed with the project firmware, on the same
-  **2.4 GHz** Wi-Fi network as the PC (the classic ESP32 has no 5 GHz radio).
+- ESP32-S3-DevKitC-1 gateway, flashed with the project firmware. The analyzer
+  link uses its native USB port (CDC-ACM, `serial://COMx`); for the Wi-Fi TCP
+  link and the live web view it joins the same **2.4 GHz** network as the PC.
 - PC with the project `.venv` and, for viewing captures, PulseView
   (`build/pulseview`) or any VCD viewer.
 - Wiring per `docs/wiring.md`: signals to **JC** (3.3 V only), the UART ribbon
@@ -47,29 +48,42 @@ SD card, then power-cycle with JP5 = SD.
 python tools\run.py boot
 ```
 
-**ESP32 gateway:**
+**ESP32-S3 gateway:**
 
 ```powershell
 .\.venv\Scripts\python.exe tools\set_wifi.py   # once per network; prompts, never committed
 python tools\run.py fw-esp32
 ```
 
-Flash it. This DOIT board's auto-reset does not assert GPIO0, so hold **BOOT**,
-tap **EN**, release **BOOT**, then flash with reset disabled and watch the
-console:
+Connect both DevKitC-1 micro-USB ports: **"UART"** (CP2102 bridge, console and
+flashing) and **"USB"** (native USB-OTG, the analyzer host transport). The S3
+resets normally, so flash and monitor over the UART port without a BOOT/EN
+sequence:
 
 ```powershell
-Set-Location build\esp32
-python $env:IDF_PATH\components\esptool_py\esptool\esptool.py --chip esp32 -p COM5 -b 460800 --before no_reset --after hard_reset write_flash @flash_args
-Set-Location ..\..
 Set-Location fw-esp32
-idf.py -B ..\build\esp32 -p COM5 monitor
+idf.py -B ..\build\esp32 -p COMx flash monitor
 ```
 
-Success signs: `station started`, `got ip`, `net CONNECTED`, `fifo_ovf=0`.
-Exit the monitor with `Ctrl+]`.
+Success signs: `USB CDC ready on the native USB port`, `station started`,
+`got ip`, `net CONNECTED`, `fifo_ovf=0`. Exit the monitor with `Ctrl+]`.
 
 ## 3. Verify the link
+
+**USB CDC host link (P9.1 fast path).** Plug the native "USB" port into the PC;
+it enumerates as a USB serial device. `la-cli ports` lists the candidates: the
+CP2102 console and the CDC data port. Open the data port:
+
+```powershell
+.\.venv\Scripts\la-cli.exe ports
+.\.venv\Scripts\la-cli.exe ping -t serial://COMx
+```
+
+While that port is open the gateway routes the analyzer stream to USB and
+refuses TCP analyzer clients (the P10.1 web view is unaffected). Close it to
+use the Wi-Fi/TCP leg again.
+
+**Wi-Fi TCP link.**
 
 ```powershell
 .\.venv\Scripts\la-cli.exe ping   -t tcp://la-esp32.local:5555
@@ -274,15 +288,15 @@ By default burst `DATA_*` frames travel over the UART. To route them over the
 SPI slave (JD-7..10 + JA-1 wired), select it once per session:
 
 ```powershell
-.\.venv\Scripts\la-cli.exe link -t tcp://la-esp32.local:5555 --spi --clock 18
-.\.venv\Scripts\la-cli.exe capture -t tcp://la-esp32.local:5555 --rate 10M --words 64k --out big.sr
+.\.venv\Scripts\la-cli.exe link -t serial://COMx --spi --clock 18
+.\.venv\Scripts\la-cli.exe capture -t serial://COMx --rate 10M --words 64k --out big.sr
 ```
 
 Commands and ACKs stay on the UART. Framed transfers are bench-clean at
-5/10/18 MHz (18 MHz is the measured ceiling; 19/20 MHz lose chunks). The
-sustained host drain is currently limited to ~0.28 MB/s by the ESP32 Wi-Fi
-relay, so very large captures take a long time even though the SPI wire is
-faster; see `docs/limits.md`.
+5/10/18 MHz (18 MHz is the measured ceiling; 19/20 MHz lose chunks). For large
+captures use the native USB CDC port (`serial://COMx`): the ESP32-S3 USB-OTG is
+full-speed, so the host drain is bounded near 1.2 MB/s, far above the ~0.28 MB/s
+of the Wi-Fi TCP leg; see `docs/limits.md`.
 
 ## 10. Command reference
 
@@ -297,8 +311,9 @@ faster; see `docs/limits.md`.
 | `la-cli trace -t URI [--start\|--stop\|--dump]` | Task/queue trace ring. |
 | `la-cli link -t URI --spi\|--uart [--clock MHz]` | Select the burst transport. |
 
-Target URIs: `tcp://la-esp32.local:5555` (gateway), `tcp://<ip>:5555`, or
-`serial://COMx` (direct 3.3 V USB-UART adapter on JD-1..4 + GND, `[HUMAN]`).
+Target URIs: `serial://COMx` (gateway native USB CDC port, or a direct 3.3 V
+USB-UART adapter on JD-1..4 + GND, `[HUMAN]`), `tcp://la-esp32.local:5555`
+(Wi-Fi gateway) or `tcp://<ip>:5555`.
 
 ## 11. Troubleshooting
 
@@ -310,8 +325,13 @@ Target URIs: `tcp://la-esp32.local:5555` (gateway), `tcp://<ip>:5555`, or
   running (`jtag-zynq` or SD boot).
 - **First capture after `--patgen` looks wrong:** `SELFTEST_EN` latches; omit
   `--patgen` (or re-arm without it) to capture real JC inputs.
-- **ESP32 will not flash:** manual BOOT/EN sequence plus
-  `esptool --before no_reset`; the auto-reset does not assert GPIO0.
+- **ESP32-S3 will not flash:** flash over the CP2102 "UART" port with
+  `idf.py -p COMx flash`; the S3 resets normally. The older DOIT classic board
+  needs the manual BOOT/EN sequence plus `esptool --before no_reset`.
+- **USB CDC port missing or TCP refused:** the native "USB" port enumerates
+  only after the firmware boots (TinyUSB); until then the ROM USB-Serial-JTAG
+  device shows there. Use the CP2102 port for the console. While the CDC port
+  is open the gateway refuses TCP analyzer clients by design.
 - **Live session stops with `EVT_OVERRUN`:** the offered event rate exceeded
   the link. Lower the input rate, use `--compact`, or accept the reported loss.
 - **PulseView shows decoder-probe Python 3.4 warnings:** a bundled PulseView

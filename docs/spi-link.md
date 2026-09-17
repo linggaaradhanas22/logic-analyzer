@@ -9,19 +9,20 @@ it runs.
 
 ## Physical interface
 
-| Signal | Zybo pin | Package pin | Direction | ESP32 (provisional) |
+| Signal | Zybo pin | Package pin | Direction | ESP32-S3 (J1) |
 |---|---|---|---|---|
-| SPI SCLK | JD-7 | U14 | input (slave clock) | GPIO18 |
-| SPI SS_N | JD-8 | U15 | input (active low) | GPIO4 |
-| SPI MOSI | JD-9 | V17 | input (slave data in) | GPIO23 |
-| SPI MISO | JD-10 | V18 | output (slave data out) | GPIO19 |
-| SPI data-ready | JA-1 | N15 | output | GPIO27 |
+| SPI SCLK | JD-7 | U14 | input (slave clock) | GPIO12 (J1-18, FSPICLK) |
+| SPI SS_N | JD-8 | U15 | input (active low) | GPIO10 (J1-16, FSPICS0) |
+| SPI MOSI | JD-9 | V17 | input (slave data in) | GPIO11 (J1-17, FSPID) |
+| SPI MISO | JD-10 | V18 | output (slave data out) | GPIO13 (J1-19, FSPIQ) |
+| SPI data-ready | JA-1 | N15 | output | GPIO9 (J1-15) |
 | GND | JD-5/11, JA-5/11 | - | common ground | GND |
 
 All signals are 3.3 V LVCMOS33. The JD pins are shared with the UART link
-header only physically; JD-1..4 stay assigned to UART0 EMIO. The ESP32 pin
-column is provisional until the module is re-checked against the DOIT DevKit V1
-schematic (same rule as the UART pin map); the Zybo side is fixed by the XDC.
+header only physically; JD-1..4 stay assigned to UART0 EMIO. The S3 column is
+verified against the official DevKitC-1 v1.1 header guide and matches
+`fw-esp32/components/la_board/include/la_board.h`; the Zybo side is fixed by
+the XDC. GPIO9-14 are the S3's SPI2/FSPI IOMUX pins (the S3 has no SPI3).
 
 The Zybo Pmod outputs pass through the on-board 200 ohm series resistors. P9.1
 starts at 10 MHz and the bench characterizes the SCK edges (overshoot, ringing,
@@ -117,6 +118,13 @@ dump) and verifies every byte through the host parser.
   frame stay on the UART, and the ESP32 merges the SPI and UART streams into
   the single host relay. TxTask retries a full 8 KiB SPI ring briefly before
   reporting a drop.
+- **Host leg (P9.1 S3 port, 2026-09-17):** the ESP32-S3-DevKitC-1 gateway also
+  exposes the relay over its native USB port as a CDC-ACM device (`la_usb`).
+  While the host has that port open, it owns the analyzer stream: NetServerTask
+  stops draining the relay ring and refuses TCP analyzer clients, so frames are
+  never split between legs. The host uses the existing `serial://COMx`
+  transport; the Wi-Fi TCP leg and the P10.1 web view keep working when the USB
+  port is closed.
 
 ## Measured results (2026-09-13 bench)
 
@@ -149,15 +157,15 @@ Measured with the P9.1 bench tests (`tests/e2e/test_p91_spi.py`):
 | 4 MiB capture at 10 MHz | completes, every byte verified |
 | Sustained host-verified drain | **0.28 MB/s** |
 
-The sustained rate is limited by the **ESP32 Wi-Fi relay**, not the SPI wire:
-the same capture path reaches the Zynq at 1.25 MB/s at 10 MHz and 2.25 MB/s at
-18 MHz, while the gateway-to-host TCP path tops out near 0.28 MB/s in this
-setup. The plan's `>=1.5 MB/s over a 64 MB drain` gate therefore remains
-**blocked on the ESP32 -> host transport**; the plan already names the
-ESP32-S3 USB-OTG path as the replacement. 20 MHz additionally exceeds what the
-256-byte slave FIFO can sustain with task-scheduled refills even with the ISR
-bridge (19 MHz already loses chunks), so 18 MHz is the measured burst ceiling
-on the current wiring.
+The sustained rate is limited by the **ESP32 -> host transport**, not the SPI
+wire: the same capture path reaches the Zynq at 1.25 MB/s at 10 MHz and
+2.25 MB/s at 18 MHz, while the gateway-to-host TCP path topped out near
+0.28 MB/s in this setup. The 2026-09-17 S3 port replaces that leg with USB
+CDC-ACM; the ESP32-S3 USB-OTG is **full-speed only** (12 Mbps, bulk ceiling
+about 1.2 MB/s), so the drain is measured and recorded against that physical
+ceiling. 20 MHz additionally exceeds what the 256-byte slave FIFO can sustain
+even with the ISR bridge (19 MHz already loses chunks), so 18 MHz is the
+measured burst ceiling on the current wiring.
 
 ## Test plan
 

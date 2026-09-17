@@ -43,10 +43,12 @@ authoritative execution ledger is `docs/status.md`.
   delivers ~1.25 MB/s at 10 MHz and ~2.25 MB/s at 18 MHz; 19/20 MHz lose
   chunks to 256-byte slave FIFO underruns. The 200 Ω series-resistor SCK/MISO
   edge characterization with a scope is still open.
-- **Host drain via the ESP32 Wi-Fi relay: ~0.28 MB/s measured**, so the P9.1
-  `>=1.5 MB/s over 64 MB` gate is blocked. The ESP32-S3 USB-OTG transport port
-  is the planned replacement; it cannot bypass a slow Zynq→ESP32 link, but the
-  SPI wire is not the bottleneck.
+- **Host drain via the ESP32 Wi-Fi relay: ~0.28 MB/s measured.** The 2026-09-17
+  ESP32-S3 port adds a USB CDC-ACM host leg (`la_usb`, native USB port,
+  `serial://COMx`). The S3 USB-OTG is **full-speed only** (12 Mbps), so its
+  bulk ceiling is about 1.2 MB/s: the drain is measured against that physical
+  ceiling, and the plan's `>=1.5 MB/s over 64 MB` target cannot be met over
+  this transport. The SPI wire is not the bottleneck.
 - **Gateway loopback echo: ~40–44 kB/s round trip**, unchanged from 921600 to
   2 Mbps. This is a relay-processing measurement, not a universal one-way
   limit or a profiled root cause.
@@ -84,7 +86,11 @@ authoritative execution ledger is `docs/status.md`.
 - Vitis path-length constraints force short generated project names; crashed
   runs can orphan `vitis-server` java processes that hold file locks.
 - The DOIT ESP32 board's auto-reset does not assert GPIO0: every flash needs
-  the manual BOOT/EN sequence plus esptool `--before no_reset`.
+  the manual BOOT/EN sequence plus esptool `--before no_reset`. The ESP32-S3
+  DevKitC-1 resets normally, so `idf.py -p COMx flash` works; flash over the
+  CP2102 "UART" port and keep the console there (the native "USB" port carries
+  the CDC host transport, and its USB-Serial-JTAG console is disabled in the
+  firmware configuration).
 - Wi-Fi credentials live only in the ignored `build/esp32/sdkconfig`; a fresh
   checkout must set them with `tools/set_wifi.py` before network gates.
 - `build/reports` and release artifacts are ignored: on another checkout a

@@ -35,6 +35,7 @@ typedef struct la_net_counters {
     uint32_t select_ready;        /* probe select() reported readiness */
     uint32_t select_errors;       /* probe select() returned -1 */
     uint32_t listener_refreshes;  /* stale listening sockets rebuilt */
+    uint32_t usb_rejections;      /* P9.1: TCP clients refused while USB owns the stream */
 } la_net_counters_t;
 
 /* Initializes Wi-Fi, mDNS and starts NetServerTask (which drives the session

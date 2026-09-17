@@ -6,5 +6,5 @@ idf_component_register(
         "src/net_server.c"
     INCLUDE_DIRS "include"
     PRIV_INCLUDE_DIRS "src"
-    REQUIRES la_board la_link la_proto esp_wifi esp_netif esp_event lwip mdns esp_timer
+    REQUIRES la_board la_link la_proto la_usb esp_wifi esp_netif esp_event lwip mdns esp_timer
 )

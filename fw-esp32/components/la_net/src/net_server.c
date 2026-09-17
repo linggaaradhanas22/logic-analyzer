@@ -13,6 +13,7 @@
 #include "la_board.h"
 #include "la_link.h"
 #include "la_proto.h"
+#include "la_usb.h"
 #include "lwip/api.h"
 #include "lwip/priv/sockets_priv.h"
 #include "lwip/priv/tcp_priv.h"
@@ -282,6 +283,15 @@ static void handle_new_client(void)
         handled += 1u;
         set_nonblocking(fd);
         (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
+        /* P9.1: a USB CDC host is the analyzer endpoint while its port is
+         * open. Close the TCP connection immediately so the host sees a clean
+         * EOF instead of a session that never answers. */
+        if (la_usb_host_active()) {
+            s_server.counters.usb_rejections += 1u;
+            ESP_LOGW(TAG, "USB host owns the analyzer stream: TCP client rejected");
+            close(fd);
+            continue;
+        }
         /* A new connection may arrive before the previous client's FIN has
          * been read. Clear a departed client first so the fast reconnect is
          * not rejected by the single-client rule. */
@@ -411,22 +421,9 @@ static void on_host_frame(void *context,
                           const uint8_t *payload,
                           uint16_t length)
 {
-    uint8_t frame[LA_PROTO_MAX_PAYLOAD + LA_PROTO_FRAME_OVERHEAD];
-    size_t frame_bytes;
-
     (void)context;
-    /* P9.1: the LINK_CFG clock byte selects the SPI master clock before the
-     * frame is forwarded to the Zynq (which ignores the field). */
-    if (type == LA_PROTO_LINK_CFG && length >= 2u && payload[1] != 0u) {
-        (void)la_link_spi_set_clock((uint32_t)payload[1] * 1000000u);
-    }
-    frame_bytes = la_proto_encode(type, sequence, payload, length, frame,
-                                  sizeof(frame));
-    if (frame_bytes == 0u) {
-        return;
-    }
-    if (la_link_send_to_zynq(frame, frame_bytes,
-                             pdMS_TO_TICKS(LA_NET_HOST_FRAME_TIMEOUT_MS)) != ESP_OK) {
+    if (la_link_forward_host_frame(type, sequence, payload, length,
+                                   pdMS_TO_TICKS(LA_NET_HOST_FRAME_TIMEOUT_MS)) != ESP_OK) {
         s_server.counters.host_frame_failures += 1u;
     } else {
         s_server.counters.client_rx_frames += 1u;
@@ -497,6 +494,11 @@ static void pump_link_to_client(void)
      * and host-read paths above (the select loop runs every 5 ms). */
     unsigned budget = 64u;
 
+    /* P9.1: while the USB CDC host owns the analyzer stream the ring must not
+     * be drained (or discarded) here, or the two legs would split frames. */
+    if (la_usb_host_active()) {
+        return;
+    }
     while (budget-- > 0u) {
         uint8_t *frame = NULL;
         size_t length;
@@ -580,6 +582,14 @@ static void net_server_task(void *argument)
             s_server.counters.select_errors += 1u;
         }
 
+        /* P9.1: if the USB host opened its port while a TCP analyzer session
+         * was active, hand the stream over. The USB attach flushed the relay
+         * ring; close the TCP client and let the policy stop the Zynq. */
+        if (s_server.client_fd >= 0 && la_usb_host_active()) {
+            ESP_LOGW(TAG, "USB host attached: closing the TCP analyzer client");
+            close_client_socket();
+            run_policy(LA_NET_POLICY_EVT_CLIENT_DISCONNECTED);
+        }
         /* Read the current client first: a disconnect observed in this cycle
          * must clear the single-client state before a connection that arrived
          * in the same cycle is accepted or rejected. */

@@ -113,9 +113,11 @@ signoff run replaces them.
 - P3.3 `fpga/scripts/program.tcl` is the [HUMAN] JTAG programming step; it was
   exercised on 2026-09-10 (LD0 heartbeat observed). `jtag-zynq` is the
   scripted load used for every later bench session.
-- The P9.1 SPI link is bench-verified for framed transfers at 5/10/18 MHz; the
-  64 MB / 1.5 MB/s drain gate is blocked on the ESP32 Wi-Fi host transport
-  (0.28 MB/s measured) and waits for the ESP32-S3 USB-OTG port.
+- The P9.1 SPI link is bench-verified for framed transfers at 5/10/18 MHz. The
+  2026-09-17 ESP32-S3 port replaces the 0.28 MB/s Wi-Fi host leg with a USB
+  CDC-ACM host transport (`la_usb`); the 64 MB drain is measured over that
+  port. The S3 USB-OTG is full-speed only (12 Mbps), so its bulk ceiling is
+  about 1.2 MB/s.
 - Remaining honest caveats: PS DDR behavior with the board-preset negative
   DQS-to-CLK skew values is only verified at boot/bring-up on hardware;
   `IRQ_F2P` carries three sources (analyzer, DMA, SPI) and the drivers must

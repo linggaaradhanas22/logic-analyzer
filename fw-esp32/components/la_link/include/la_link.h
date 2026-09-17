@@ -62,8 +62,16 @@ esp_err_t la_link_start(void);
  * session task only, so net_to_link keeps a single producer. */
 esp_err_t la_link_send_control(uint8_t type);
 
-/* Queues a verbatim encoded frame for the Zynq leg. Called by NetServerTask. */
+/* Queues a verbatim encoded frame for the Zynq leg. Called by the active host
+ * leg (NetServerTask or UsbHostTask). */
 esp_err_t la_link_send_to_zynq(const uint8_t *frame, size_t length, TickType_t timeout);
+
+/* Encodes one host-originated frame and queues it for the Zynq, applying the
+ * LINK_CFG SPI-clock latch first. Shared by the TCP and USB host legs so both
+ * transports forward identical frames. */
+esp_err_t la_link_forward_host_frame(uint8_t type, uint8_t sequence,
+                                     const uint8_t *payload, uint16_t length,
+                                     TickType_t timeout);
 
 /* P9.1: requests a new SPI master clock for the bulk link (Hz). The request is
  * applied by LinkSpiTask before its next transaction (device re-add). A zero

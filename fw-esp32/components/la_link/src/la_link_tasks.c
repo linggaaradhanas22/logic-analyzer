@@ -595,6 +595,26 @@ esp_err_t la_link_send_to_zynq(const uint8_t *frame, size_t length, TickType_t t
     }
 }
 
+esp_err_t la_link_forward_host_frame(uint8_t type, uint8_t sequence,
+                                     const uint8_t *payload, uint16_t length,
+                                     TickType_t timeout)
+{
+    uint8_t frame[LA_PROTO_MAX_PAYLOAD + LA_PROTO_FRAME_OVERHEAD];
+    size_t frame_bytes;
+
+    /* P9.1: the LINK_CFG clock byte selects the SPI master clock before the
+     * frame is forwarded to the Zynq (which ignores the field). */
+    if (type == LA_PROTO_LINK_CFG && length >= 2u && payload[1] != 0u) {
+        (void)la_link_spi_set_clock((uint32_t)payload[1] * 1000000u);
+    }
+    frame_bytes = la_proto_encode(type, sequence, payload, length, frame,
+                                  sizeof(frame));
+    if (frame_bytes == 0u) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    return la_link_send_to_zynq(frame, frame_bytes, timeout);
+}
+
 esp_err_t la_link_send_control(uint8_t type)
 {
     size_t frame_bytes;

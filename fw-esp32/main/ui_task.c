@@ -10,6 +10,7 @@
 #include "la_board.h"
 #include "la_link.h"
 #include "la_net.h"
+#include "la_usb.h"
 #include "la_web.h"
 
 static const char *TAG = "la_ui";
@@ -41,6 +42,7 @@ static void ui_task(void *argument)
     la_net_policy_stats_t policy;
     la_net_policy_state_t state;
     la_net_counters_t net;
+    la_usb_counters_t usb;
     la_web_counters_t web;
     uint32_t led_phase = 0u;
     uint32_t stats_phase = 0u;
@@ -48,6 +50,7 @@ static void ui_task(void *argument)
     (void)argument;
     esp_task_wdt_add(NULL);
 
+#if LA_BOARD_LED_GPIO >= 0
     gpio_config_t led = {
         .pin_bit_mask = 1ULL << LA_BOARD_LED_GPIO,
         .mode = GPIO_MODE_OUTPUT,
@@ -56,19 +59,23 @@ static void ui_task(void *argument)
         .intr_type = GPIO_INTR_DISABLE,
     };
     (void)gpio_config(&led);
+#endif
 
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(250));
         la_link_stats(&up, &down, &link);
         la_net_stats(&policy, &state, &net);
+        la_usb_stats(&usb);
         la_web_stats(&web);
 
+#if LA_BOARD_LED_GPIO >= 0
 #if LA_BOARD_LED_ACTIVE_LOW
         int level = (state == LA_NET_POLICY_CLIENT_ACTIVE) ? 0 : (int)(led_phase & 1u);
 #else
         int level = (state == LA_NET_POLICY_CLIENT_ACTIVE) ? 1 : (int)(led_phase & 1u);
 #endif
         (void)gpio_set_level(LA_BOARD_LED_GPIO, level);
+#endif
         led_phase += 1u;
 
         if ((stats_phase++ % 40u) == 0u) {
@@ -85,7 +92,9 @@ static void ui_task(void *argument)
                  "spi=%u/%u/%u | net %s clients=%u/%u "
                  "disc=%u wifiat=%u/%u wifidrop=%u rx_frames=%u tx_frames=%u to_host_discard=%u "
                  "open=%u accfail=%u/%d closefail=%u/%d closemax=%u sretry=%u "
-                 "drains=%u loops=%u sready=%u serr=%u refresh=%u | "
+                 "drains=%u loops=%u sready=%u serr=%u refresh=%u usbrej=%u | "
+                 "usb %d at=%u det=%u disc=%u rx=%u/%u tx=%u/%u ffail=%u part=%u "
+                 "stall=%u wto=%u rxd=%u rxerr=%u hwm=%u | "
                  "rssi=%d heap=%u stacks rx=%u tx=%u net=%u ui=%u "
                  "spi2 lo=%u ch=%u cf=%u sto=%u rst=%u frm=%u crc=%u "
                  "web=%u/%u/%u",
@@ -110,7 +119,16 @@ static void ui_task(void *argument)
                  (unsigned)net.close_max_ms, (unsigned)net.send_retries,
                  (unsigned)net.accept_drains, (unsigned)net.loops,
                  (unsigned)net.select_ready, (unsigned)net.select_errors,
-                 (unsigned)net.listener_refreshes, (int)net.rssi,
+                 (unsigned)net.listener_refreshes, (unsigned)net.usb_rejections,
+                 la_usb_host_active(),
+                 (unsigned)usb.attaches, (unsigned)usb.detaches,
+                 (unsigned)usb.discarded, (unsigned)usb.host_rx_frames,
+                 (unsigned)usb.host_rx_bytes, (unsigned)usb.host_tx_frames,
+                 (unsigned)usb.host_tx_bytes, (unsigned)usb.host_frame_failures,
+                 (unsigned)usb.tx_partial, (unsigned)usb.write_stalls,
+                 (unsigned)usb.write_timeouts, (unsigned)usb.rx_dropped,
+                 (unsigned)usb.rx_errors, (unsigned)usb.usb_stack_hwm,
+                 (int)net.rssi,
                  (unsigned)esp_get_free_heap_size(), (unsigned)link.rx_stack_hwm,
                  (unsigned)link.tx_stack_hwm, (unsigned)net.net_stack_hwm,
                  (unsigned)uxTaskGetStackHighWaterMark(NULL),
