@@ -104,6 +104,22 @@ remains the default and rollback. Next: U01 local platform-feasibility evidence
 and the `[HUMAN]` board/power/identity checklist; U02 contract design may
 proceed locally, but no U03 device load until the U01/U02 entry gates pass.
 
+### USB migration execution - U01 (2026-09-18)
+
+**U01 complete.** The actual XSA and generated FreeRTOS BSP confirm `usbps` /
+`XUsbPs` (USB0 enabled at 60 MHz, MIO 28..39, reset MIO 46, encoded IRQ
+`0x4015`, MIT-licensed driver sources) and the installed `usbps_v2_9` examples
+contain no CDC example. The old AMD CDC techtip is a bare-metal SDK 2015.1
+reference that needed a custom Windows driver (it did not auto-bind
+`usbser.sys`) and must not be imported. Physical checklist: REV D.0, JP1 open
+(unsoldered), JP2 open (shunt removed), JP5=JTAG, JP6=USB (power from J12),
+J11 empty, J10 connected through the USB hub by the user's direction with a
+direct PC port as the first isolation step, FTDI `COM7` (0403:6010, serial
+`210351BE7ACEB`), no board modification, fresh power with no image. Identity
+basis: pid.codes test PID `0x1209:0x0001` for in-house development only, with
+the release identity recorded as an open U07/U09 gate. Evidence:
+`build/reports/usb-u01-feasibility.md`. No hardware PASS is claimed. Next: U02.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |
@@ -344,17 +360,19 @@ the implementation is not present.
 
 ## Next Session Checklist
 
-**USB execution handoff (2026-09-18):** U00 is complete - baseline preserved at
-`b611390` with hashes under `build/usb-migration/baseline/`, `test-native`
-15/15 and `test-host` 84/84 PASS, report `build/reports/usb-u00-baseline.md`.
+**USB execution handoff (2026-09-18):** U00 and U01 are complete - baseline
+preserved at `b611390` (hashes under `build/usb-migration/baseline/`,
+`test-native` 15/15, `test-host` 84/84) and platform/physical feasibility
+recorded in `build/reports/usb-u01-feasibility.md` (REV D.0, JP2 open, J10 via
+hub by user direction, pid.codes test PID `0x1209:0x0001` for development only).
 The gateway profile stays the default and rollback; nothing was flashed and the
-S3 SPI fault remains open. The next packet is U01: local platform-feasibility
-evidence plus the `[HUMAN]` board/power/identity checklist; U02 contract design
-may proceed locally, but no U03 candidate load until the U01/U02 entry gates
-pass. Read `docs/usb-migration-implementation-instructions.md` and
-`docs/usb-link.md` and follow the user's current execution instruction. Older
-dated bench/portal instructions below are historical context, not new
-authorization to flash or publish.
+S3 SPI fault remains open. Execution is continuous per the user's 2026-09-18
+instruction (stop on request): the next packet is U02 contract freeze, then U03
+implementation and a [HUMAN] JTAG enumeration session. Read
+`docs/usb-migration-implementation-instructions.md` and `docs/usb-link.md` and
+follow the user's current execution instruction. Older dated bench/portal
+instructions below are historical context, not new authorization to flash or
+publish.
 
 1. Read `AGENTS.md`, `docs/plan.md` and this file before editing.
 2. Confirm the checkout root and run `python tools/run.py check-env -- --write-lock`.
@@ -371,7 +389,7 @@ authorization to flash or publish.
 |---|---|
 | Normative requirements | `docs/plan.md` |
 | Session state and blockers | `docs/status.md` |
-| Direct USB execution sequence | `docs/usb-migration-implementation-instructions.md` (U00 complete 2026-09-18; U01 next) |
+| Direct USB execution sequence | `docs/usb-migration-implementation-instructions.md` (U00/U01 complete 2026-09-18; U02 next) |
 | Proposed direct USB interface and feasibility evidence | `docs/usb-link.md` |
 | Canonical commands and environment import | `tools/run.py` |
 | Tool versions and smoke state | `tools/toolchain-lock.json` |
@@ -387,6 +405,7 @@ authorization to flash or publish.
 
 | Date | Work completed | Result |
 |---|---|---|
+| 2026-09-18 | U01 board and platform feasibility complete (continuous execution authorized by the 2026-09-18 user instruction, stop on request). Inspected the actual `logic_analyzer.xsa` (`system.hwh`: USB0 enabled, 60 MHz, MIO 28..39, reset MIO 46, USB1 disabled), the generated FreeRTOS BSP (`XPAR_XUSBPS_0_BASEADDR 0xe0002000`, encoded IRQ `0x4015`, MIT-licensed `usbps`/`XUsbPs` sources, no CDC example) and the installed `usbps_v2_9` examples; evaluated the old AMD CDC techtip (bare-metal SDK 2015.1, custom Windows driver, click-through RefDesLicense, AR#61313 ULPI caveat) as reference only. Recorded the physical checklist: REV D.0, JP1 unsoldered/open, JP2 shunt removed, JP5=JTAG, JP6=USB (power from J12), J11 empty, J10 on the USB hub by user direction (direct PC port is the first isolation step), FTDI `COM7` serial `210351BE7ACEB`, no board modification, fresh power with no image. Identity basis: pid.codes test PID `0x1209:0x0001` for in-house use only; release identity open. Host check: `la-cli ports` shows only COM7 and the gateway is not attached, so the optional gateway baseline is BLOCKED, not failed. | PASS (local evidence + checklist): `build/reports/usb-u01-feasibility.md`. No firmware built, no image loaded, no hardware PASS claimed. Open: HS vs FS until U03, release VID/PID, hub-first deviation recorded in the report. Next: U02 contract freeze. |
 | 2026-09-18 | U00 execution baseline complete (first authorized U packet). Authorized scope: execute the first incomplete eligible U packet (U00) of `docs/usb-migration-implementation-instructions.md`; hardware load, product adoption, publication and release were not authorized. Synced: `git fetch` clean, `main` at `b611390` matching `origin/main`, worktree clean except the preserved untracked `docs/hardwarex/` and `docs/learning/`. Preserved and hashed the rollback identity under ignored `build/usb-migration/baseline/` (P9.1 JA-1-fixed bitstream `06488a9...`, XSA `0719cbd...`, loaded Zynq ELF `9067cfa...`, BOOT.BIN `bc1d1a1...`, S3 gateway `0c96ed8...`, classic package set, timing/DRC/utilization, toolchain/board locks) with `SHA256SUMS.txt`; no rebuild ran, so `build/vitis/ws` is untouched. Ran the required off-board baseline checks. | PASS: `test-native` 15/15 (`build/reports/test-native.json`) and `test-host` 84/84 (`build/reports/test-host.json`), copies under `build/reports/usb-migration/U00/`; report `build/reports/usb-u00-baseline.md`; no pre-existing failures to isolate. No flash, JTAG load, E2E or bench step ran. Open blockers carried: S3 SPI 2:1 byte drop (open, not relabeled fixed), S3 USB-OTG full-speed ~1.2 MB/s below the 1.5 MB/s gate, U01 `[HUMAN]` board/power/identity checklist, U02 ISR-deferral/identity decisions, P10.4 release hold. Next: U01 local feasibility evidence plus the physical checklist; U02 design may proceed locally, no U03 load until U01/U02 gates pass. Committed and pushed as `72a4bc3 U00: establish the USB migration execution baseline`; `git ls-remote origin refs/heads/main` matched `git rev-parse HEAD`, and this status-only close-out records that verified push. |
 | 2026-09-17 | Prepared the direct-Zynq USB planning package: new `docs/usb-migration-implementation-instructions.md` (U00-U09) and `docs/usb-link.md`; linked from `docs/plan.md` and `README.md`; updated this ledger and clarified the root v0.4 snapshot. Reviewed preset/generated BSP/installed `usbps_v2_9`, app routing and primary AMD/Digilent/Microsoft references. Corrected the proposed driver, power and CDC-example assumptions; specified ownership/IRQ feasibility, failure recovery, exact performance measurement, adoption, documentation and release gates. | Planning complete, pushed as `8eaf3ea`; remote hash verified. Documentation checks PASS: `.venv/Scripts/python.exe build/reports/usb-planning-review.py` (20 local links, ten ordered packets with entry/exit gates; `build/reports/usb-planning-review.json`), `git diff --check`, `git diff --cached --check`; manual scope and technical review complete. Firmware and hardware unverified; no implementation authorized or started. Tracked worktree clean after push; existing untracked `docs/hardwarex/` and `docs/learning/` preserved and excluded. This status-only close-out records the push. Next implementation action, when authorized: U00. |
 | 2026-09-17 | P9.1 ESP32-S3 bench bring-up (CDC host transport works; SPI bulk link still open). (a) CDC: `la-cli ping/status/capture` work over `serial://COM11` on a **direct PC USB port**; behind a Genesys Logic USB hub every usbser.sys CDC device (ours and the ESP32 ROM's USB-Serial-JTAG) fails (`GetCommState` hangs, then errors 22/31 with re-enumeration) while the vendor-driver CH343/FTDI ports work - the hub is unusable for the CDC link. (b) Power: with only the CH343 cable connected the S3 browns out (`E BOD: Brownout detector was triggered`, `rst:0x3`) under Wi-Fi TX peaks; both USB cables must be connected. (c) Two stack overflows found on the bench: LiveView (the ~1 KiB `la_proto_parser_t` on its 3 KiB stack; now a static parser) and UiTask (3072 B with <120 B headroom; now 4096 B) - both panicked and re-enumerated USB. (d) `host/la_cli/transport.py` imported `serial` inside `__init__`, so its exception handlers raised `NameError` on any serial fault; now a module-level import. (e) The DevKitC-1 RGB LED (WS2812) is cleared with one black frame at boot (RMT, both known GPIOs). (f) New Kconfig `LA_SPI_LOOPBACK_TEST` (MOSI<->MISO jumper, Zynq SPI wires off) proves the S3 SPI master and GPIO11/GPIO13: **0/64 mismatches**. (g) Bench results: a 4 KB UART+CDC burst capture is bit-exact; the **SPI bulk link still fails** - the S3 receives the payload with every other byte dropped (the chunk dump matches the known-good UART stream's even bytes plus a constant phase), the five SPI wires pass a continuity check, the Zynq slave shows tx/underrun/half-empty activity, and the same slave delivered bit-exact captures with the classic ESP32 on 2026-09-13; root cause not yet identified (mode 0/1, 64/1024-byte chunks, an explicit TX DMA buffer and ready-optional reads all still fail). | Local gates PASS: `fw-esp32` (`build/reports/fw-esp32.json`), `test-esp32-mocks`, `test-native`, `test-host` (84 passed), compileall clean. Bench PASS: CDC ping/status/abort, UART+CDC 4 KB capture, SPI loopback self-test. Bench OPEN: the SPI bulk link (evidence above); next step is signal-level instrumentation (scope or the Zybo's own analyzer) or an A/B rerun with the classic ESP32 to find the byte-drop cause. |
