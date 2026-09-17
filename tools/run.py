@@ -607,15 +607,24 @@ def _run_target(target: str, forwarded: Sequence[str]) -> int:
             if smoke_code != 0:
                 return smoke_code
             return _blocked(target, f"XSA is missing: run `python tools/run.py bit` first ({xsa})")
-        command = _command(vitis, ["-s", str(script), "--", str(PROJECT_ROOT), str(xsa)])
+        command = _command(
+            vitis,
+            ["-s", str(script), "--", str(PROJECT_ROOT), str(xsa), *forwarded],
+        )
         return _run_steps(target, [(command, BUILD_ROOT / "vitis")])
     if target == "jtag-zynq":
         xsdb = _tool("xsdb")
         script = PROJECT_ROOT / "fw-zynq" / "scripts" / "jtag_load.tcl"
+        profile = "gateway"
+        if "--profile" in forwarded:
+            index = forwarded.index("--profile")
+            if index + 1 < len(forwarded):
+                profile = forwarded[index + 1]
+        app_name = "la_app_usb" if profile == "usb" else "la_app"
         artifacts = (
             BUILD_ROOT / "release" / "logic_analyzer.bit",
             BUILD_ROOT / "vitis" / "ws" / "lap" / "zynq_fsbl" / "build" / "fsbl.elf",
-            BUILD_ROOT / "vitis" / "ws" / "la_app" / "build" / "la_app.elf",
+            BUILD_ROOT / "vitis" / "ws" / app_name / "build" / f"{app_name}.elf",
         )
         if xsdb is None:
             return _blocked(target, "XSDB is missing; install AMD Vitis Embedded 2026.1 or set XSDB_EXE")
@@ -626,7 +635,7 @@ def _run_target(target: str, forwarded: Sequence[str]) -> int:
                 "required artifact(s) missing; run `python tools/run.py bit` and "
                 f"`python tools/run.py fw-zynq` first: {', '.join(missing)}",
             )
-        command = _command(xsdb, [str(script), str(PROJECT_ROOT)])
+        command = _command(xsdb, [str(script), str(PROJECT_ROOT), *forwarded])
         return _run_steps(target, [(command, BUILD_ROOT / "vitis")], timeout=120.0)
     if target == "fw-esp32":
         idf = _tool("idf.py")

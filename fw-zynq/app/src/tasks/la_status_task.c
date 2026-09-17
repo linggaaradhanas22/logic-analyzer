@@ -53,6 +53,20 @@ void la_status_task(void *parameters)
                    (unsigned)app->tx_retransmits, (unsigned)app->tx_drops,
                    (unsigned)app->irq.pl_count, (unsigned)app->irq.dma_count,
                    (unsigned)app->live_max_latency_us);
+#if LA_TRANSPORT_USB
+        xil_printf("LA status: usb setup=%u irq=%u rx=%u ovf=%u txb=%u txd=%u"
+                   " uns=%u err=%u sess=%u hs=%u\r\n",
+                   (unsigned)app->usb.setup_count,
+                   (unsigned)app->usb.isr_events,
+                   (unsigned)app->usb.rx_bytes,
+                   (unsigned)app->usb.rx_overflows,
+                   (unsigned)app->usb.tx_bytes,
+                   (unsigned)app->usb.tx_drops,
+                   (unsigned)app->usb.unsupported,
+                   (unsigned)app->usb.ep0_errors,
+                   (unsigned)app->usb.session_events,
+                   (unsigned)la_usb_high_speed(&app->usb));
+#endif
         xil_printf("LA status: dec words %u %u %u busy_us %u %u %u\r\n",
                    (unsigned)app->decoder_words[0],
                    (unsigned)app->decoder_words[1],

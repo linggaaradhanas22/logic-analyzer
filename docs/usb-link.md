@@ -249,9 +249,11 @@ released.
 for CDC notifications. One CDC-ACM function with IAD: device class `0x02`,
 control interface `0x02/0x02/0x01` with header/call-management/ACM/union
 functional descriptors, data interface `0x0A`; device, configuration,
-other-speed, device-qualifier and string descriptors, `wTotalLength` fixed at
-66 bytes. Automatic `usbser.sys` binding is the gate (the old AMD techtip
-needed a custom driver and is not copied).
+other-speed, device-qualifier and string descriptors. The implemented
+configuration descriptor is 75 bytes (`la_usb_desc.c`; the U02 draft said 66,
+corrected during U03) and Windows bound `usbser.sys` to it on the bench
+(2026-09-18). Automatic `usbser.sys` binding is the gate (the old AMD CDC
+techtip needed a custom driver and is not copied).
 
 **Identity.** Development/test identity `0x1209:0x0001` (pid.codes test PID)
 with a fixed serial string and a warning in source that it is not universally
@@ -276,8 +278,10 @@ init; U03 adds it to `la_mem_geom` with host tests. TX frames use a static
 8 x 1088-byte pool: TxTask fills a complete frame and hands the handle to
 UsbTask; UsbTask owns it until IN completion, then returns it. Admission is
 all-or-nothing with a bounded wait inside the existing 2 s no-progress limit;
-a partial frame is never submitted. RX completions go through the 16-entry
-ring into `app->rx_sb` (8 KiB, single writer UsbTask, single reader CmdTask);
+a partial frame is never submitted. RX completions go through the 24-entry
+ring (worst case of 2 EP0 plus 16 bulk OUT descriptors; the U02 draft said 16,
+corrected during U03) into `app->rx_sb` (8 KiB, single writer UsbTask,
+single reader CmdTask);
 a full `rx_sb` stops pops/re-primes so the controller NAKs. Ring capacities
 match the descriptor counts so a full ring cannot lose completions; overflow
 is counted, never silent. Payloads live in non-cached DDR, so no application

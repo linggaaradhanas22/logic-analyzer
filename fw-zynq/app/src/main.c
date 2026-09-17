@@ -135,6 +135,7 @@ int main(void)
         }
     }
 
+#if !LA_TRANSPORT_USB
     {
         /* P9.1: the SPI slave must be present and report slave mode. This is
          * a report, not a fatal gate: the P9.2 bitstream has no SPI core and
@@ -150,6 +151,7 @@ int main(void)
             xil_printf("LA warning: SPI slave not ready (P9.1 bitstream?)\r\n");
         }
     }
+#endif
 
     la_trace_init();
     if (la_app_init(&s_app) != 0) {
@@ -157,8 +159,15 @@ int main(void)
         for (;;) {
         }
     }
+#if LA_TRANSPORT_USB
+    xil_printf("LA transport: direct USB CDC-ACM (test PID 0x1209:0x0001, "
+               "development only)\r\n");
+    xil_printf("LA app ready: %u tasks\r\n",
+               (unsigned)uxTaskGetNumberOfTasks());
+#else
     xil_printf("LA app ready: %u tasks, UART0 %u RTS/CTS\r\n",
                (unsigned)uxTaskGetNumberOfTasks(), (unsigned)LA_LINK_BAUD);
+#endif
     vTaskStartScheduler();
     for (;;) {
     }

@@ -21,13 +21,13 @@ import la_platform as platform_mod  # noqa: E402  (project module in same dir)
 
 
 def main() -> int:
-    root, xsa = platform_mod.usage(sys.argv)
+    root, xsa, profile = platform_mod.usage(sys.argv)
     client = platform_mod.make_client()
     try:
         platform_mod.ensure_clean_workspace(client, root)
         platform = platform_mod.create_platform_and_domain(client, root, xsa)
-        platform_mod.create_app_and_build(client, root, platform)
-        elf = platform_mod.verify_elf_and_report(root)
+        platform_mod.create_app_and_build(client, root, platform, profile)
+        elf = platform_mod.verify_elf_and_report(root, profile)
     finally:
         try:
             import vitis

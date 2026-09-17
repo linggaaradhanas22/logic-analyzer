@@ -122,6 +122,7 @@ typedef struct la_cmd_dispatch {
     uint8_t patgen_valid;
     uint8_t evt_format; /* LA_PROTO_EVT_FORMAT_* latched by EVT_CFG (P9.2) */
     uint8_t link_transport; /* LA_PROTO_LINK_* latched by LINK_CFG (P9.1) */
+    uint8_t link_cfg_allowed; /* 0 in the direct-USB profile (U03) */
     uint64_t pool_bytes; /* burst capture pool capacity; 0 disables the check */
     la_proto_decoder_config_t decoders[LA_PROTO_DECODER_MAX_SLOTS];
     uint8_t decoder_valid[LA_PROTO_DECODER_MAX_SLOTS];
@@ -137,6 +138,11 @@ LA_CMD_API void la_cmd_dispatch_init(la_cmd_dispatch_t *dispatch,
  * touched. */
 LA_CMD_API void la_cmd_dispatch_set_pool(la_cmd_dispatch_t *dispatch,
                                          uint64_t pool_bytes);
+
+/* 0 rejects LINK_CFG with UNSUPPORTED before any state change (direct-USB
+ * profile: the gateway UART/SPI routing does not exist there). */
+LA_CMD_API void la_cmd_dispatch_set_link_cfg_allowed(
+    la_cmd_dispatch_t *dispatch, int allowed);
 
 /* Route one accepted frame. Returns 0 on success, -1 on invalid arguments.
  * result.outcome is OUT_NONE when there is nothing to do. */

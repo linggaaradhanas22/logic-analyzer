@@ -353,6 +353,11 @@ void la_cmd_task(void *parameters)
     la_cmd_dispatch_init(&ctx->dispatch, LA_FW_VERSION,
                          la_regs_read_id(&app->regs));
     la_cmd_dispatch_set_pool(&ctx->dispatch, LA_MEM_CAPTURE_SIZE);
+#if LA_TRANSPORT_USB
+    /* Direct-USB profile: LINK_CFG must not redirect frames to absent
+     * gateway hardware; reject it before any state change. */
+    la_cmd_dispatch_set_link_cfg_allowed(&ctx->dispatch, 0);
+#endif
 
     for (;;) {
         size_t received = xStreamBufferReceive(app->rx_sb, ctx->rx_chunk,

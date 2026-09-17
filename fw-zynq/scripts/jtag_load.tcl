@@ -6,9 +6,20 @@ if {$argc < 1} {
 }
 
 set project_root [file normalize [lindex $argv 0]]
+set profile "gateway"
+if {[llength $argv] >= 3 && [lindex $argv 1] eq "--profile"} {
+    set profile [lindex $argv 2]
+}
+if {$profile eq "usb"} {
+    set app_name "la_app_usb"
+} elseif {$profile eq "gateway"} {
+    set app_name "la_app"
+} else {
+    error "jtag-zynq blocked: unknown profile: $profile"
+}
 set bitstream [file normalize [file join $project_root build release logic_analyzer.bit]]
 set fsbl [file normalize [file join $project_root build vitis ws lap zynq_fsbl build fsbl.elf]]
-set application [file normalize [file join $project_root build vitis ws la_app build la_app.elf]]
+set application [file normalize [file join $project_root build vitis ws $app_name build $app_name.elf]]
 
 foreach {label artifact} [list bitstream $bitstream FSBL $fsbl application $application] {
   if {![file exists $artifact]} {

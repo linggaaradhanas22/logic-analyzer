@@ -1,0 +1,122 @@
+#ifndef LA_USB_DEV_H
+#define LA_USB_DEV_H
+
+/*
+ * U03 direct-USB CDC-ACM device driver (XUsbPs wrapper).
+ *
+ * Interrupt discipline (docs/usb-link.md section 9): the GIC handler is the
+ * vendor XUsbPs_IntrHandler, which performs bounded register work and invokes
+ * the endpoint callbacks below. The callbacks only (a) copy the 8-byte setup
+ * packet, (b) pop a completed OUT buffer with XUsbPs_EpBufferReceive - which
+ * must happen in interrupt context because the vendor RX dispatcher advances
+ * its descriptor cursor per callback - and (c) push a completion record and
+ * notify UsbTask. Class processing, payload copies, stream-buffer writes,
+ * submissions and re-priming all run in UsbTask.
+ *
+ * Buffer ownership: the driver's DMA pool lives in the non-cached DDR window;
+ * RX completions travel by handle and are released only by UsbTask. TX frames
+ * are copied into the static pool by TxTask (la_usb_enqueue), submitted by
+ * UsbTask and returned by the IN completion callback through the counting
+ * semaphore. A partial frame is never submitted.
+ */
+
+#include "FreeRTOS.h"
+#include "semphr.h"
+#include "stream_buffer.h"
+#include "task.h"
+
+#include "la_usb_core.h"
+#include "xparameters.h"
+#include "xusbps.h"
+
+#include <stddef.h>
+#include <stdint.h>
+
+#define LA_USB_EP0_BUF_SIZE 64u
+#define LA_USB_EP0_BUF_COUNT 2u
+#define LA_USB_BULK_BUF_SIZE 512u
+#define LA_USB_BULK_BUF_COUNT 16u
+#define LA_USB_NOTIFY_BUF_COUNT 2u
+#define LA_USB_NOTIFY_BUF_SIZE 16u
+#define LA_USB_DMA_POOL_BYTES (64u * 1024u)
+#define LA_USB_TX_FRAME_BYTES 1088u
+#define LA_USB_TX_FRAME_COUNT 8u
+#define LA_USB_TX_WAIT_MS 500u
+#define LA_USB_GIC_ENCODED XPAR_XUSBPS_0_INTERRUPTS
+
+/* UsbTask notification bits (interrupt callbacks and TxTask). */
+#define LA_USB_NOTIFY_EP0_SETUP ((uint32_t)0x00000001u)
+#define LA_USB_NOTIFY_RX_DONE ((uint32_t)0x00000002u)
+#define LA_USB_NOTIFY_TX_DONE ((uint32_t)0x00000004u)
+#define LA_USB_NOTIFY_SESSION ((uint32_t)0x00000008u)
+#define LA_USB_NOTIFY_TX_FRAME ((uint32_t)0x00000010u)
+#define LA_USB_NOTIFY_ALL ((uint32_t)0x0000001Fu)
+
+typedef struct la_usb_dev {
+    XUsbPs usb;
+    XUsbPs_DeviceConfig device_config;
+    TaskHandle_t task;
+    StreamBufferHandle_t rx_sb;
+    la_usb_session_t session;
+    la_usb_ring_t rx_ring;
+
+    StaticSemaphore_t tx_sem_struct;
+    SemaphoreHandle_t tx_free_sem;
+    uint8_t tx_frames[LA_USB_TX_FRAME_COUNT][LA_USB_TX_FRAME_BYTES]
+        __attribute__((aligned(64)));
+    volatile uint8_t tx_slot_state[LA_USB_TX_FRAME_COUNT]; /* 0 free, 1 ready, 2 in flight */
+    volatile uint32_t tx_slot_len[LA_USB_TX_FRAME_COUNT];
+    volatile int32_t tx_inflight;
+
+    volatile uint8_t setup_pending;
+    volatile uint8_t session_pending;
+    volatile uint32_t session_status;
+    XUsbPs_SetupData setup;
+
+    volatile uint8_t line_coding[7];
+    volatile uint16_t control_line_state;
+
+    volatile uint32_t rx_bytes;
+    volatile uint32_t rx_overflows;
+    volatile uint32_t tx_bytes;
+    volatile uint32_t tx_drops;
+    volatile uint32_t setup_count;
+    volatile uint32_t unsupported;
+    volatile uint32_t ep0_errors;
+    volatile uint32_t session_events;
+    volatile uint32_t isr_events;
+} la_usb_dev_t;
+
+/* Creates the driver objects, configures the endpoints from the non-cached
+ * pool, installs the GIC handler and starts the controller. Returns 0 or a
+ * negative error. The task handle is used for ISR notifications. */
+int la_usb_dev_init(la_usb_dev_t *dev, StreamBufferHandle_t rx_sb,
+                    TaskHandle_t task);
+
+/* Re-initializes the endpoint ring after a bus reset and primes EP1 OUT. */
+int la_usb_reconfigure(la_usb_dev_t *dev);
+
+/* TX producer API (TxTask): copies one complete frame into a free slot and
+ * notifies UsbTask. Bounded wait for a free slot; returns 0 or -1. */
+int la_usb_enqueue(la_usb_dev_t *dev, const uint8_t *frame, size_t length);
+
+/* TX service (UsbTask): submits the next ready frame when the endpoint is
+ * idle. */
+void la_usb_tx_pump(la_usb_dev_t *dev);
+
+/* Drops queued/in-flight TX frames after a session invalidation and returns
+ * every slot to the free pool. */
+void la_usb_tx_reset(la_usb_dev_t *dev);
+
+/* RX service (UsbTask): releases a popped completion and re-primes the
+ * endpoint. */
+void la_usb_rx_release(la_usb_dev_t *dev, const la_usb_completion_t *completion);
+
+/* EP0 control responses (UsbTask). */
+int la_usb_ep0_send(la_usb_dev_t *dev, const uint8_t *data, size_t length);
+void la_usb_ep0_stall(la_usb_dev_t *dev, uint8_t direction);
+
+/* True when the port negotiated high speed (read in task context). */
+int la_usb_high_speed(la_usb_dev_t *dev);
+
+#endif /* LA_USB_DEV_H */

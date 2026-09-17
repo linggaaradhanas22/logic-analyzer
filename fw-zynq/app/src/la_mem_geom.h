@@ -39,6 +39,18 @@
 #define LA_MEM_SG_OFFSET UINT32_C(0x00800000)
 #define LA_MEM_SG_SIZE UINT32_C(0x00100000)      /* SG descriptors, 1 MiB */
 
+/* U03 direct-USB DMA pool (XUsbPs dQH/dTD/buffers), 64 KiB after the SG
+ * pool. The whole window is programmed non-cached at boot, so no cache
+ * maintenance is needed for the USB payloads and descriptors. */
+#define LA_MEM_USB_OFFSET UINT32_C(0x00900000)
+#define LA_MEM_USB_SIZE UINT32_C(0x00010000)
+
+typedef char la_mem_usb_pool_fits[
+    ((LA_MEM_USB_OFFSET + LA_MEM_USB_SIZE) <= LA_MEM_NC_SIZE &&
+     LA_MEM_USB_OFFSET >= (LA_MEM_SG_OFFSET + LA_MEM_SG_SIZE))
+        ? 1
+        : -1];
+
 /* P8.5 cached-vs-non-cached experiment. 0 keeps the whole window
  * Non-cacheable. 1 (the measured winner, see rtos-design.md P8.5 results)
  * programs the live-pool prefix (16 x 256 KiB = 4 MiB, the same region

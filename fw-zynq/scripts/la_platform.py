@@ -372,13 +372,19 @@ def _collect_app_files(root: Path) -> list[str]:
     return files
 
 
-def _patch_user_config(app_dir: Path, sources: list[str]) -> None:
-    """Deterministic USER_COMPILE_SOURCES/INCLUDE_DIRECTORIES after import.
+def app_component_name(profile: str) -> str:
+    """Application component name for a build profile (U02 contract)."""
+    return "la_app_usb" if profile == "usb" else APP_NAME
+
+
+def _patch_user_config(app_dir: Path, sources: list[str], profile: str) -> None:
+    """Deterministic USER_COMPILE_* blocks after import.
 
     import_files updates UserConfig.cmake itself, but the generated list
-    ordering depends on the import calls; rewriting the two blocks keeps the
+    ordering depends on the import calls; rewriting the blocks keeps the
     build reproducible and independent of that behaviour. All imported
-    sources live flat in src/, so the CMake source directory is enough.
+    sources live flat in src/, so the CMake source directory is enough. The
+    USB profile adds the LA_TRANSPORT_USB compile definition.
     """
     import re
 
@@ -393,15 +399,21 @@ def _patch_user_config(app_dir: Path, sources: list[str]) -> None:
                   count=1, flags=re.S)
     text = re.sub(r'set\(USER_INCLUDE_DIRECTORIES.*?\)\n',
                   'set(USER_INCLUDE_DIRECTORIES\n".."\n)\n', text, count=1, flags=re.S)
+    defines = "LA_TRANSPORT_USB=1" if profile == "usb" else ""
+    text = re.sub(r"set\(USER_COMPILE_DEFINITIONS.*?\)\n",
+                  'set(USER_COMPILE_DEFINITIONS\n"' + defines + '"\n)\n',
+                  text, count=1, flags=re.S)
     config.write_text(text, encoding="utf-8", newline="\n")
-    print(f"VITIS UserConfig sources installed: {len(sources)} files")
+    print(f"VITIS UserConfig sources installed: {len(sources)} files "
+          f"(profile {profile})")
 
 
-def create_app_and_build(client, root: Path, platform) -> None:
-    """Create the la_app application component from the repo sources."""
+def create_app_and_build(client, root: Path, platform, profile: str) -> None:
+    """Create the application component for the selected profile."""
+    name = app_component_name(profile)
     xpfm = client.find_platform_in_repos(PLATFORM_NAME)
     app = client.create_app_component(
-        name=APP_NAME, platform=xpfm, domain=DOMAIN_NAME
+        name=name, platform=xpfm, domain=DOMAIN_NAME
     )
     files = _collect_app_files(root)
     for group in APP_SOURCE_GROUPS:
@@ -414,8 +426,8 @@ def create_app_and_build(client, root: Path, platform) -> None:
         if names:
             app.import_files(from_loc=str(directory), files=names,
                              dest_dir_in_cmp="src")
-    app_dir = workspace_path(root) / APP_NAME
-    _patch_user_config(app_dir, files)
+    app_dir = workspace_path(root) / name
+    _patch_user_config(app_dir, files, profile)
     # import_files refuses to overwrite the Vitis-generated src/lscript.ld,
     # so the P4.3 linker script (NC carve + ASSERTs) replaces it in place.
     lscript = app_dir / "src" / "lscript.ld"
@@ -424,19 +436,20 @@ def create_app_and_build(client, root: Path, platform) -> None:
     shutil.copyfile(root / "fw-zynq" / "lscript.ld", lscript)
     print(f"VITIS P4.3 linker script installed at {lscript}")
     app.build()
-    print(f"VITIS app built: {APP_NAME}")
+    print(f"VITIS app built: {name} (profile {profile})")
 
 
-def verify_elf_and_report(root: Path) -> Path:
+def verify_elf_and_report(root: Path, profile: str) -> Path:
+    name = app_component_name(profile)
     ws = workspace_path(root)
-    elves = list(ws.rglob(f"{APP_NAME}.elf"))
+    elves = list(ws.rglob(f"{name}.elf"))
     if not elves:
         raise SystemExit(
-            f"fw-zynq blocked: {APP_NAME}.elf not found under {ws}; "
+            f"fw-zynq blocked: {name}.elf not found under {ws}; "
             "inspect the build log for compiler/linker errors"
         )
     elf = elves[0]
-    print(f"FW-ZYNQ ELF: {elf}")
+    print(f"FW-ZYNQ ELF ({profile}): {elf}")
     return elf
 
 
@@ -448,18 +461,31 @@ def make_client():
     return vitis.create_client()
 
 
-def usage(argv) -> tuple[Path, Path]:
-    if len(argv) < 3:
-        raise SystemExit("usage: vitis -s <script>.py -- PROJECT_ROOT XSA")
-    root = Path(argv[-2]).resolve()
-    xsa = Path(argv[-1]).resolve()
+def usage(argv) -> tuple[Path, Path, str]:
+    tokens = list(argv[1:])
+    profile = "gateway"
+    if "--profile" in tokens:
+        index = tokens.index("--profile")
+        if index + 1 >= len(tokens):
+            raise SystemExit("fw-zynq blocked: --profile needs a value")
+        profile = tokens[index + 1]
+        del tokens[index:index + 2]
+    if profile not in ("gateway", "usb"):
+        raise SystemExit(f"fw-zynq blocked: unknown profile: {profile}")
+    if len(tokens) < 2:
+        raise SystemExit(
+            "usage: vitis -s <script>.py -- PROJECT_ROOT XSA "
+            "[--profile gateway|usb]"
+        )
+    root = Path(tokens[-2]).resolve()
+    xsa = Path(tokens[-1]).resolve()
     if not xsa.is_file():
         raise SystemExit(f"fw-zynq blocked: XSA is missing: {xsa}")
-    return root, xsa
+    return root, xsa, profile
 
 
 if __name__ == "__main__":  # pragma: no cover - standalone platform-only run
-    root, xsa = usage(sys.argv)
+    root, xsa, _profile = usage(sys.argv)
     client = make_client()
     try:
         ensure_clean_workspace(client, root)

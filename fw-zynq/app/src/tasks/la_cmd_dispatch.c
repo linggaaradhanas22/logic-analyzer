@@ -88,6 +88,16 @@ void la_cmd_dispatch_init(la_cmd_dispatch_t *dispatch,
     dispatch->view = LA_CMD_VIEW_IDLE;
     dispatch->fw_version = fw_version;
     dispatch->pl_id = pl_id;
+    dispatch->link_cfg_allowed = 1u;
+}
+
+void la_cmd_dispatch_set_link_cfg_allowed(la_cmd_dispatch_t *dispatch,
+                                          int allowed)
+{
+    if (dispatch == NULL) {
+        return;
+    }
+    dispatch->link_cfg_allowed = (allowed != 0) ? 1u : 0u;
 }
 
 static int handle_config(la_cmd_dispatch_t *dispatch,
@@ -256,6 +266,11 @@ static int handle_link_cfg(la_cmd_dispatch_t *dispatch,
 {
     uint8_t transport;
 
+    if (dispatch->link_cfg_allowed == 0u) {
+        result_nak(result, LA_PROTO_LINK_CFG, sequence,
+                   LA_PROTO_ERROR_UNSUPPORTED);
+        return 0;
+    }
     if (length != LA_PROTO_LINK_CFG_WIRE_SIZE) {
         result_nak(result, LA_PROTO_LINK_CFG, sequence, LA_PROTO_ERROR_BAD_LENGTH);
         return 0;

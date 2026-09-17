@@ -1,6 +1,12 @@
 #ifndef LA_APP_H
 #define LA_APP_H
 
+/* Build-time transport profile: 0 = ESP32 gateway over UART0 (default),
+ * 1 = direct Zynq USB CDC-ACM. Selected by `fw-zynq -- --profile usb`. */
+#ifndef LA_TRANSPORT_USB
+#define LA_TRANSPORT_USB 0
+#endif
+
 /*
  * P4.4-P4.9 Zynq application context.
  *
@@ -37,6 +43,10 @@
 #include "la_regs_drv.h"
 #include "la_segment_pool.h"
 
+#if LA_TRANSPORT_USB
+#include "la_usb_dev.h"
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -62,9 +72,10 @@
 #define LA_STACK_ACQ 1024u
 #define LA_STACK_CMD 1024u
 #define LA_STACK_TX 1024u
-#define LA_STACK_STATUS 512u
+#define LA_STACK_STATUS 1024u
 #define LA_STACK_DECODER 1024u
 #define LA_STACK_SPI 1024u
+#define LA_STACK_USB 3072u
 
 /* P9.1 SPI slave service (la_spi_task.c): the task runs above AcqTask and
  * wakes on the IP's TX-half-empty interrupt so the 256-byte FIFO (102 us at
@@ -89,6 +100,7 @@
  * blocked because AcqTask kept seg_q non-empty - so no event or overrun
  * frame was ever sent. Equal priority gives FreeRTOS round-robin drain. */
 #define LA_PRIO_TX 5u
+#define LA_PRIO_USB 5u
 #define LA_PRIO_STATUS 1u
 
 #define LA_FW_VERSION UINT32_C(0x00090000)
@@ -198,6 +210,11 @@ typedef struct la_app {
     la_dma_t dma;
     la_irq_t irq;
     la_link_uart_t link;
+#if LA_TRANSPORT_USB
+    /* U03 direct-USB CDC-ACM device and its service task. */
+    la_usb_dev_t usb;
+    TaskHandle_t usb_task;
+#endif
 
     /* FreeRTOS objects */
     StreamBufferHandle_t rx_sb;
@@ -281,6 +298,12 @@ void la_cmd_task(void *parameters);
 void la_tx_task(void *parameters);
 void la_status_task(void *parameters);
 void la_decoder_task(void *parameters);
+
+#if LA_TRANSPORT_USB
+/* U03: owns EP0 class requests, the RX StreamBuffer producer side and the
+ * USB TX frame pool consumer side. */
+void la_usb_task(void *parameters);
+#endif
 
 /* P9.1: creates the static SPI slave service task (the task owns the
  * axi_quad_spi device, the frame ring and the JA-1 data-ready GPIO). */

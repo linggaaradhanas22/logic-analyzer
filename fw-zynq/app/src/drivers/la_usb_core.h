@@ -24,7 +24,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define LA_USB_RING_CAPACITY 16u /* >= EP1 OUT NumBufs (16) and TX pool (8) */
+/* Covers the worst case of 2 EP0 plus 16 bulk OUT descriptor completions so
+ * a full ring can never lose a completion; the TX-done path uses 8. */
+#define LA_USB_RING_CAPACITY 24u
 #define LA_USB_GENERATION_INIT 1u
 
 typedef enum la_usb_state {

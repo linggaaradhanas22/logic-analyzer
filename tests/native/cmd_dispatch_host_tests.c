@@ -704,6 +704,23 @@ static int test_link_cfg(void)
               result.outcome == LA_CMD_OUT_NAK &&
               result.error == LA_PROTO_ERROR_BAD_FIELD,
           "LINK_CFG undefined transport NAK bad field");
+
+    /* U03 direct-USB profile: LINK_CFG is rejected before any state change. */
+    la_cmd_dispatch_init(&dispatch, TEST_FW_VERSION, TEST_PL_ID);
+    la_cmd_dispatch_set_link_cfg_allowed(&dispatch, 0);
+    payload[0] = LA_PROTO_LINK_SPI;
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LINK_CFG, 0x44u, payload,
+                               LA_PROTO_LINK_CFG_WIRE_SIZE, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_UNSUPPORTED,
+          "LINK_CFG rejected in USB profile");
+    CHECK(la_cmd_dispatch_link_transport(&dispatch) == LA_PROTO_LINK_UART,
+          "USB profile keeps the UART latch");
+    la_cmd_dispatch_set_link_cfg_allowed(&dispatch, 1);
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_LINK_CFG, 0x45u, payload,
+                               LA_PROTO_LINK_CFG_WIRE_SIZE, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_LINK_CFG,
+          "gateway profile still accepts LINK_CFG");
     return 0;
 }
 

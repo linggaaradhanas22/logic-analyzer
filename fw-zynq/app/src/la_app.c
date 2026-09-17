@@ -61,6 +61,10 @@ static StaticTask_t s_status_tcb;
 static StackType_t s_status_stack[LA_STACK_STATUS];
 static StaticTask_t s_decoder_tcb[LA_DECODER_COUNT];
 static StackType_t s_decoder_stack[LA_DECODER_COUNT][LA_STACK_DECODER];
+#if LA_TRANSPORT_USB
+static StaticTask_t s_usb_tcb;
+static StackType_t s_usb_stack[LA_STACK_USB];
+#endif
 
 static const char *const s_decoder_names[LA_DECODER_COUNT] = {
     "la_dec0", "la_dec1", "la_dec2"};
@@ -163,6 +167,13 @@ int la_app_init(la_app_t *app)
         app->tx_task == NULL || app->status_task == NULL) {
         return -1;
     }
+#if LA_TRANSPORT_USB
+    app->usb_task = xTaskCreateStatic(la_usb_task, "la_usb", LA_STACK_USB, app,
+                                      LA_PRIO_USB, s_usb_stack, &s_usb_tcb);
+    if (app->usb_task == NULL) {
+        return -1;
+    }
+#endif
     for (slot = 0u; slot < LA_DECODER_COUNT; ++slot) {
         app->decoders[slot].task = xTaskCreateStatic(
             la_decoder_task, s_decoder_names[slot], LA_STACK_DECODER,
@@ -198,10 +209,18 @@ int la_app_init(la_app_t *app)
     la_trace_register_queue(app->rx_sb, "rxsb");
     la_trace_register_queue(app->tx_sb, "txsb");
 
+#if LA_TRANSPORT_USB
+    /* Direct-USB profile: UsbTask owns the analyzer RX producer side and the
+     * TX frame pool; UART0 and the SPI bulk service stay disabled. */
+    if (la_usb_dev_init(&app->usb, app->rx_sb, app->usb_task) != 0) {
+        return -2;
+    }
+#else
     if (la_link_uart_init(&app->link, XPAR_XUARTPS_0_BASEADDR, LA_LINK_BAUD,
                           app->rx_sb, app->tx_sb) != 0) {
         return -2;
     }
+#endif
     if (la_dma_init(&app->dma, la_mem_sg_base(), LA_MEM_SG_SIZE,
                     LA_DMA_BD_MAX_BYTES) != 0) {
         return -3;
@@ -209,8 +228,10 @@ int la_app_init(la_app_t *app)
     if (la_irq_init(&app->irq, &app->regs, &app->dma, app->acq_task) != 0) {
         return -4;
     }
+#if !LA_TRANSPORT_USB
     if (la_spi_service_start(app) != 0) {
         return -5;
     }
+#endif
     return 0;
 }

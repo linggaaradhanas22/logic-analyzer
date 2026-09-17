@@ -99,6 +99,16 @@ static int tx_write(la_tx_ctx_t *ctx, uint8_t type, uint8_t sequence,
         ctx->app->tx_drops++;
         return -1;
     }
+#if LA_TRANSPORT_USB
+    /* Direct-USB profile: every frame class goes through the USB frame pool
+     * (UsbTask submits it); the gateway UART/SPI routing below is unused. */
+    if (la_usb_enqueue(&ctx->app->usb, wire, encoded) == 0) {
+        la_trace_mark(LA_TRACE_EVENT_MARK_TX_FRAME, type);
+        return 0;
+    }
+    ctx->app->tx_drops++;
+    return -1;
+#endif
     if (ctx->app->spi_bulk != 0u &&
         (type == LA_PROTO_DATA_BEGIN || type == LA_PROTO_DATA_CHUNK ||
          type == LA_PROTO_DATA_END)) {

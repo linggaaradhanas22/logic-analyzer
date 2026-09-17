@@ -113,6 +113,14 @@ target_include_directories(la_native_usb_core PRIVATE
   fw-zynq/app/src/drivers
 )
 
+add_executable(la_native_usb_desc
+  tests/native/usb_desc_host_tests.c
+  fw-zynq/app/src/drivers/la_usb_desc.c
+)
+target_include_directories(la_native_usb_desc PRIVATE
+  fw-zynq/app/src/drivers
+)
+
 add_executable(la_native_txwin
   tests/native/txwin_host_tests.c
   fw-zynq/app/src/tasks/la_tx_win.c
@@ -205,6 +213,7 @@ add_test(NAME la_native_regs COMMAND la_native_regs)
 add_test(NAME la_native_spi COMMAND la_native_spi)
 add_test(NAME la_native_spi_core COMMAND la_native_spi_core)
 add_test(NAME la_native_usb_core COMMAND la_native_usb_core)
+add_test(NAME la_native_usb_desc COMMAND la_native_usb_desc)
 add_test(NAME la_native_txwin COMMAND la_native_txwin)
 add_test(NAME la_native_acq COMMAND la_native_acq)
 add_test(NAME la_native_mem COMMAND la_native_mem)
