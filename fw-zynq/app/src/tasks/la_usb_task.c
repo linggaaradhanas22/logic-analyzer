@@ -119,6 +119,21 @@ static void usb_get_descriptor(la_usb_dev_t *dev, const XUsbPs_SetupData *setup)
     (void)la_usb_ep0_send(dev, data, length);
 }
 
+/* The host resets its endpoint data toggles on SET_INTERFACE and on
+ * CLEAR_FEATURE(ENDPOINT_HALT); the device must do the same or it will
+ * ACK-but-discard every other bulk packet (bench 2026-09-18: 50% EP1 OUT
+ * loss with perfect control transfers). A DWC endpoint flush resets the
+ * toggle to DATA0, so flush the data endpoints and re-prime EP1 OUT. */
+static void usb_reset_data_endpoints(la_usb_dev_t *dev)
+{
+    uint32_t flush = (1u << 1) | (0x00010000u << 1) | (0x00010000u << 2);
+
+    XUsbPs_WriteReg(dev->usb.Config.BaseAddress, XUSBPS_EPFLUSH_OFFSET,
+                    flush);
+    dev->tx_inflight = -1;
+    (void)XUsbPs_EpPrime(&dev->usb, 1u, XUSBPS_EP_DIRECTION_OUT);
+}
+
 static void usb_handle_standard(la_app_t *app, const XUsbPs_SetupData *setup,
                                 uint8_t direction)
 {
@@ -163,11 +178,15 @@ static void usb_handle_standard(la_app_t *app, const XUsbPs_SetupData *setup,
                 XUsbPs_EpStall(&dev->usb, number, epdir);
             } else {
                 XUsbPs_EpUnStall(&dev->usb, number, epdir);
+                if (number != 0u) {
+                    usb_reset_data_endpoints(dev);
+                }
             }
         }
         (void)la_usb_ep0_send(dev, NULL, 0u);
         break;
-    case 0x0Bu: /* SET_INTERFACE */
+    case 0x0Bu: /* SET_INTERFACE: the host resets its data toggles */
+        usb_reset_data_endpoints(dev);
         (void)la_usb_ep0_send(dev, NULL, 0u);
         break;
     default:

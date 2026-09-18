@@ -143,7 +143,11 @@ and releases/re-primes inside the callback; (5) the driver never sets the
 endpoint control registers, so EP1/EP2 stayed disabled (`EPCTRL1=0`, host
 tokens timed out) - they are now enabled at SET_CONFIGURATION; (6) the
 previous transfer's 0-length status completion could be mistaken for
-`SET_LINE_CODING` data - dropped while waiting.
+`SET_LINE_CODING` data - dropped while waiting; (7) SET_INTERFACE and
+CLEAR_FEATURE(ENDPOINT_HALT) require the device to reset the data endpoints'
+toggles (the host resets its own), otherwise the device ACKs but discards
+every other bulk packet - `usb_reset_data_endpoints()` flushes EP1 OUT/IN and
+EP2 IN and re-primes (built, pending bench verification).
 
 **Remaining blocker: EP1 bulk OUT loses roughly half of the host's
 transfers.** Evidence: 50 writes at 50 ms -> 25 completions; 10 writes ->
@@ -160,9 +164,14 @@ was added to recover lost-interrupt stalls, but the loss persists (12 writes
 -> 3-6 received). A 2-descriptor OUT ring loses the same; full 512-byte HS
 transfers also lose half (8 x 512 -> 4 completions), so it is not a ring-size
 or short-packet effect. Both HS and forced FS lose; control transfers are
-clean. Device-side variables are now exhausted; the next checks are host-side
-(cable, a different PC port, ideally another host) and, if those are clean, a
-USB protocol capture.
+clean. Device-side variables are now exhausted. **Bring-up experiment log:**
+the full hypothesis/experiment/result matrix (21 experiments, including the
+ones that ruled out speed, ring depth, transfer size, release cadence, the
+sweep and host flow control) is preserved at
+`build/reports/usb-migration/U03/usb-u03-bring-up-log.md` (ignored local
+evidence). Surviving hypothesis: a data-toggle desync (fix 7 above), pending
+bench verification; host-side checks (USB 2.0 port/hub/PC) remain a control
+but are unavailable on this bench.
 A status-print side effect remains too: the long status blocks corrupt
 `.rodata` (short diagnostic lines are stable). No open/close or reset-cycle
 evidence yet; the gateway remains the working data path. Next tactic:
