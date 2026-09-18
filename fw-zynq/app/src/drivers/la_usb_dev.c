@@ -56,30 +56,84 @@ static void la_usb_stage_push(la_usb_dev_t *dev, uint8_t ep, const uint8_t *data
     vPortClearInterruptMask(saved);
 }
 
-static void la_usb_ep_out_event(la_usb_dev_t *dev, uint8_t ep)
+/* Pops one completed OUT descriptor, copies it into the staging ring and
+ * releases it. `advance` is 0 in the ISR callback because the vendor
+ * XUsbPs_IntrHandleRX loop advances the cursor itself, and 1 for the task
+ * sweep that has no vendor loop. Returns 1 when an entry was serviced. */
+static int la_usb_rx_service(la_usb_dev_t *dev, uint8_t ep, int advance)
 {
+    XUsbPs_EpOut *out = &dev->usb.DeviceConfig.Ep[ep].Out;
     uint8_t *ptr = NULL;
     uint32_t length = 0u;
     uint32_t handle = 0u;
 
-    dev->rx_events++;
+    if (XUsbPs_dTDIsActive(out->dTDCurr)) {
+        return 0;
+    }
     if (XUsbPs_EpBufferReceive(&dev->usb, ep, &ptr, &length, &handle) !=
         XST_SUCCESS) {
-        dev->rx_trace[dev->rx_trace_head & 15u][0] = 0x100u | ep;
-        dev->rx_trace[dev->rx_trace_head & 15u][1] = 0xFFFFFFFFu;
-        dev->rx_trace_head++;
-        return;
+        return 0;
     }
     dev->rx_trace[dev->rx_trace_head & 15u][0] = ep;
     dev->rx_trace[dev->rx_trace_head & 15u][1] = length;
+    dev->rx_trace[dev->rx_trace_head & 15u][2] =
+        (uint32_t)(((uintptr_t)out->dTDCurr - (uintptr_t)out->dTDs) /
+                   XUSBPS_dTD_ALIGN);
     dev->rx_trace_head++;
     la_usb_stage_push(dev, ep, ptr, length);
     XUsbPs_EpBufferRelease(handle);
-    /* The vendor XUsbPs_IntrHandleRX loop re-primes the endpoint after the
-     * completion callback returns; an extra prime here made the controller
-     * re-use the just-released descriptor (every other packet lost, bench
-     * 2026-09-18). */
-    la_usb_isr_notify(dev, LA_USB_NOTIFY_RX_DONE);
+    if (advance != 0) {
+        out->dTDCurr = XUsbPs_dTDGetNLP(out->dTDCurr);
+        XUsbPs_dTDInvalidateCache(out->dTDCurr);
+    }
+    return 1;
+}
+
+static void la_usb_ep_out_event(la_usb_dev_t *dev, uint8_t ep)
+{
+    dev->rx_events++;
+    if (la_usb_rx_service(dev, ep, 0) != 0) {
+        la_usb_isr_notify(dev, LA_USB_NOTIFY_RX_DONE);
+    }
+}
+
+void la_usb_sweep_rx(la_usb_dev_t *dev)
+{
+    u32 complete;
+    uint8_t ep;
+
+    if (dev == NULL) {
+        return;
+    }
+    /* A completion whose interrupt is lost leaves an inactive descriptor at
+     * the cursor; the controller then NAKs every further packet (bench
+     * 2026-09-18: exactly four packets accepted, then a silent stall). Sweep
+     * and re-prime from task context with interrupts masked so the vendor
+     * ISR cannot race the cursor. The same lost interrupt also strands an IN
+     * completion, so process EPCOMPL here as well. */
+    taskENTER_CRITICAL();
+    for (ep = 0u; ep < 2u; ep++) {
+        while (la_usb_rx_service(dev, ep, 1) != 0) {
+            dev->rx_events++;
+        }
+        (void)XUsbPs_EpPrime(&dev->usb, ep, XUSBPS_EP_DIRECTION_OUT);
+    }
+    complete = XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
+                              XUSBPS_EPCOMPL_OFFSET);
+    if (complete != 0u) {
+        XUsbPs_WriteReg(dev->usb.Config.BaseAddress, XUSBPS_EPCOMPL_OFFSET,
+                        complete);
+        if ((complete & (0x00010000u << 1)) != 0u && dev->tx_inflight >= 0) {
+            int32_t slot = dev->tx_inflight;
+
+            if (slot < (int32_t)LA_USB_TX_FRAME_COUNT) {
+                dev->tx_slot_state[slot] = 0u;
+            }
+            dev->tx_inflight = -1;
+            (void)xSemaphoreGive(dev->tx_free_sem);
+        }
+    }
+    taskEXIT_CRITICAL();
 }
 
 static void la_usb_ep0_handler(void *reference, u8 ep, u8 event, void *data)
@@ -172,32 +226,6 @@ int la_usb_setup_take(la_usb_dev_t *dev, XUsbPs_SetupData *setup)
     *setup = dev->setup_data;
     dev->setup_ready = 0u;
     return 1;
-}
-
-void la_usb_poll_tx(la_usb_dev_t *dev)
-{
-    u32 complete;
-
-    if (dev == NULL) {
-        return;
-    }
-    complete = XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
-                              XUSBPS_EPCOMPL_OFFSET);
-    if (complete == 0u) {
-        return;
-    }
-    XUsbPs_WriteReg(dev->usb.Config.BaseAddress, XUSBPS_EPCOMPL_OFFSET,
-                    complete);
-    /* EP1 IN completion bit (EP0 IN is one bit below it). */
-    if ((complete & (0x00010000u << 1)) != 0u && dev->tx_inflight >= 0) {
-        int32_t slot = dev->tx_inflight;
-
-        if (slot < (int32_t)LA_USB_TX_FRAME_COUNT) {
-            dev->tx_slot_state[slot] = 0u;
-        }
-        dev->tx_inflight = -1;
-        (void)xSemaphoreGive(dev->tx_free_sem);
-    }
 }
 
 static void la_usb_general_handler(void *reference, u32 status)

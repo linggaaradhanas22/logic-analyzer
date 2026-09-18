@@ -93,7 +93,7 @@ typedef struct la_usb_dev {
     volatile uint32_t rx_overflows;
     volatile uint32_t rx_bad;    /* driver entries outside the DMA pool */
     volatile uint32_t rx_events; /* OUT completion callbacks serviced */
-    volatile uint32_t rx_trace[16][2]; /* last (ep, length) completions */
+    volatile uint32_t rx_trace[16][3]; /* last (ep, length, dTD index) */
     volatile uint32_t rx_trace_head;
     volatile uint32_t tx_bytes;
     volatile uint32_t tx_drops;
@@ -139,7 +139,7 @@ void la_usb_rx_release(la_usb_dev_t *dev, const la_usb_completion_t *completion)
 const uint8_t *la_usb_stage_pop(la_usb_dev_t *dev, uint16_t *len, uint8_t *ep);
 void la_usb_stage_release(la_usb_dev_t *dev);
 int la_usb_setup_take(la_usb_dev_t *dev, XUsbPs_SetupData *setup);
-void la_usb_poll_tx(la_usb_dev_t *dev);
+void la_usb_sweep_rx(la_usb_dev_t *dev);
 
 /* EP0 control responses (UsbTask). */
 int la_usb_ep0_send(la_usb_dev_t *dev, const uint8_t *data, size_t length);

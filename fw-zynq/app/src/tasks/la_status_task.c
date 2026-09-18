@@ -61,18 +61,39 @@ void la_status_task(void *parameters)
         {
             uint32_t head = app->usb.rx_trace_head & 15u;
             uint32_t index;
-            uint32_t values[8];
+            uint32_t values[12];
 
             for (index = 0u; index < 4u; index++) {
                 uint32_t slot = (head + 12u + index) & 15u;
-                values[index * 2u] = app->usb.rx_trace[slot][0];
-                values[index * 2u + 1u] = app->usb.rx_trace[slot][1];
+                values[index * 3u] = app->usb.rx_trace[slot][0];
+                values[index * 3u + 1u] = app->usb.rx_trace[slot][1];
+                values[index * 3u + 2u] = app->usb.rx_trace[slot][2];
             }
-            xil_printf("LA rx: %u/%u %u/%u %u/%u %u/%u\r\n",
+            xil_printf("LA rx: %u/%u/%u %u/%u/%u %u/%u/%u %u/%u/%u\r\n",
                        (unsigned)values[0], (unsigned)values[1],
                        (unsigned)values[2], (unsigned)values[3],
                        (unsigned)values[4], (unsigned)values[5],
-                       (unsigned)values[6], (unsigned)values[7]);
+                       (unsigned)values[6], (unsigned)values[7],
+                       (unsigned)values[8], (unsigned)values[9],
+                       (unsigned)values[10], (unsigned)values[11]);
+            xil_printf("LA cur: sw=%u hw=%u ovl=%u\r\n",
+                       (unsigned)(((uintptr_t)app->usb.usb.DeviceConfig.Ep[1]
+                                       .Out.dTDCurr -
+                                   (uintptr_t)app->usb.usb.DeviceConfig.Ep[1]
+                                       .Out.dTDs) /
+                                  XUSBPS_dTD_ALIGN),
+                       (unsigned)(((volatile uint32_t *)app->usb.usb
+                                       .DeviceConfig.Ep[1]
+                                       .Out.dQH)[1] -
+                                  (uintptr_t)app->usb.usb.DeviceConfig.Ep[1]
+                                      .Out.dTDs) /
+                           XUSBPS_dTD_ALIGN,
+                       (unsigned)(((volatile uint32_t *)app->usb.usb
+                                       .DeviceConfig.Ep[1]
+                                       .Out.dQH)[2] -
+                                  (uintptr_t)app->usb.usb.DeviceConfig.Ep[1]
+                                      .Out.dTDs) /
+                           XUSBPS_dTD_ALIGN);
         }
 #else
         xil_printf("LA st: acq=%u cmd=%u tx=%u status=%u\r\n",

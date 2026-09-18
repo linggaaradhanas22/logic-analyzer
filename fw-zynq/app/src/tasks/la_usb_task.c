@@ -287,6 +287,7 @@ void la_usb_task(void *parameters)
         if (la_usb_setup_take(dev, &setup) != 0) {
             usb_handle_setup(app, &setup);
         }
+        la_usb_sweep_rx(dev);
         usb_pump_rx(app);
         la_usb_tx_pump(dev);
         if (s_ep0_wait_data != 0u &&
