@@ -157,7 +157,12 @@ the first four packets of a batch accepted (dTD 0-3) and then a silent
 stall while the endpoint was still primed; a task-context sweep
 (`la_usb_sweep_rx`, which also drains EPCOMPL for stranded IN completions)
 was added to recover lost-interrupt stalls, but the loss persists (12 writes
--> 3-6 received). Both HS and forced FS lose; control transfers are clean.
+-> 3-6 received). A 2-descriptor OUT ring loses the same; full 512-byte HS
+transfers also lose half (8 x 512 -> 4 completions), so it is not a ring-size
+or short-packet effect. Both HS and forced FS lose; control transfers are
+clean. Device-side variables are now exhausted; the next checks are host-side
+(cable, a different PC port, ideally another host) and, if those are clean, a
+USB protocol capture.
 A status-print side effect remains too: the long status blocks corrupt
 `.rodata` (short diagnostic lines are stable). No open/close or reset-cycle
 evidence yet; the gateway remains the working data path. Next tactic:
