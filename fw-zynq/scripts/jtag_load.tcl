@@ -12,6 +12,8 @@ if {[llength $argv] >= 3 && [lindex $argv 1] eq "--profile"} {
 }
 if {$profile eq "usb"} {
     set app_name "la_app_usb"
+} elseif {$profile eq "example"} {
+    set app_name "la_usb_example"
 } elseif {$profile eq "gateway"} {
     set app_name "la_app"
 } else {
@@ -87,7 +89,7 @@ bpremove $fsbl_breakpoint
 rst -processor -clear-registers
 puts "Downloading application: $application"
 dow -force $application
-puts "Starting FreeRTOS on Cortex-A9 #0..."
+puts "Starting application on Cortex-A9 #0..."
 con
 configparams force-mem-access 0
 disconnect

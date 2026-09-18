@@ -620,7 +620,10 @@ def _run_target(target: str, forwarded: Sequence[str]) -> int:
             index = forwarded.index("--profile")
             if index + 1 < len(forwarded):
                 profile = forwarded[index + 1]
-        app_name = "la_app_usb" if profile == "usb" else "la_app"
+        app_name = {
+            "usb": "la_app_usb",
+            "example": "la_usb_example",
+        }.get(profile, "la_app")
         artifacts = (
             BUILD_ROOT / "release" / "logic_analyzer.bit",
             BUILD_ROOT / "vitis" / "ws" / "lap" / "zynq_fsbl" / "build" / "fsbl.elf",

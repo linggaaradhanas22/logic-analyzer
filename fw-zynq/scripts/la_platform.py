@@ -26,6 +26,8 @@ DOMAIN_NAME = "fr"
 CPU = "ps7_cortexa9_0"
 OS_NAME = "freertos"
 APP_NAME = "la_app"
+USB_APP_NAME = "la_app_usb"
+EXAMPLE_APP_NAME = "la_usb_example"
 
 
 def workspace_path(root: Path) -> Path:
@@ -358,11 +360,20 @@ APP_SOURCE_GROUPS = (
     ("common", "la_decode", "include"),
 )
 
+# The `example` profile builds the unmodified AMD usbps mass-storage example
+# (driver usbps_v2_9, copied verbatim from the installed tool tree into
+# fw-zynq/example). It is a hardware-control experiment, not the product
+# firmware: it runs bare-metal style from the BSP main() call, enumerates as a
+# USB mass-storage device and serves a 1 MiB virtual disk. See docs/status.md
+# and docs/usb-link.md for the experiment record.
+EXAMPLE_SOURCE_GROUPS = (("fw-zynq", "example"),)
 
-def _collect_app_files(root: Path) -> list[str]:
+
+def _collect_app_files(root: Path, profile: str) -> list[str]:
     """Flat source/header list for the app component (all names unique)."""
+    groups = EXAMPLE_SOURCE_GROUPS if profile == "example" else APP_SOURCE_GROUPS
     files: list[str] = []
-    for group in APP_SOURCE_GROUPS:
+    for group in groups:
         directory = root.joinpath(*group)
         if not directory.is_dir():
             raise SystemExit(f"fw-zynq blocked: source directory missing: {directory}")
@@ -374,7 +385,11 @@ def _collect_app_files(root: Path) -> list[str]:
 
 def app_component_name(profile: str) -> str:
     """Application component name for a build profile (U02 contract)."""
-    return "la_app_usb" if profile == "usb" else APP_NAME
+    if profile == "usb":
+        return USB_APP_NAME
+    if profile == "example":
+        return EXAMPLE_APP_NAME
+    return APP_NAME
 
 
 def _patch_user_config(app_dir: Path, sources: list[str], profile: str) -> None:
@@ -384,7 +399,10 @@ def _patch_user_config(app_dir: Path, sources: list[str], profile: str) -> None:
     ordering depends on the import calls; rewriting the blocks keeps the
     build reproducible and independent of that behaviour. All imported
     sources live flat in src/, so the CMake source directory is enough. The
-    USB profile adds the LA_TRANSPORT_USB compile definition.
+    USB profile adds the LA_TRANSPORT_USB compile definition; the example
+    profile maps the driver's generated USBPS_BASEADDR macro (normally
+    produced by the driver example CMake) to the BSP xparameters symbol and
+    enables the storage-class SCSI trace on the console.
     """
     import re
 
@@ -399,10 +417,18 @@ def _patch_user_config(app_dir: Path, sources: list[str], profile: str) -> None:
                   count=1, flags=re.S)
     text = re.sub(r'set\(USER_INCLUDE_DIRECTORIES.*?\)\n',
                   'set(USER_INCLUDE_DIRECTORIES\n".."\n)\n', text, count=1, flags=re.S)
-    defines = "LA_TRANSPORT_USB=1" if profile == "usb" else ""
+    if profile == "example":
+        defines = (
+            "XPS_USB0_BASEADDR=XPAR_XUSBPS_0_BASEADDR",
+            "CLASS_STORAGE_DEBUG=1",
+        )
+    else:
+        defines = (("LA_TRANSPORT_USB=1",) if profile == "usb" else ("",))
+    define_block = "set(USER_COMPILE_DEFINITIONS\n" + "".join(
+        f'"{name}"\n' for name in defines
+    ) + ")"
     text = re.sub(r"set\(USER_COMPILE_DEFINITIONS.*?\)\n",
-                  'set(USER_COMPILE_DEFINITIONS\n"' + defines + '"\n)\n',
-                  text, count=1, flags=re.S)
+                  define_block + "\n", text, count=1, flags=re.S)
     config.write_text(text, encoding="utf-8", newline="\n")
     print(f"VITIS UserConfig sources installed: {len(sources)} files "
           f"(profile {profile})")
@@ -415,8 +441,9 @@ def create_app_and_build(client, root: Path, platform, profile: str) -> None:
     app = client.create_app_component(
         name=name, platform=xpfm, domain=DOMAIN_NAME
     )
-    files = _collect_app_files(root)
-    for group in APP_SOURCE_GROUPS:
+    files = _collect_app_files(root, profile)
+    groups = EXAMPLE_SOURCE_GROUPS if profile == "example" else APP_SOURCE_GROUPS
+    for group in groups:
         directory = root.joinpath(*group)
         names = sorted(
             entry.name
@@ -430,11 +457,16 @@ def create_app_and_build(client, root: Path, platform, profile: str) -> None:
     _patch_user_config(app_dir, files, profile)
     # import_files refuses to overwrite the Vitis-generated src/lscript.ld,
     # so the P4.3 linker script (NC carve + ASSERTs) replaces it in place.
+    # The example profile keeps the generated stock script: it has no NC
+    # carve contract and the vendor example only needs plain DDR .bss.
     lscript = app_dir / "src" / "lscript.ld"
     if not lscript.is_file():
         raise SystemExit(f"fw-zynq blocked: generated lscript.ld missing at {lscript}")
-    shutil.copyfile(root / "fw-zynq" / "lscript.ld", lscript)
-    print(f"VITIS P4.3 linker script installed at {lscript}")
+    if profile == "example":
+        print(f"VITIS example profile keeps the generated linker script {lscript}")
+    else:
+        shutil.copyfile(root / "fw-zynq" / "lscript.ld", lscript)
+        print(f"VITIS P4.3 linker script installed at {lscript}")
     app.build()
     print(f"VITIS app built: {name} (profile {profile})")
 
@@ -470,12 +502,12 @@ def usage(argv) -> tuple[Path, Path, str]:
             raise SystemExit("fw-zynq blocked: --profile needs a value")
         profile = tokens[index + 1]
         del tokens[index:index + 2]
-    if profile not in ("gateway", "usb"):
+    if profile not in ("gateway", "usb", "example"):
         raise SystemExit(f"fw-zynq blocked: unknown profile: {profile}")
     if len(tokens) < 2:
         raise SystemExit(
             "usage: vitis -s <script>.py -- PROJECT_ROOT XSA "
-            "[--profile gateway|usb]"
+            "[--profile gateway|usb|example]"
         )
     root = Path(tokens[-2]).resolve()
     xsa = Path(tokens[-1]).resolve()

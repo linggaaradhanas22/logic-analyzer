@@ -267,6 +267,52 @@ output. Next: move J10 to a direct USB 2.0 port (or obtain an analyzer), rerun
 the 12-write detector, compare the trace; do not re-enable the type programming
 until the PID/toggle behavior is observable.
 
+### USB migration execution - U03 J10 hardware control (2026-09-18)
+
+**J10/USB3320/PS USB0 hardware cleared by a stock-example control; the U03
+alternating bulk-OUT loss is firmware/driver configuration, not the connector
+or PHY.** Built and ran AMD's unmodified `usbps_v2_9` mass-storage example
+(Chapter 9 + storage class + vendor `XUsbPs` driver) through a new bench-only
+`--profile example` build/load path. The seven vendor files are copied
+verbatim into `fw-zynq/example/` (SHA-256 recorded in `docs/usb-link.md`
+section 13); the only repo-owned additions are build-level adaptations in
+`fw-zynq/scripts/la_platform.py` (`XPS_USB0_BASEADDR=XPAR_XUSBPS_0_BASEADDR`,
+`CLASS_STORAGE_DEBUG=1`, generated linker script), the `--profile example`
+mapping in `fw-zynq/scripts/jtag_load.tcl` and `tools/run.py`, and the
+link-only `fw-zynq/example/la_freertos_trace_stubs.c` for the BSP P8.3 trace
+hooks. The vendor's `while (NumReceivedFrames < 1)` spin is kept as shipped
+(the counter is never incremented, so the device serves forever), as is its
+stock endpoint setup: `XUsbPs_EpEnable(1, OUT/IN)`, then EPCR1
+`TXT_BULK|RXT_BULK|TXR|RXR`, then `XUsbPs_EpPrime(1, OUT)` at
+SET_CONFIGURATION.
+
+Bench (2026-09-18, J10 direct to the PC, same host as the U03 loss):
+- Windows enumerated `USB\VID_0D7D&PID_0100` as a USB mass-storage device;
+  `Get-Disk` reported `Xilinx PS USB VirtDisk`, 1,048,576 bytes, USB bus.
+- A 10 s COM7 capture shows a continuous, orderly SCSI stream (TEST UNIT
+  READY, MODE SENSE, READ CAPACITY, READ at offsets 0x0/0x400/0x8000) with no
+  stalls or gaps: every host CBW (bulk OUT) reached the device and every
+  response completed.
+- Elevated raw-sector test (`build/reports/usb-migration/U03/example-write-test.txt`):
+  65,536 bytes written to the raw physical drive in 23 ms, read back in 7 ms,
+  **0 mismatched bytes** - multi-packet bulk OUT plus bulk IN, byte-exact.
+- JTAG readback of the device `VirtFlash` at offset 0x40000 returned
+  `18110A03 342D261F`, exactly the host pattern; sector 0 stayed zero.
+
+Conclusion: the J10 path handles control, bulk IN and multi-packet bulk OUT
+correctly with the vendor driver and the vendor's exact endpoint sequence.
+That sequence includes the EPCR type/toggle-reset programming that appeared to
+break the project image in the section-12 experiments, so the next U03 tactic
+is to align `la_usb_reconfigure` with the vendor sequence and re-run the
+numbered-record detector. No product firmware result is claimed; the gateway
+remains the working data path. The board currently runs the example; reload
+the product image with `jtag-zynq -- --profile usb` (or gateway) to resume
+U03. Verification: `fw-zynq -- --profile example` PASS (`la_usb_example.elf`
+text 78,598 / data 3,084 / bss 1,210,640; `build/reports/fw-zynq.json`),
+`jtag-zynq -- --profile example` PASS, host write/read PASS, device-memory
+cross-check PASS. The example profile is a bench control only and is not part
+of the product build.
+
 ### USB migration execution - U02 (2026-09-18)
 
 **U02 complete; contract frozen.** `docs/usb-link.md` section 9 is the frozen
@@ -557,7 +603,7 @@ publish.
 |---|---|
 | Normative requirements | `docs/plan.md` |
 | Session state and blockers | `docs/status.md` |
-| Direct USB execution sequence | `docs/usb-migration-implementation-instructions.md` (U00-U02 complete; U03 WIP: HS enumerates, `usbser.sys` binds, post-enumeration `.rodata` corruption blocks transfers) |
+| Direct USB execution sequence | `docs/usb-migration-implementation-instructions.md` (U00-U02 complete; U03 WIP: HS enumerates, `usbser.sys` binds, EP1 bulk OUT loses every other packet - J10 hardware cleared 2026-09-18 by the stock AMD mass-storage control, so the remaining fault is firmware/driver configuration) |
 | Proposed direct USB interface and feasibility evidence | `docs/usb-link.md` |
 | Canonical commands and environment import | `tools/run.py` |
 | Tool versions and smoke state | `tools/toolchain-lock.json` |
@@ -573,6 +619,7 @@ publish.
 
 | Date | Work completed | Result |
 |---|---|---|
+| 2026-09-18 | U03 J10 hardware control (bench-only stock example). Added a `--profile example` path that builds AMD's unmodified `usbps_v2_9` mass-storage example (`xusbps_intr_example.c` + Chapter 9 + storage class, copied verbatim into `fw-zynq/example/`) against the existing `lap` platform, plus `fw-zynq/example/la_freertos_trace_stubs.c` for the BSP P8.3 trace hooks and the `example` mappings in `fw-zynq/scripts/la_platform.py`, `fw-zynq/scripts/jtag_load.tcl` and `tools/run.py`. The example keeps the vendor's `while (NumReceivedFrames < 1)` spin (counter never incremented, so it serves forever) and vendor endpoint sequence (`XUsbPs_EpEnable`, EPCR1 `TXT_BULK|RXT_BULK|TXR|RXR`, `XUsbPs_EpPrime` OUT). Bench on J10 direct to the PC: Windows enumerated `USB\VID_0D7D&PID_0100` as a mass-storage device (`Xilinx PS USB VirtDisk`, 1,048,576 bytes), a 10 s COM7 trace showed a continuous SCSI command stream (TEST UNIT READY / MODE SENSE / READCAP / READ at 0x0/0x400/0x8000) with no stalls, and an elevated raw test wrote 65,536 bytes and read them back with 0 mismatches; the device `VirtFlash` JTAG readback matched the host pattern exactly (`18110A03 342D261F` at offset 0x40000). | PASS (hardware control): J10/PHY/USB0 cleared for control, bulk IN and multi-packet bulk OUT; the U03 alternating loss is project firmware/driver configuration. Evidence `build/reports/usb-migration/U03/example-write-test.txt`, `fw-zynq -- --profile example` PASS (`la_usb_example.elf` text 78,598 / data 3,084 / bss 1,210,640), `jtag-zynq -- --profile example` PASS. The example profile is not part of the product build; the board runs the example until the next `jtag-zynq -- --profile usb`. No product firmware fix claimed. |
 | 2026-09-18 | U03 direct-USB implementation + bench bring-up (WIP). New `la_usb_core` (session model), `la_usb_desc` (CDC-ACM descriptors, `wTotalLength` 75, test PID `0x1209:0x0001` warning), `la_usb_dev` (XUsbPs wrapper: zeroed 64 KiB non-cached DMA pool at NC offset 0x00900000, 8 x 1088-byte TX pool, polled setup/RX/TX service with the vendor cursor advance, reset/error/port-change ISR notification only), `la_usb_task` (EP0 standard/CDC requests, `rx_sb` producer, TX pump, session actions), `LA_TRANSPORT_USB` integration in `la_app`/`main`/`la_tx_task`/`la_cmd_dispatch` (LINK_CFG unsupported NAK)/`la_status_task`, build profiles in `tools/run.py` + `fw-zynq/scripts` + `jtag_load.tcl`, and native `la_native_usb_desc`/`la_native_usb_core` tests. Bench: HS on the hub and on a direct PC port, complete enumeration and `usbser.sys` binding (`USB\VID_1209&PID_0001\LA-USB-TEST-0001`, COM12 Status OK), 25 control requests with 0 errors (SET_CONFIGURATION, GET/SET_LINE_CODING, SET_CONTROL_LINE_STATE). Fixed: SDT `LookupConfig` u16 truncation, missing DMA-pool zeroing (wild controller DMA), SLE/UI suspend storm, and the deferred-pop vendor RX spin. | WIP/BLOCKED on EP1 bulk OUT packet loss after a successful enumeration and control path. Bench session 2 (same day): fixed the driver's missing endpoint enables (EPCTRL1/2 were 0, so host tokens to EP1 timed out), the EP0 stale-status/class-data confusion, the deferred-release ring desync (now pop+copy into a bounded staging ring + release in the callback), and confirmed HS enumeration, `usbser.sys` binding (COM12 OK), `la-cli ping`/`status` successes. Remaining: ~50% of host bulk OUT transfers never complete a dTD (50 writes -> 25 completions; 10 -> 9; 8 at 300 ms -> 4; a 140-byte FS write delivered only its first 64-byte packet) while the dTD ring is fully active (`0x02008080` tokens, circular NLP, `EPRDY=3`, `EPCTRL1=0x00800080`, `out_waiting=0`, `bad=0`, `ovf=0`); both HS and forced FS lose. Long status prints also still corrupt `.rodata` (short lines are stable). No open/close/reset-cycle evidence; no hardware PASS claimed. Local gates PASS: `test-native` 17/17; USB and gateway profiles build. Next: resolve the EP1 OUT completion loss (driver dTD/dQH handling or a different device-mode approach) and the status-print fault. |
 | 2026-09-18 | U02 integration contract frozen (continuous execution, stop on request). Audited the generated `XUsbPs` driver: `EpBufferReceive` pops without re-activating, the vendor RX dispatcher advances its descriptor cursor per callback (so the pop must stay in interrupt context), `EpBufferRelease` re-activates, the reset path has an infinite fallback unless a general handler is registered, and `EpStall`/`EpBufferSendWithZLT` exist. Froze `docs/usb-link.md` section 9: GIC ID 53 via `la_irq_connect`, notification-only callbacks with deferred class processing and stale-generation dropping, CDC-ACM descriptors with IAD/`wTotalLength` 66 and automatic `usbser.sys` binding, test identity `0x1209:0x0001` (release identity open), advisory line coding/DTR, no-ZLP byte stream, non-cached 64 KiB DMA pool at NC offset `0x00900000`, 8 x 1088-byte TX pool, 16-entry completion ring, `rx_sb` NAK backpressure, gateway-default `fw-zynq -- --profile usb` builds and `test_usb_*` selectors. Added portable `la_usb_core.{h,c}` and host tests. | PASS (local): `test-native` 16/16 including the new `la_native_usb_core`; report `build/reports/usb-u02-contract.md`, canonical `build/reports/test-native.json`. No target code, build, load or hardware run; U03 not started. Next: U03 driver/task implementation and local profile builds, then the [HUMAN] JTAG enumeration session. |
 | 2026-09-18 | U01 board and platform feasibility complete (continuous execution authorized by the 2026-09-18 user instruction, stop on request). Inspected the actual `logic_analyzer.xsa` (`system.hwh`: USB0 enabled, 60 MHz, MIO 28..39, reset MIO 46, USB1 disabled), the generated FreeRTOS BSP (`XPAR_XUSBPS_0_BASEADDR 0xe0002000`, encoded IRQ `0x4015`, MIT-licensed `usbps`/`XUsbPs` sources, no CDC example) and the installed `usbps_v2_9` examples; evaluated the old AMD CDC techtip (bare-metal SDK 2015.1, custom Windows driver, click-through RefDesLicense, AR#61313 ULPI caveat) as reference only. Recorded the physical checklist: REV D.0, JP1 unsoldered/open, JP2 shunt removed, JP5=JTAG, JP6=USB (power from J12), J11 empty, J10 on the USB hub by user direction (direct PC port is the first isolation step), FTDI `COM7` serial `210351BE7ACEB`, no board modification, fresh power with no image. Identity basis: pid.codes test PID `0x1209:0x0001` for in-house use only; release identity open. Host check: `la-cli ports` shows only COM7 and the gateway is not attached, so the optional gateway baseline is BLOCKED, not failed. | PASS (local evidence + checklist): `build/reports/usb-u01-feasibility.md`. No firmware built, no image loaded, no hardware PASS claimed. Open: HS vs FS until U03, release VID/PID, hub-first deviation recorded in the report. Next: U02 contract freeze. |

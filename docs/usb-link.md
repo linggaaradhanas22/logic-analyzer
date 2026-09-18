@@ -416,3 +416,74 @@ handshakes. Next bench conditions: (1) a direct USB 2.0 port (the current bench
 uses an AMD xHCI USB 3.x root hub; no other PC was available), and (2) a USB
 protocol analyzer if the host-side control does not change the behavior. No
 firmware result is claimed as passing.
+
+## 13. U03 J10 hardware-control example (2026-09-18)
+
+**Purpose.** Separate the J10 / USB3320 PHY / PS USB0 hardware from the
+project firmware as the cause of the section-12 alternating bulk-OUT loss.
+The control is AMD's own mass-storage example from the installed
+`usbps_v2_9` driver: `xusbps_intr_example.c` plus the vendor Chapter 9 and
+storage-class sources, using the vendor `XUsbPs` driver and presenting a
+1 MiB RAM disk to the Windows in-box `usbstor.sys` driver.
+
+**Provenance and build adaptation.** The seven vendor files are copied
+verbatim from
+`C:/AMDDesignTools/2026.1/data/embeddedsw/XilinxProcessorIPLib/drivers/usbps_v2_9/examples/`
+into `fw-zynq/example/` and are unmodified (SHA-256 below). The repo-owned
+adaptations are build-level only: `fw-zynq/example/la_freertos_trace_stubs.c`
+(link-only no-ops for the BSP P8.3 kernel trace hooks, never called because
+the example does not start the scheduler), the `--profile example` branch in
+`fw-zynq/scripts/la_platform.py` (source group, app name `la_usb_example`,
+`XPS_USB0_BASEADDR=XPAR_XUSBPS_0_BASEADDR`, `CLASS_STORAGE_DEBUG=1`, stock
+generated linker script instead of the project NC carve), and the matching
+profile mappings in `fw-zynq/scripts/jtag_load.tcl` and `tools/run.py`. The
+example keeps the shipped `while (NumReceivedFrames < 1)` wait: the counter
+is never incremented, so the loop never exits and the device serves
+indefinitely; the cleanup path is dead code.
+
+| Vendor file | SHA-256 |
+|---|---|
+| `xusbps_intr_example.c` | `424D1BD09B688195AC660E1C6DFC91A48CCEF61D62CDABE2B32F1B58B96BF1AB` |
+| `xusbps_ch9.c` | `E257B616BBDE65157FA0BE8E4CF125C59D47EE07672AC828B5878F91A64D081F` |
+| `xusbps_ch9.h` | `8DBC5E73ED2E64FC4284BFC51363DDA1D26C2217F759BAD912C16781B4BDAB32` |
+| `xusbps_ch9_storage.c` | `CFC88746716EE48A128DDFBE22CC1C4D4D16B159D49B62DD0E8783D2D119EB07` |
+| `xusbps_ch9_storage.h` | `9E71D303FCBEA2A4D82308CBD2463C473389C22D6B8E271C106399ADAE2B7449` |
+| `xusbps_class_storage.c` | `D739040F668D81C3A58E0A0220B43A806F88E0342B0FED1AC60069F6E03D3B5B` |
+| `xusbps_class_storage.h` | `18FBA2FB276826B4F87655B3AF3E79D38246D8431A855FFFA2C599FEA10EBC30` |
+
+The vendor's SET_CONFIGURATION path (`xusbps_ch9_storage.c:382`) is the
+sequence our section-12 experiments tried to reproduce:
+`XUsbPs_EpEnable(1, OUT)`, `XUsbPs_EpEnable(1, IN)`, then one
+`XUsbPs_SetBits` writing `XUSBPS_EPCR_TXT_BULK_MASK |
+XUSBPS_EPCR_RXT_BULK_MASK | XUSBPS_EPCR_TXR_MASK |
+XUSBPS_EPCR_RXR_MASK`, then `XUsbPs_EpPrime(1, OUT)`.
+
+**Bench results (2026-09-18, J10 direct to the PC, same host as the loss).**
+
+- Build/load: `python tools/run.py fw-zynq -- --profile example` PASS
+  (`la_usb_example.elf` text 78,598 / data 3,084 / bss 1,210,640) and
+  `python tools/run.py jtag-zynq -- --profile example` PASS.
+- Windows enumerated `USB\VID_0D7D&PID_0100` as a USB mass-storage device;
+  `Get-Disk` reported `Xilinx PS USB VirtDisk`, 1,048,576 bytes, USB bus.
+- A 10 s COM7 console capture showed a continuous, orderly SCSI command
+  stream (TEST UNIT READY, MODE SENSE, READ CAPACITY, READ at offsets
+  0x00000000/0x400/0x8000) with no stalls, gaps or retries; every host CBW
+  (bulk OUT) reached the device and every response completed.
+- Elevated raw-sector test (`build/reports/usb-migration/U03/example-write-test.txt`):
+  65,536 bytes written to `\\.\PhysicalDriveN` in 23 ms, read back in 7 ms,
+  0 mismatched bytes. That is a multi-packet bulk OUT transfer plus a bulk IN
+  readback, byte-exact.
+- JTAG readback of the device `VirtFlash` at offset 0x40000 returned
+  `18110A03 342D261F`, exactly the host pattern; sector 0 remained zero.
+
+**Interpretation and boundary.** J10, the ULPI PHY and the PS USB0 core
+handle control transfers, bulk IN and multi-packet bulk OUT correctly with
+the vendor driver and the vendor endpoint sequence, on the same host and
+cable that produced the project image's alternating ACK-discard. The
+hardware is therefore cleared as the cause, and the fault is in the project
+`la_usb_dev` / `la_usb_task` configuration. This is a control experiment,
+not a product result: the example profile is bench-only, the gateway remains
+the working data path, and no product firmware fix is claimed. The board runs
+the example until the next `jtag-zynq -- --profile usb` (or gateway) load.
+Next tactic: align `la_usb_reconfigure` with the exact vendor sequence above
+and re-run the numbered-record detector and trace.
