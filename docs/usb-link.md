@@ -302,3 +302,68 @@ change.
 `python tools/run.py test-e2e -- --target serial://COMx -k test_usb`; common
 tests stay unmodified, and ESP/TCP/SPI-only tests are excluded by name and
 never counted as passed. A zero-selection or all-skipped run is not a pass.
+
+## 10. U03 reset audit (2026-09-18)
+
+The `SET_INTERFACE`/`CLEAR_FEATURE` reset fix committed as `d1e36e1` was
+audited before further bench work. Sources inspected: the installed
+`usbps_v2_9` driver in the generated BSP, the USB 2.0 specification sections
+below and the AMD CDC techtip. `docs.amd.com` (UG585) is a JavaScript
+application and its USB register chapter could not be retrieved from the
+development environment; the installed first-party driver headers are the
+register documentation available locally, so no UG585 confirmation is claimed.
+
+| Question | Documented evidence | Status |
+|---|---|---|
+| Endpoint type configuration | `XUsbPs_EpEnable` (`xusbps.h:762`) sets only `RXE`/`TXE`; no driver code writes the EPCR type bits. Bench read `EPCTRL1=0x00800080` (type = control). | The vendor driver and its examples never program the type; whether device-mode packet handling depends on it is unverified and recorded as an open question, not a bug. |
+| Toggle reset | `xusbps_hw.h:159` (`TXR`, 0x00400000) and `xusbps_hw.h:171` (`RXR`, 0x00000040) are labelled "Data Toggle Reset Bit". | Documented mechanism. |
+| Flush semantics | `xusbps_hw.h:121` labels `EPFLUSH` "Endpoint Flush"; the driver's macro comment (`xusbps.h:834`) says "flush an endpoint upon interface disable"; the driver writes `EPFLUSH=0xFFFFFFFF` only in `XUsbPs_Reset` (`xusbps_intr.c:429`) and `XUsbPs_ConfigureDevice` (`xusbps.c:146`). | "An EPFLUSH resets the toggle" is **not** documented; the earlier code comment was an assumption and has been removed. |
+| Flush completion / safe re-prime | `XUsbPs_EpFlush` is a posted `SetBits` with no completion handshake; `XUsbPs_EpPrime` polls `EPRDY`. | Re-priming after a toggle reset is not required for the ring; the task sweep re-primes every service pass. |
+| CLEAR_FEATURE scope | USB 2.0 section 9.4.5: the addressed endpoint's toggle returns to DATA0. | Corrected: reset only the addressed endpoint/direction; invalid features, EP0 halt and reserved bits stall. |
+| SET_INTERFACE scope | USB 2.0 section 9.4.10: reset the data toggles of the addressed interface's endpoints. | Corrected: interface 1 (data, EP1 OUT/IN) and interface 0 (control, EP2 IN) are handled separately; an unknown interface/alt setting stalls. |
+| SET_CONFIGURATION | USB 2.0 section 9.4.7 resets every endpoint's toggle. | `la_usb_reconfigure` now writes the EPCR toggle-reset bits for EP1 OUT/IN and EP2 IN instead of `EPFLUSH`; the previous `tx_inflight = -1` also leaked an in-flight TX slot and was removed. |
+
+The audit establishes the documented mechanism, not that the toggle was the
+cause of the 50% loss; that remains a bench question.
+
+## 11. U03 bench instrumentation and loss detector (2026-09-18)
+
+**Bounded trace.** `la_usb_trace_ring` (`la_usb_trace.h`) keeps 512 entries of
+(tag, a, b, c) for setups, OUT descriptor completions, staging, parser
+delivery, TX submissions/completions and reset/session events. It is CPU-only
+memory, never DMA, and the USB profile no longer prints per-setup lines or
+long status blocks (`LA_USB_STATUS_PRINT` defaults to 0). `head` counts every
+push and the decoder reports entries overwritten before the dump, so trace
+overflow is detected instead of silently wrapping.
+
+**Retrieval.** `python tools/usb_trace.py --elf <USB ELF> --out <dump>` resolves
+the symbol with `arm-none-eabi-nm` and dumps the ring with XSDB while the CPU
+runs; `--decode <dump>` renders the entries offline. No console or USB traffic
+is used for retrieval.
+
+**Numbered-record detector.** `TEST_RECORD` (0x1B, `protocol.md`) carries a
+unique `record_id:u32`; the device acknowledges it without state changes and
+the trace logs the id at parser delivery. `tests/e2e/test_usb_bulk.py`
+(`-k test_usb`) sends 12-write bursts at the recorded 50 ms spacing, repeats
+them, then sends a 200-record stream, and accounts missing, duplicated,
+reordered and NAKed records separately. One host write is one transport send,
+not one USB packet or one device completion.
+
+**Pre-registered observations for the next bench session.** (1) The setup trace
+must show whether Windows issues `SET_INTERFACE` (0x0B) or `CLEAR_FEATURE`
+(0x01) at port open, for which interface/endpoint, and the `RESET` entries show
+whether the corrected path ran. (2) If neither request occurs, the reset path
+cannot explain any change and the detector's earliest-mismatch output becomes
+the primary evidence. (3) A repeatable baseline failure followed by a
+loss-free corrected image under fresh enumeration is the causal bar; a single
+improved run is supporting evidence only. (4) The unresolved status-print
+`.rodata` corruption stays a confounder; the quiet image avoids the trigger
+but does not explain it.
+
+**Acceptance before success is claimed.** Repeated loss-free 12-write bursts
+(two consecutive repeats in `test_usb_numbered_records_12_repeat`), a
+loss-free 200-record stream, short and full-packet burst traffic from the
+existing E2E suite, exact payload integrity (zero CRC/format errors), and
+repeated open/close and re-enumeration cycles. Any unexplained drop keeps the
+result WIP; the device trace classifies the first divergent boundary
+(host -> controller -> staging -> parser -> response).

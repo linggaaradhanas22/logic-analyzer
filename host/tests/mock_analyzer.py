@@ -71,6 +71,7 @@ class MockAnalyzer:
         self.last_trace_action: int | None = None
         self.last_evt_format: int | None = None
         self.last_link_transport: int | None = None
+        self.test_record_ids: list[int] = []
         self.parser = p.FrameParser()
         self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -166,6 +167,12 @@ class MockAnalyzer:
                 self.last_patgen = payload
                 self.patgen_history.append(payload)
                 self._send(connection, p.ACK, p.pack_ack(p.PATGEN_CFG, sequence))
+            elif message_type == p.TEST_RECORD:
+                self.test_record_ids.append(p.unpack_test_record(payload))
+                if not (self.scenario == "test_record_drop" and
+                        sequence % 2 == 1):
+                    self._send(connection, p.ACK,
+                               p.pack_ack(p.TEST_RECORD, sequence))
             elif message_type == p.EVT_CFG:
                 self.last_evt_format = p.unpack_evt_cfg(payload)
                 self._send(connection, p.ACK, p.pack_ack(p.EVT_CFG, sequence))

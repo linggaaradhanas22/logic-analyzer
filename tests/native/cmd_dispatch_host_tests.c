@@ -597,6 +597,39 @@ static int test_patgen_cfg(void)
     return 0;
 }
 
+static int test_test_record(void)
+{
+    la_cmd_dispatch_t dispatch;
+    la_cmd_result_t result;
+    uint8_t payload[LA_PROTO_TEST_RECORD_WIRE_SIZE];
+    uint32_t record_id = UINT32_C(0x0000002A);
+
+    la_cmd_dispatch_init(&dispatch, TEST_FW_VERSION, TEST_PL_ID);
+    CHECK(la_proto_pack_test_record(record_id, payload, sizeof(payload)) ==
+              LA_PROTO_TEST_RECORD_WIRE_SIZE,
+          "test record payload packs");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_TEST_RECORD, 0x2Au, payload,
+                                LA_PROTO_TEST_RECORD_WIRE_SIZE, 0u, &result) ==
+                  0 &&
+              result.outcome == LA_CMD_OUT_ACK &&
+              result.type == LA_PROTO_TEST_RECORD &&
+              result.sequence == 0x2Au,
+          "TEST_RECORD acknowledged without state change");
+    CHECK(la_cmd_dispatch_view(&dispatch) == LA_CMD_VIEW_IDLE,
+          "TEST_RECORD leaves the acquisition view idle");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_TEST_RECORD, 0x2Bu, payload,
+                                3u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_LENGTH,
+          "TEST_RECORD bad length NAK");
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_TEST_RECORD, 0x2Cu, NULL, 0u,
+                                0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK &&
+              result.error == LA_PROTO_ERROR_BAD_LENGTH,
+          "TEST_RECORD empty payload NAK");
+    return 0;
+}
+
 static int test_trace_ctrl(void)
 {
     la_cmd_dispatch_t dispatch;
@@ -787,6 +820,7 @@ int main(void)
         test_get_status() != 0 || test_decoder_cfg() != 0 ||
         test_live_lifecycle() != 0 ||
         test_patgen_cfg() != 0 || test_trace_ctrl() != 0 ||
+        test_test_record() != 0 ||
         test_evt_cfg() != 0 || test_link_cfg() != 0 ||
         test_arm_pool_capacity() != 0 ||
         test_ack_nak_routing() != 0 || test_argument_guards() != 0) {

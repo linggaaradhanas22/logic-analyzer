@@ -178,6 +178,54 @@ evidence yet; the gateway remains the working data path. Next tactic:
 verify the Zynq device-mode dQH/dTD field encoding against UG585 and the
 AMD CDC techtip before further blind changes.
 
+### USB migration execution - U03 offline hardening (2026-09-18, no bench)
+
+**Bench-blocked work completed while J10/J12 are disconnected.** Preserved the
+bench baseline (commit `d1e36e1`, `la_app_usb.elf` SHA-256
+`1C1F3122...1EC31CB`, copies and hashes under
+`build/reports/usb-migration/U03/`) and audited the `d1e36e1` toggle-reset fix
+before changing it. Audit (`docs/usb-link.md` section 10): the EPCR `TXR`/`RXR`
+bits are the documented "Data Toggle Reset" (`xusbps_hw.h:159,171`), while
+`EPFLUSH` is documented only as an endpoint flush and the driver uses it only
+in reset/configuration paths; the old code comment's "flush resets the toggle"
+was an assumption. `docs.amd.com` (UG585) is a JavaScript application and its
+USB register chapter could not be retrieved from this environment, so the
+installed first-party driver headers plus USB 2.0 sections 9.4.5/9.4.7/9.4.10
+are the documentation basis; no UG585 confirmation is claimed. Corrections:
+`la_usb_toggle_reset()` writes the explicit EPCR bits, CLEAR_FEATURE resets
+only the addressed endpoint/direction, SET_INTERFACE is interface-scoped and
+validates `wIndex`/`wValue`, and `la_usb_reconfigure` no longer strands an
+in-flight TX slot.
+
+Added the offline experiment apparatus: a 512-entry bounded USB event trace
+(`la_usb_trace.{h,c}`, `la_native_usb_trace` host test) covering setups, OUT
+descriptor completions, staging, parser delivery, TX submit/done and
+reset/session events with overwrite detection; JTAG retrieval
+(`fw-zynq/scripts/usb_trace_dump.tcl`, `tools/usb_trace.py`, decoder verified
+against a synthetic dump); the additive `TEST_RECORD` (0x1B) numbered-record
+command with native and host coverage; and the bench-gated loss detector
+(`tests/e2e/test_usb_bulk.py`, `-k test_usb`) that accounts missing,
+duplicated, reordered and NAKed records separately. The USB profile is quiet
+by default (`LA_USB_STATUS_PRINT=0`) so the unresolved `.rodata` print
+corruption (experiment 7) is avoided rather than reproduced; it remains not
+root-caused and is recorded as a confounder. Pre-registered bench predictions
+and acceptance criteria are in `docs/usb-link.md` section 11.
+
+Verification: `test-native` 18/18 (new trace ring test, TEST_RECORD protocol
+vectors and dispatch cases); `test-host` 87 passed (new record-accounting
+tests, including a mock that drops records); `python -m compileall -q tools
+host tests` PASS; `fw-zynq -- --profile usb` PASS (`la_app_usb.elf` text
+209072 / data 3720 / bss 281408, SHA-256 `A536912E...2B9E10A7`, copied to
+`build/release/la_app_usb.elf`) and the default `fw-zynq` gateway profile PASS
+(`la_app.elf` text 191144 / data 3688 / bss 243936) unchanged. No bench result
+is claimed: the 12-write burst, the setup-request observation, the A/B reset
+comparison, the 200-record stream and the trace dump remain BLOCKED until the
+board is connected. Next: reconnect J10/J12, load the corrected USB ELF
+(`jtag-zynq -- --profile usb`), run `test-e2e -- --target serial://COMx -k
+test_usb`, dump `la_usb_trace_ring`, and record whether SET_INTERFACE or
+CLEAR_FEATURE occurs at port open and whether the corrected reset path changes
+the loss.
+
 ### USB migration execution - U02 (2026-09-18)
 
 **U02 complete; contract frozen.** `docs/usb-link.md` section 9 is the frozen

@@ -7,7 +7,7 @@ import time
 import pytest
 
 from host.la_cli import protocol as p
-from host.la_cli.client import AnalyzerClient, AnalyzerError
+from host.la_cli.client import AnalyzerClient, AnalyzerError, account_test_records
 from host.la_cli.transport import TransportError, open_uri
 from host.tests.mock_analyzer import counter_samples
 
@@ -191,3 +191,33 @@ def test_eof_reported(analyzer) -> None:
     finally:
         client.close()
     assert "closed" in str(excinfo.value)
+
+
+def test_test_record_burst_accounting(analyzer) -> None:
+    mock = analyzer("ping")
+    client = _client(mock.uri)
+    try:
+        result = client.test_records(range(6), settle_s=0.3)
+    finally:
+        client.close()
+    accounting = account_test_records(result)
+    assert accounting["clean"], accounting
+    assert accounting["sent"] == 6
+    assert accounting["acked"] == 6
+    assert mock.test_record_ids == list(range(6))
+
+
+def test_test_record_drop_detected(analyzer) -> None:
+    mock = analyzer("test_record_drop")
+    client = _client(mock.uri)
+    try:
+        result = client.test_records(range(6), settle_s=0.3)
+    finally:
+        client.close()
+    accounting = account_test_records(result)
+    assert not accounting["clean"]
+    assert accounting["sent"] == 6
+    assert len(accounting["missing"]) == 3
+    assert accounting["duplicates"] == []
+    assert accounting["naks"] == []
+    assert mock.test_record_ids == list(range(6))

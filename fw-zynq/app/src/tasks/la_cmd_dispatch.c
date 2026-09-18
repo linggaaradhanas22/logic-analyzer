@@ -291,6 +291,30 @@ static int handle_link_cfg(la_cmd_dispatch_t *dispatch,
     return 0;
 }
 
+static int handle_test_record(uint8_t sequence,
+                              const uint8_t *payload,
+                              uint16_t length,
+                              la_cmd_result_t *result)
+{
+    uint32_t record_id;
+
+    if (length != LA_PROTO_TEST_RECORD_WIRE_SIZE) {
+        result_nak(result, LA_PROTO_TEST_RECORD, sequence,
+                   LA_PROTO_ERROR_BAD_LENGTH);
+        return 0;
+    }
+    if (la_proto_unpack_test_record(&record_id, payload, length) != 0) {
+        result_nak(result, LA_PROTO_TEST_RECORD, sequence,
+                   LA_PROTO_ERROR_BAD_FIELD);
+        return 0;
+    }
+    /* U03 bench extension: acknowledge without touching acquisition state.
+     * The record id reaches the device trace through the CmdTask callback. */
+    (void)record_id;
+    result_ack(result, LA_PROTO_TEST_RECORD, sequence);
+    return 0;
+}
+
 static uint8_t decoder_enabled_count(const la_cmd_dispatch_t *dispatch)
 {
     uint8_t count = 0u;
@@ -478,6 +502,9 @@ int la_cmd_dispatch_step(la_cmd_dispatch_t *dispatch,
 
     case LA_PROTO_LINK_CFG:
         return handle_link_cfg(dispatch, sequence, payload, length, result);
+
+    case LA_PROTO_TEST_RECORD:
+        return handle_test_record(sequence, payload, length, result);
 
     case LA_PROTO_GET_STATUS:
         if (length != 0u) {

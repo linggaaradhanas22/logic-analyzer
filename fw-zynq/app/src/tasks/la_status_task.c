@@ -4,6 +4,14 @@
 
 #define LA_STATUS_PERIOD_MS 5000u
 
+/* U03 bench images stay quiet: the bounded USB trace is retrieved over JTAG,
+ * and the console print path is still an unresolved corruption suspect
+ * (experiment 7, docs/usb-link.md section 11). Short lines were stable, so a
+ * one-line counter summary can be compiled in for console-only debugging. */
+#ifndef LA_USB_STATUS_PRINT
+#define LA_USB_STATUS_PRINT 0
+#endif
+
 static uint16_t stack_watermark(TaskHandle_t task)
 {
     UBaseType_t words;
@@ -44,9 +52,8 @@ void la_status_task(void *parameters)
             min = status;
         }
         app->min_free_stack = min;
-        /* Bring-up diagnostic line (the long status blocks are disabled until
-         * the print-path fault is understood). */
 #if LA_TRANSPORT_USB
+#if LA_USB_STATUS_PRINT
         xil_printf("LA st: su=%u rx=%u fr=%u ev=%u ovf=%u bad=%u err=%u txb=%u txd=%u hs=%u\r\n",
                    (unsigned)app->usb.setup_count,
                    (unsigned)app->usb.rx_bytes,
@@ -58,43 +65,7 @@ void la_status_task(void *parameters)
                    (unsigned)app->usb.tx_bytes,
                    (unsigned)app->usb.tx_drops,
                    (unsigned)la_usb_high_speed(&app->usb));
-        {
-            uint32_t head = app->usb.rx_trace_head & 15u;
-            uint32_t index;
-            uint32_t values[12];
-
-            for (index = 0u; index < 4u; index++) {
-                uint32_t slot = (head + 12u + index) & 15u;
-                values[index * 3u] = app->usb.rx_trace[slot][0];
-                values[index * 3u + 1u] = app->usb.rx_trace[slot][1];
-                values[index * 3u + 2u] = app->usb.rx_trace[slot][2];
-            }
-            xil_printf("LA rx: %u/%u/%u %u/%u/%u %u/%u/%u %u/%u/%u\r\n",
-                       (unsigned)values[0], (unsigned)values[1],
-                       (unsigned)values[2], (unsigned)values[3],
-                       (unsigned)values[4], (unsigned)values[5],
-                       (unsigned)values[6], (unsigned)values[7],
-                       (unsigned)values[8], (unsigned)values[9],
-                       (unsigned)values[10], (unsigned)values[11]);
-            xil_printf("LA cur: sw=%u hw=%u ovl=%u\r\n",
-                       (unsigned)(((uintptr_t)app->usb.usb.DeviceConfig.Ep[1]
-                                       .Out.dTDCurr -
-                                   (uintptr_t)app->usb.usb.DeviceConfig.Ep[1]
-                                       .Out.dTDs) /
-                                  XUSBPS_dTD_ALIGN),
-                       (unsigned)(((volatile uint32_t *)app->usb.usb
-                                       .DeviceConfig.Ep[1]
-                                       .Out.dQH)[1] -
-                                  (uintptr_t)app->usb.usb.DeviceConfig.Ep[1]
-                                      .Out.dTDs) /
-                           XUSBPS_dTD_ALIGN,
-                       (unsigned)(((volatile uint32_t *)app->usb.usb
-                                       .DeviceConfig.Ep[1]
-                                       .Out.dQH)[2] -
-                                  (uintptr_t)app->usb.usb.DeviceConfig.Ep[1]
-                                      .Out.dTDs) /
-                           XUSBPS_dTD_ALIGN);
-        }
+#endif
 #else
         xil_printf("LA st: acq=%u cmd=%u tx=%u status=%u\r\n",
                    (unsigned)acq, (unsigned)cmd, (unsigned)tx,

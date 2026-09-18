@@ -21,6 +21,7 @@ PATGEN_CFG = 0x17
 TRACE_CTRL = 0x18
 EVT_CFG = 0x19
 LINK_CFG = 0x1A
+TEST_RECORD = 0x1B
 STATUS, EVT_TRIGGERED, EVT_DECODED, EVT_OVERRUN = 0x20, 0x21, 0x22, 0x23
 EVT_BLOCK = 0x24
 DATA_BEGIN, DATA_CHUNK, DATA_END = 0x30, 0x31, 0x32
@@ -53,6 +54,7 @@ PATGEN_CFG_SIZE = 4
 TRACE_CTRL_SIZE = 4
 EVT_CFG_SIZE = 4
 LINK_CFG_SIZE = 4
+TEST_RECORD_SIZE = 4
 
 # TRACE_CTRL actions (protocol.md, additive v1 extension).
 TRACE_STOP, TRACE_START, TRACE_DUMP = 1, 2, 3
@@ -272,6 +274,23 @@ def unpack_trace_ctrl(payload: bytes) -> int:
     if action not in (TRACE_STOP, TRACE_START, TRACE_DUMP):
         raise FrameError(f"undefined trace action: {action}")
     return action
+
+
+def pack_test_record(record_id: int) -> bytes:
+    """TEST_RECORD payload: record_id:u32 LE (U03 bulk-OUT loss detector).
+
+    The device acknowledges each record without touching acquisition state;
+    the JTAG trace logs the id so a dropped or reordered record can be located
+    on both sides of the link."""
+    if not 0 <= record_id <= 0xFFFFFFFF:
+        raise ValueError(f"record id out of range: {record_id}")
+    return struct.pack("<I", record_id)
+
+
+def unpack_test_record(payload: bytes) -> int:
+    if len(payload) != TEST_RECORD_SIZE:
+        raise FrameError(f"TEST_RECORD payload length {len(payload)}")
+    return struct.unpack_from("<I", payload, 0)[0]
 
 
 def pack_ack(acknowledged_type: int, sequence: int) -> bytes:

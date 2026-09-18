@@ -479,6 +479,29 @@ int la_proto_unpack_link_cfg(uint8_t *transport,
     return 0;
 }
 
+size_t la_proto_pack_test_record(uint32_t record_id,
+                                 uint8_t *output,
+                                 size_t output_capacity)
+{
+    if (output == NULL || output_capacity < LA_PROTO_TEST_RECORD_WIRE_SIZE) {
+        return 0u;
+    }
+    put_u32_le(&output[0], record_id);
+    return LA_PROTO_TEST_RECORD_WIRE_SIZE;
+}
+
+int la_proto_unpack_test_record(uint32_t *record_id,
+                                const uint8_t *input,
+                                size_t input_length)
+{
+    if (record_id == NULL || input == NULL ||
+        input_length != LA_PROTO_TEST_RECORD_WIRE_SIZE) {
+        return -1;
+    }
+    *record_id = get_u32_le(input);
+    return 0;
+}
+
 size_t la_proto_pack_pong(const la_proto_pong_t *pong,
                           uint8_t *output,
                           size_t output_capacity)

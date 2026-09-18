@@ -20,6 +20,7 @@
 #define LA_PROTO_TRACE_CTRL_WIRE_SIZE ((uint16_t)4u)
 #define LA_PROTO_EVT_CFG_WIRE_SIZE ((uint16_t)4u)
 #define LA_PROTO_LINK_CFG_WIRE_SIZE ((uint16_t)4u)
+#define LA_PROTO_TEST_RECORD_WIRE_SIZE ((uint16_t)4u)
 #define LA_PROTO_EVT_BLOCK_HEADER_SIZE ((uint16_t)12u)
 #define LA_PROTO_EVT_BLOCK_VERSION ((uint8_t)1u)
 #define LA_PROTO_EVT_BLOCK_DELTA_ESCAPE ((uint16_t)0xFFFFu)
@@ -46,6 +47,7 @@ typedef enum la_proto_message_type {
     LA_PROTO_TRACE_CTRL = 0x18,
     LA_PROTO_EVT_CFG = 0x19,
     LA_PROTO_LINK_CFG = 0x1A,
+    LA_PROTO_TEST_RECORD = 0x1B,
     LA_PROTO_STATUS = 0x20,
     LA_PROTO_EVT_TRIGGERED = 0x21,
     LA_PROTO_EVT_DECODED = 0x22,
@@ -299,6 +301,18 @@ LA_PROTO_API size_t la_proto_pack_link_cfg(uint8_t transport,
 LA_PROTO_API int la_proto_unpack_link_cfg(uint8_t *transport,
                                           const uint8_t *input,
                                           size_t input_length);
+
+/* TEST_RECORD payload (U03 bench extension): record_id:u32 LE. A test-only
+ * numbered record used by the bulk-OUT loss detector; the receiver validates
+ * the length and acknowledges without touching acquisition state. The device
+ * trace logs the record id so the JTAG dump can be compared with the host's
+ * sent list. */
+LA_PROTO_API size_t la_proto_pack_test_record(uint32_t record_id,
+                                              uint8_t *output,
+                                              size_t output_capacity);
+LA_PROTO_API int la_proto_unpack_test_record(uint32_t *record_id,
+                                             const uint8_t *input,
+                                             size_t input_length);
 
 LA_PROTO_API size_t la_proto_pack_pong(const la_proto_pong_t *pong,
                                        uint8_t *output,

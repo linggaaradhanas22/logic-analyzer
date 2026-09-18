@@ -51,6 +51,7 @@ where the receiver documents forward-compatible handling.
 | `0x18` | `TRACE_CTRL` | host -> Zynq | `action:u8`, reserved[3] (additive v1 extension) |
 | `0x19` | `EVT_CFG` | host -> Zynq | `format:u8`, reserved[3] (additive v1 extension) |
 | `0x1A` | `LINK_CFG` | host -> Zynq | `transport:u8`, `spi_clock_mhz:u8`, reserved[2] (additive v1 extension) |
+| `0x1B` | `TEST_RECORD` | host -> Zynq | `record_id:u32` (additive v1 extension, U03 bench) |
 | `0x20` | `STATUS` | Zynq -> host | status snapshot, 52 bytes in v1 |
 | `0x21` | `EVT_TRIGGERED` | Zynq -> host | `trig_index:u64` |
 | `0x22` | `EVT_DECODED` | Zynq -> host | zero or more event records |
@@ -157,8 +158,18 @@ field (it has no clock of its own). Commands, ACKs and every other frame always
 stay on the UART. The command is accepted only in IDLE, the selection latches
 until changed, and the Zynq acknowledges the frame.
 
-### EVT_BLOCK, type `0x24`
+### TEST_RECORD, type `0x1B`
 
+An additive v1 extension for the U03 bulk-OUT loss detector. The payload is
+exactly 4 bytes: `record_id:u32` little-endian. The receiver validates the
+length, acknowledges the frame with the request sequence, and changes no
+acquisition state; the id is logged in the bounded device trace
+(`docs/usb-link.md` section 11) so the host's sent list can be compared with
+the records the parser actually received. A wrong length is NAK bad-length.
+The command exists for bench diagnostics and is not part of the normal capture
+flow.
+
+### EVT_BLOCK, type `0x24`
 The compact live event encoding selected by `EVT_CFG(format=1)`. The payload
 is one versioned block:
 

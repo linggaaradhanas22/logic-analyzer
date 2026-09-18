@@ -20,6 +20,32 @@
 
 #include <string.h>
 
+/* U03: global so fw-zynq/scripts/usb_trace_dump.tcl can resolve the symbol
+ * from the ELF and dump the ring over JTAG after a burst. */
+la_usb_trace_t la_usb_trace_ring;
+
+void la_usb_trace_event(uint32_t tag, uint32_t a, uint32_t b, uint32_t c)
+{
+    uint32_t saved = ulPortSetInterruptMask();
+
+    la_usb_trace_push(&la_usb_trace_ring, tag, a, b, c);
+    vPortClearInterruptMask(saved);
+}
+
+void la_usb_toggle_reset(la_usb_dev_t *dev, uint8_t number, uint8_t direction)
+{
+    uint32_t mask;
+
+    if (dev == NULL || number == 0u ||
+        number >= dev->usb.DeviceConfig.NumEndpoints) {
+        return;
+    }
+    mask = ((direction & XUSBPS_EP_DIRECTION_IN) != 0u)
+               ? XUSBPS_EPCR_TXR_MASK
+               : XUSBPS_EPCR_RXR_MASK;
+    XUsbPs_SetBits(&dev->usb, XUSBPS_EPCRn_OFFSET(number), mask);
+}
+
 static void la_usb_isr_notify(la_usb_dev_t *dev, uint32_t bits)
 {
     BaseType_t woken = pdFALSE;
@@ -51,6 +77,8 @@ static void la_usb_stage_push(la_usb_dev_t *dev, uint8_t ep, const uint8_t *data
     memcpy(stage->data, data, length);
     stage->len = (uint16_t)length;
     stage->ep = ep;
+    la_usb_trace_push(&la_usb_trace_ring, LA_USB_TRACE_STAGE_PUSH, ep, length,
+                      dev->stage_head);
     dev->stage_head = (dev->stage_head + 1u) % LA_USB_STAGE_COUNT;
     dev->stage_count++;
     vPortClearInterruptMask(saved);
@@ -74,12 +102,19 @@ static int la_usb_rx_service(la_usb_dev_t *dev, uint8_t ep, int advance)
         XST_SUCCESS) {
         return 0;
     }
-    dev->rx_trace[dev->rx_trace_head & 15u][0] = ep;
-    dev->rx_trace[dev->rx_trace_head & 15u][1] = length;
-    dev->rx_trace[dev->rx_trace_head & 15u][2] =
-        (uint32_t)(((uintptr_t)out->dTDCurr - (uintptr_t)out->dTDs) /
-                   XUSBPS_dTD_ALIGN);
-    dev->rx_trace_head++;
+    {
+        uint32_t dtd = (uint32_t)(((uintptr_t)out->dTDCurr -
+                                   (uintptr_t)out->dTDs) /
+                                  XUSBPS_dTD_ALIGN);
+        uint32_t head = 0u;
+
+        if (length >= 4u) {
+            head = (uint32_t)ptr[0] | ((uint32_t)ptr[1] << 8) |
+                   ((uint32_t)ptr[2] << 16) | ((uint32_t)ptr[3] << 24);
+        }
+        la_usb_trace_event(LA_USB_TRACE_OUT_DTD,
+                           ((uint32_t)ep << 8) | (dtd & 0xFFu), length, head);
+    }
     la_usb_stage_push(dev, ep, ptr, length);
     XUsbPs_EpBufferRelease(handle);
     if (advance != 0) {
@@ -113,8 +148,14 @@ void la_usb_sweep_rx(la_usb_dev_t *dev)
      * completion, so process EPCOMPL here as well. */
     taskENTER_CRITICAL();
     for (ep = 0u; ep < 2u; ep++) {
+        uint32_t serviced = 0u;
+
         while (la_usb_rx_service(dev, ep, 1) != 0) {
             dev->rx_events++;
+            serviced++;
+        }
+        if (serviced != 0u) {
+            la_usb_trace_event(LA_USB_TRACE_SWEEP, ep, serviced, 0u);
         }
         (void)XUsbPs_EpPrime(&dev->usb, ep, XUSBPS_EP_DIRECTION_OUT);
     }
@@ -129,6 +170,8 @@ void la_usb_sweep_rx(la_usb_dev_t *dev)
             if (slot < (int32_t)LA_USB_TX_FRAME_COUNT) {
                 dev->tx_slot_state[slot] = 0u;
             }
+            la_usb_trace_event(LA_USB_TRACE_TX_DONE, (uint32_t)slot, complete,
+                               dev->tx_bytes);
             dev->tx_inflight = -1;
             (void)xSemaphoreGive(dev->tx_free_sem);
         }
@@ -178,6 +221,8 @@ static void la_usb_tx_handler(void *reference, u8 ep, u8 event, void *data)
     if (slot >= 0 && slot < (int32_t)LA_USB_TX_FRAME_COUNT) {
         dev->tx_slot_state[slot] = 0u;
     }
+    la_usb_trace_event(LA_USB_TRACE_TX_DONE, (uint32_t)slot, 0u,
+                       dev->tx_bytes);
     dev->tx_inflight = -1;
     (void)xSemaphoreGiveFromISR(dev->tx_free_sem, &woken);
     if (dev->task != NULL) {
@@ -190,6 +235,7 @@ const uint8_t *la_usb_stage_pop(la_usb_dev_t *dev, uint16_t *len, uint8_t *ep)
 {
     la_usb_stage_t *stage;
     const uint8_t *ptr = NULL;
+    uint32_t tail = 0u;
 
     if (dev == NULL || len == NULL || ep == NULL) {
         return NULL;
@@ -200,8 +246,12 @@ const uint8_t *la_usb_stage_pop(la_usb_dev_t *dev, uint16_t *len, uint8_t *ep)
         *len = stage->len;
         *ep = stage->ep;
         ptr = stage->data;
+        tail = dev->stage_tail;
     }
     taskEXIT_CRITICAL();
+    if (ptr != NULL) {
+        la_usb_trace_event(LA_USB_TRACE_STAGE_POP, *ep, *len, tail);
+    }
     return ptr;
 }
 
@@ -278,6 +328,7 @@ int la_usb_dev_init(la_usb_dev_t *dev, StreamBufferHandle_t rx_sb,
         return -1;
     }
     memset(dev, 0, sizeof(*dev));
+    la_usb_trace_init(&la_usb_trace_ring);
     dev->rx_sb = rx_sb;
     dev->task = task;
     dev->tx_inflight = -1;
@@ -391,12 +442,20 @@ int la_usb_reconfigure(la_usb_dev_t *dev)
     (void)XUsbPs_EpEnable(&dev->usb, 1u,
                           XUSBPS_EP_DIRECTION_OUT | XUSBPS_EP_DIRECTION_IN);
     (void)XUsbPs_EpEnable(&dev->usb, 2u, XUSBPS_EP_DIRECTION_IN);
-    /* Reset the EP1 OUT data toggle/state before re-priming: a stale toggle
-     * made the controller discard every other host packet (bench
-     * 2026-09-18). */
-    XUsbPs_WriteReg(dev->usb.Config.BaseAddress, XUSBPS_EPFLUSH_OFFSET,
-                    1u << 1);
-    dev->tx_inflight = -1;
+    /* USB 2.0 section 9.4.7 requires SET_CONFIGURATION to reset every
+     * endpoint's data toggle to DATA0. Use the EPCR TXR/RXR bits that the
+     * XUsbPs headers document as "Data Toggle Reset" (docs/usb-link.md
+     * section 10); an EPFLUSH is documented only as a FIFO/endpoint flush.
+     * The previous EPFLUSH + tx_inflight = -1 form also stranded an in-flight
+     * TX slot; the IN completion still owns and returns it. */
+    la_usb_toggle_reset(dev, 1u, XUSBPS_EP_DIRECTION_OUT);
+    la_usb_toggle_reset(dev, 1u, XUSBPS_EP_DIRECTION_IN);
+    la_usb_toggle_reset(dev, 2u, XUSBPS_EP_DIRECTION_IN);
+    la_usb_trace_event(LA_USB_TRACE_RESET, 1u,
+                       XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
+                                      XUSBPS_EPCR1_OFFSET),
+                       XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
+                                      XUSBPS_EPRDY_OFFSET));
     return (XUsbPs_EpPrime(&dev->usb, 1u, XUSBPS_EP_DIRECTION_OUT) ==
             XST_SUCCESS)
                ? 0

@@ -57,6 +57,41 @@ def nak_text(error_code: int) -> str:
     return _NAK_TEXT.get(error_code, f"code {error_code}")
 
 
+def account_test_records(result: dict) -> dict:
+    """U03 loss accounting for AnalyzerClient.test_records().
+
+    Counts missing, duplicated, reordered and NAKed records separately and
+    reports the parser CRC/format errors. One host write is one transport
+    send, not one USB packet; when an ACK is missing the device-side JTAG
+    trace is the authority on whether the record reached the controller."""
+    sent_sequences = [sequence for _record_id, sequence in result["sent"]]
+    acked = [entry for entry in result["acked"] if isinstance(entry, int)]
+    naks = [entry for entry in result["acked"] if not isinstance(entry, int)]
+    seen: set[int] = set()
+    duplicates: list[int] = []
+    for sequence in acked:
+        if sequence in seen:
+            duplicates.append(sequence)
+        seen.add(sequence)
+    sent_set = set(sent_sequences)
+    missing = [sequence for sequence in sent_sequences if sequence not in seen]
+    expected = [sequence for sequence in sent_sequences if sequence in seen]
+    observed = [sequence for sequence in acked if sequence in sent_set]
+    return {
+        "sent": len(sent_sequences),
+        "acked": len(acked),
+        "missing": missing,
+        "duplicates": duplicates,
+        "reordered": observed != expected,
+        "naks": naks,
+        "crc_errors": result["parser"]["crc_errors"],
+        "format_errors": result["parser"]["format_errors"],
+        "clean": (not missing and not duplicates and observed == expected and
+                  not naks and result["parser"]["crc_errors"] == 0 and
+                  result["parser"]["format_errors"] == 0),
+    }
+
+
 class AnalyzerClient:
     def __init__(self, transport: Transport) -> None:
         self._transport = transport
@@ -236,6 +271,41 @@ class AnalyzerClient:
         deadline = time.monotonic() + timeout_s
         self._send(p.TRACE_CTRL, p.pack_trace_ctrl(action))
         self._expect_ack(p.TRACE_CTRL, "TRACE_CTRL", deadline)
+
+    def test_records(self, record_ids, gap_s: float = 0.0,
+                     settle_s: float = 2.0) -> dict:
+        """U03 bulk-OUT loss detector: sends numbered TEST_RECORD frames back
+        to back, then collects the per-record ACKs for a bounded settle window.
+
+        Returns {"sent": [(record_id, sequence), ...], "acked": [...],
+        "parser": {...}}. `acked` holds the acknowledged request sequences in
+        arrival order plus ("nak", sequence, error) tuples. One host write is
+        one transport send; it is not assumed to be one USB packet or one
+        device completion. The device-side JTAG trace records the same ids."""
+        sent: list[tuple[int, int]] = []
+        acked: list = []
+        deadline = time.monotonic() + settle_s
+
+        for record_id in record_ids:
+            sequence = self._next_sequence()
+            self._transport.send(
+                p.encode(p.TEST_RECORD, sequence, p.pack_test_record(record_id))
+            )
+            sent.append((record_id, sequence))
+            if gap_s > 0.0:
+                time.sleep(gap_s)
+
+        def on_frame(message_type, sequence, payload):
+            if message_type == p.ACK and len(payload) >= 2 and \
+                    payload[0] == p.TEST_RECORD:
+                acked.append(payload[1])
+            elif message_type == p.NAK and len(payload) >= 3 and \
+                    payload[0] == p.TEST_RECORD:
+                acked.append(("nak", payload[1], payload[2]))
+            return False
+
+        self._pump(deadline, on_frame, deadline_ok=True)
+        return {"sent": sent, "acked": acked, "parser": self._parser_stats()}
 
     def trace_dump(self, timeout_s: float = 30.0) -> list[str]:
         """P8.3: stops tracing and collects the LOG dump until the END line.

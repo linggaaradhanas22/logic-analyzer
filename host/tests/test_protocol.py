@@ -142,6 +142,19 @@ def test_link_cfg_layout() -> None:
         p.unpack_link_cfg(b"\x01\x00\x00")
 
 
+def test_test_record_layout() -> None:
+    payload = p.pack_test_record(0x12345678)
+    assert payload == bytes([0x78, 0x56, 0x34, 0x12])
+    assert p.unpack_test_record(payload) == 0x12345678
+    assert p.TEST_RECORD == 0x1B
+    with pytest.raises(ValueError):
+        p.pack_test_record(-1)
+    with pytest.raises(ValueError):
+        p.pack_test_record(0x1_0000_0000)
+    with pytest.raises(p.FrameError):
+        p.unpack_test_record(b"\x00\x00\x00")
+
+
 def test_evt_block_round_trip() -> None:
     payload = bytearray([p.EVT_BLOCK_VERSION, 2])
     payload += struct.pack("<H", 4)

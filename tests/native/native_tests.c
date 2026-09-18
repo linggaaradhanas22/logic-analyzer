@@ -373,8 +373,35 @@ static int test_typed_protocol_payloads(void)
     }
 
     {
-        /* TRACE_CTRL additive extension: action plus three reserved zeros. */
-        static const uint8_t expected_trace[LA_PROTO_TRACE_CTRL_WIRE_SIZE] = {
+        /* TEST_RECORD additive extension (U03 bulk-OUT loss detector):
+         * record_id:u32 little-endian. */
+        static const uint8_t expected_record[LA_PROTO_TEST_RECORD_WIRE_SIZE] = {
+            0x78u, 0x56u, 0x34u, 0x12u};
+        uint32_t record_id = UINT32_C(0x12345678);
+        uint32_t unpacked_record = 0u;
+
+        packed = la_proto_pack_test_record(record_id, payload, sizeof(payload));
+        CHECK(packed == LA_PROTO_TEST_RECORD_WIRE_SIZE,
+              "TEST_RECORD pack size");
+        CHECK(memcmp(payload, expected_record, sizeof(expected_record)) == 0,
+              "TEST_RECORD little-endian byte vector");
+        CHECK(la_proto_unpack_test_record(&unpacked_record, payload, packed) ==
+                      0 &&
+                  unpacked_record == record_id,
+              "TEST_RECORD round trip");
+        CHECK(la_proto_pack_test_record(record_id, payload,
+                                        LA_PROTO_TEST_RECORD_WIRE_SIZE - 1u) ==
+                      0u &&
+                  la_proto_pack_test_record(record_id, NULL,
+                                            sizeof(payload)) == 0u,
+              "TEST_RECORD pack capacity guards");
+        CHECK(la_proto_unpack_test_record(&unpacked_record, payload, 3u) == -1 &&
+                  la_proto_unpack_test_record(NULL, payload, packed) == -1,
+              "TEST_RECORD unpack guards");
+    }
+
+    {
+        /* TRACE_CTRL additive extension: action plus three reserved zeros. */        static const uint8_t expected_trace[LA_PROTO_TRACE_CTRL_WIRE_SIZE] = {
             0x03u, 0x00u, 0x00u, 0x00u};
         uint8_t trace_action = 0u;
 

@@ -266,6 +266,22 @@ static void cmd_frame_callback(void *context, uint8_t type, uint8_t sequence,
     uint64_t uptime_ms = (uint64_t)xTaskGetTickCount() * portTICK_PERIOD_MS;
 
     ctx->app->rx_frames++;
+#if LA_TRANSPORT_USB
+    /* U03: log parser delivery with the first payload word so the JTAG trace
+     * can be compared with the host's sent TEST_RECORD ids (docs/usb-link.md
+     * section 11). */
+    {
+        uint32_t head = 0u;
+
+        if (length >= 4u) {
+            head = (uint32_t)payload[0] | ((uint32_t)payload[1] << 8) |
+                   ((uint32_t)payload[2] << 16) |
+                   ((uint32_t)payload[3] << 24);
+        }
+        la_usb_trace_event(LA_USB_TRACE_FRAME,
+                           ((uint32_t)type << 8) | sequence, length, head);
+    }
+#endif
     if (la_cmd_dispatch_step(&ctx->dispatch, type, sequence, payload, length,
                              uptime_ms, &result) == 0) {
         cmd_handle_outcome(ctx, &result);

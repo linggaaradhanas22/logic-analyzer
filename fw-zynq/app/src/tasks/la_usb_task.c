@@ -22,8 +22,6 @@
 #include "la_usb_desc.h"
 #include "la_usb_dev.h"
 
-#include "xil_printf.h"
-
 #include <string.h>
 
 #define LA_USB_SERVICE_PERIOD_MS 1u
@@ -62,6 +60,8 @@ static void usb_apply_session(la_app_t *app, la_usb_event_t event, uint8_t arg)
         (void)la_usb_reconfigure(dev);
     }
     dev->session_events++;
+    la_usb_trace_event(LA_USB_TRACE_SESSION, (uint32_t)event, actions,
+                       (uint32_t)dev->session.state);
 }
 
 static void usb_handle_session(la_app_t *app)
@@ -119,19 +119,24 @@ static void usb_get_descriptor(la_usb_dev_t *dev, const XUsbPs_SetupData *setup)
     (void)la_usb_ep0_send(dev, data, length);
 }
 
-/* The host resets its endpoint data toggles on SET_INTERFACE and on
- * CLEAR_FEATURE(ENDPOINT_HALT); the device must do the same or it will
- * ACK-but-discard every other bulk packet (bench 2026-09-18: 50% EP1 OUT
- * loss with perfect control transfers). A DWC endpoint flush resets the
- * toggle to DATA0, so flush the data endpoints and re-prime EP1 OUT. */
-static void usb_reset_data_endpoints(la_usb_dev_t *dev)
+/* USB 2.0 section 9.4.10: SET_INTERFACE resets the data toggles of every
+ * endpoint in the addressed interface. Section 9.4.5: CLEAR_FEATURE
+ * (ENDPOINT_HALT) resets the addressed endpoint's toggle to DATA0. Both are
+ * device requirements, and the host resets its own side; a mismatch shows up
+ * as ACK-but-discard of every other bulk packet (bench 2026-09-18: ~50% EP1
+ * OUT loss with clean control transfers). The EPCR TXR/RXR bits are the
+ * mechanism the XUsbPs headers document as "Data Toggle Reset"
+ * (docs/usb-link.md section 10); the earlier EPFLUSH form relied on an
+ * undocumented toggle effect and reset every data endpoint instead of the
+ * addressed one. */
+static void usb_reset_interface_toggles(la_usb_dev_t *dev, uint8_t interface)
 {
-    uint32_t flush = (1u << 1) | (0x00010000u << 1) | (0x00010000u << 2);
-
-    XUsbPs_WriteReg(dev->usb.Config.BaseAddress, XUSBPS_EPFLUSH_OFFSET,
-                    flush);
-    dev->tx_inflight = -1;
-    (void)XUsbPs_EpPrime(&dev->usb, 1u, XUSBPS_EP_DIRECTION_OUT);
+    if (interface == 1u) {
+        la_usb_toggle_reset(dev, 1u, XUSBPS_EP_DIRECTION_OUT);
+        la_usb_toggle_reset(dev, 1u, XUSBPS_EP_DIRECTION_IN);
+    } else if (interface == 0u) {
+        la_usb_toggle_reset(dev, 2u, XUSBPS_EP_DIRECTION_IN);
+    }
 }
 
 static void usb_handle_standard(la_app_t *app, const XUsbPs_SetupData *setup,
@@ -167,7 +172,14 @@ static void usb_handle_standard(la_app_t *app, const XUsbPs_SetupData *setup,
     }
     case 0x01u: /* CLEAR_FEATURE */
     case 0x03u: /* SET_FEATURE */
-        if (setup->wValue == 0u && (setup->wIndex & 0xFFu) != 0u) {
+        /* ENDPOINT_HALT (feature 0) on an addressed non-zero endpoint only.
+         * EP0 halt, reserved endpoint bits and other features are invalid. */
+        if ((setup->bmRequestType & 0x1Fu) != 0x02u || setup->wValue != 0u ||
+            (setup->wIndex & 0x7Fu) == 0u || (setup->wIndex & 0xFF70u) != 0u) {
+            la_usb_ep0_stall(dev, direction);
+            break;
+        }
+        {
             uint8_t endpoint = (uint8_t)(setup->wIndex & 0xFFu);
             uint8_t epdir = ((endpoint & 0x80u) != 0u)
                                 ? XUSBPS_EP_DIRECTION_IN
@@ -178,15 +190,33 @@ static void usb_handle_standard(la_app_t *app, const XUsbPs_SetupData *setup,
                 XUsbPs_EpStall(&dev->usb, number, epdir);
             } else {
                 XUsbPs_EpUnStall(&dev->usb, number, epdir);
-                if (number != 0u) {
-                    usb_reset_data_endpoints(dev);
-                }
+                /* Section 9.4.5: the addressed endpoint's toggle returns to
+                 * DATA0. Reset only that endpoint/direction. */
+                la_usb_toggle_reset(dev, number, epdir);
+                la_usb_trace_event(
+                    LA_USB_TRACE_RESET, 2u,
+                    XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
+                                   XUSBPS_EPCRn_OFFSET(number)),
+                    XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
+                                   XUSBPS_EPRDY_OFFSET));
             }
         }
         (void)la_usb_ep0_send(dev, NULL, 0u);
         break;
-    case 0x0Bu: /* SET_INTERFACE: the host resets its data toggles */
-        usb_reset_data_endpoints(dev);
+    case 0x0Bu: /* SET_INTERFACE */
+        /* One alternate setting per interface: interface 0 is the CDC control
+         * interface (EP2 IN notification), interface 1 the data interface
+         * (EP1 OUT/IN). Section 9.4.10 resets the toggles of the addressed
+         * interface's endpoints; an unknown interface or alt setting stalls. */
+        if (setup->wValue != 0u || (setup->wIndex & 0xFF00u) != 0u ||
+            setup->wIndex > 1u) {
+            la_usb_ep0_stall(dev, direction);
+            break;
+        }
+        usb_reset_interface_toggles(dev, (uint8_t)setup->wIndex);
+        la_usb_trace_event(LA_USB_TRACE_RESET, 3u, setup->wIndex,
+                           XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
+                                          XUSBPS_EPRDY_OFFSET));
         (void)la_usb_ep0_send(dev, NULL, 0u);
         break;
     default:
@@ -202,10 +232,16 @@ static void usb_handle_setup(la_app_t *app, const XUsbPs_SetupData *setup)
                             ? XUSBPS_EP_DIRECTION_IN
                             : XUSBPS_EP_DIRECTION_OUT;
 
-    xil_printf("USB su %02x %02x %04x %04x %u\r\n",
-               (unsigned)setup->bmRequestType, (unsigned)setup->bRequest,
-               (unsigned)setup->wValue, (unsigned)setup->wIndex,
-               (unsigned)setup->wLength);
+    /* The bounded event trace replaces the old per-setup console line: 144+
+     * setups during enumeration would otherwise perturb timing and feed the
+     * unresolved print-path fault (docs/usb-link.md section 11). */
+    la_usb_trace_event(LA_USB_TRACE_SETUP,
+                       ((uint32_t)setup->bmRequestType << 24) |
+                           ((uint32_t)setup->bRequest << 16) |
+                           (uint32_t)setup->wValue,
+                       ((uint32_t)setup->wIndex << 16) |
+                           (uint32_t)setup->wLength,
+                       dev->setup_count);
     if ((setup->bmRequestType & 0x60u) == 0x00u) {
         usb_handle_standard(app, setup, direction);
     } else if ((setup->bmRequestType & 0x60u) == 0x20u) {
@@ -284,6 +320,8 @@ static void usb_pump_rx(la_app_t *app)
         s_rx_offset += (uint32_t)sent;
     }
     dev->rx_bytes += s_stage_len;
+    la_usb_trace_event(LA_USB_TRACE_RX_SB, s_stage_ep, s_stage_len,
+                       s_stage_len);
     la_usb_stage_release(dev);
     s_rx_pending = 0u;
 }

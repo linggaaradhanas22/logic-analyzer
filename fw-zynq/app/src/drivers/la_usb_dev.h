@@ -26,6 +26,7 @@
 #include "task.h"
 
 #include "la_usb_core.h"
+#include "la_usb_trace.h"
 #include "xparameters.h"
 #include "xusbps.h"
 
@@ -93,8 +94,6 @@ typedef struct la_usb_dev {
     volatile uint32_t rx_overflows;
     volatile uint32_t rx_bad;    /* driver entries outside the DMA pool */
     volatile uint32_t rx_events; /* OUT completion callbacks serviced */
-    volatile uint32_t rx_trace[16][3]; /* last (ep, length, dTD index) */
-    volatile uint32_t rx_trace_head;
     volatile uint32_t tx_bytes;
     volatile uint32_t tx_drops;
     volatile uint32_t setup_count;
@@ -147,5 +146,18 @@ void la_usb_ep0_stall(la_usb_dev_t *dev, uint8_t direction);
 
 /* True when the port negotiated high speed (read in task context). */
 int la_usb_high_speed(la_usb_dev_t *dev);
+
+/* U03 bounded event trace. la_usb_trace_ring is a global so the JTAG dump
+ * tool can resolve it from the ELF symbol table; la_usb_trace_event() is
+ * atomic against the USB ISR (interrupt-mask pair) and is safe from both ISR
+ * and task context. The ring is retrieved over JTAG after a burst and is
+ * never printed. */
+extern la_usb_trace_t la_usb_trace_ring;
+void la_usb_trace_event(uint32_t tag, uint32_t a, uint32_t b, uint32_t c);
+
+/* Resets one endpoint direction's data toggle to DATA0 through the
+ * documented EPCR TXR/RXR bits (docs/usb-link.md section 10). UsbTask only,
+ * with the endpoint idle. */
+void la_usb_toggle_reset(la_usb_dev_t *dev, uint8_t number, uint8_t direction);
 
 #endif /* LA_USB_DEV_H */
