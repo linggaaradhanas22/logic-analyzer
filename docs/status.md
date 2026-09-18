@@ -331,6 +331,41 @@ transitions, suspend/resume, FIFO order, overflow counting, wrap and stale
 drops. Evidence: `build/reports/usb-u02-contract.md`, `test-native` 16/16.
 Next: U03 implementation, then a [HUMAN] JTAG enumeration session.
 
+### USB migration execution - U03 host-side controls (2026-09-18)
+
+**Host-side control setup complete locally; USBPcap needs a reboot before it
+can capture.** Added the option-1 host controls from the U03 alternative list:
+USBPcap/Wireshark URB capture plus a raw libusb bulk path that bypasses
+`usbser.sys`. New `tools/usb_capture.py` (list/capture/decode) and
+`tools/usb_raw_bulk.py` (list/info/raw/records, reusing the shared
+`TEST_RECORD` accounting); `pyproject.toml` gained the pinned optional extra
+`usb-bench` (pyusb 1.3.1, libusb-package 1.0.26.2); `docs/usb-link.md` section
+14 records the setup, the driver-binding procedure and the pre-registered
+observations. Installed: Wireshark 4.6.8 (winget), USBPcap 1.5.4.0 (silent,
+SHA-256 `87A7EDF9...82CCB622`; USBPcapCMD copied into Wireshark extcap;
+`-I` run, four AMD `ROOT_HUB30` roots, all standard HWIDs), Zadig 2.9
+(`.tools\zadig\`, SHA-256 `4ECAA95D...F82039B`, ignored). The USBPcap class
+filter is registered in the USB class `UpperFilters`, but the driver is still
+`Stopped` and `\\.\USBPcapN` does not exist; a root-hub disable/enable and
+`pnputil /restart-device` did not attach it, so per the USBPcap README
+**Windows must be rebooted** before `usb_capture.py list` can show
+`USBPcap1..4`. Wireshark warns that Npcap is missing and WinPcap 4.1.3 is
+installed; Npcap is not needed for USBPcap captures or pcap reading and
+WinPcap was left untouched.
+
+Verification: `python -m compileall -q tools host tests` PASS;
+`tools/usb_raw_bulk.py list` PASS (8 devices; the vendor example
+`0d7d:0100` is attached, the product `1209:0001` is not);
+`tools/usb_raw_bulk.py info --vid 0x0d7d --pid 0x0100` correctly reported the
+WinUSB/Zadig guidance instead of crashing (the example is bound to
+`usbstor.sys`); `tools/usb_capture.py list` BLOCKED (no USBPcap interfaces
+before the reboot). No capture, raw-burst or firmware result is claimed.
+Next: reboot Windows, verify `usb_capture.py list` and a short capture, load
+`jtag-zynq -- --profile usb`, bind WinUSB with Zadig, run
+`usb_raw_bulk.py records --count 12 --gap-ms 50` and the `usb_capture.py
+decode` table, and compare both against the serial detector and the JTAG
+trace. Restore `usbser.sys` after the raw test.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

@@ -487,3 +487,73 @@ the working data path, and no product firmware fix is claimed. The board runs
 the example until the next `jtag-zynq -- --profile usb` (or gateway) load.
 Next tactic: align `la_usb_reconfigure` with the exact vendor sequence above
 and re-run the numbered-record detector and trace.
+
+## 14. U03 host-side controls: USBPcap capture and raw libusb bulk (2026-09-18)
+
+**Purpose.** This is the free, same-PC control set for U03: a URB-level
+USBPcap capture of what Windows submits (including the control requests at
+port open) and a raw libusb bulk path that bypasses `usbser.sys` entirely.
+Neither view exposes DATA0/DATA1 PIDs or ACK/NAK, so the toggle question still
+needs a wire capture (the project's own sampler or a protocol analyzer); these
+controls bound the host and class-driver side of the loss.
+
+**Installed tooling (2026-09-18).**
+
+| Component | Version | Location | Evidence |
+|---|---|---|---|
+| Wireshark (winget `WiresharkFoundation.Wireshark`) | 4.6.8 | `C:\Program Files\Wireshark` | `wireshark.exe`/`tshark.exe` present; winget reported success |
+| USBPcap silent install | 1.5.4.0 | `C:\Program Files\USBPcap` | installer SHA-256 `87A7EDF9BBBCF07B5F4373D9A192A6770D2FF3ADD7AA1E276E82E38582CCB622` |
+| USBPcapCMD extcap | 1.5.4.0 | copied to `C:\Program Files\Wireshark\extcap` | `--extcap-version` returns 1.5.4.0 |
+| USB 3.0 HWID init | `USBPcapCMD.exe -I` | 4 AMD `ROOT_HUB30` roots | all reported "Found standard HWID" |
+| pyusb + libusb-package | 1.3.1 / 1.0.26.2 | project `.venv` | optional extra `usb-bench` in `pyproject.toml` |
+| Zadig | 2.9 | `.tools\zadig\zadig-2.9.exe` (ignored) | SHA-256 `4ECAA95DF3DA3621486A043AEF8B3050B8BAFE7C901402871E816229EF82039B` |
+
+**Blocker: reboot required before USBPcap works.** The INF registered
+`USBPcap` in the USB class `UpperFilters`
+(`HKLM\SYSTEM\CurrentControlSet\Control\Class\{36fc9e60-...}`), but the driver
+service is still `Stopped`, `\\.\USBPcapN` does not exist, and
+`USBPcapCMD --extcap-interfaces` prints nothing. A disable/enable of the Zybo
+root hub and a `pnputil /restart-device` did not attach the filter; the USBPcap
+README states "After installing, reboot." The board, FTDI console and root hubs
+are healthy (`Get-PnpDevice` all `OK`). Post-reboot first checks:
+`python tools/usb_capture.py list` (expect `USBPcap1..4`) and a short capture.
+
+**Npcap note.** Wireshark 4.6 warns that Npcap is missing and that WinPcap
+4.1.3 is installed. Npcap is not needed for USBPcap captures and pcap file
+reading; WinPcap was left untouched. If network capture is wanted later,
+install Npcap and let it remove WinPcap.
+
+**Tools.**
+
+- `tools/usb_capture.py` - `list` (root-hub interfaces), `capture`
+  (elevated; USBPcapCMD with graceful stop, default
+  `build/captures/usb-<stamp>.pcap`), `decode` (tshark field table filtered to
+  the product VID/PID).
+- `tools/usb_raw_bulk.py` - `list` (libusb enumeration), `info` (descriptors
+  and endpoints), `raw` (bulk OUT burst with optional CDC control sequence and
+  EP IN reads), `records` (the same numbered `TEST_RECORD` detector as
+  `tests/e2e/test_usb_bulk.py`, with the shared ACK accounting).
+
+**Raw libusb driver binding.** Windows needs WinUSB on `1209:0001`: run
+`.tools\zadig\zadig-2.9.exe`, enable *List All Devices*, select
+`1209:0001 (LA-USB-TEST-0001)`, target `WinUSB`, *Replace Driver*. This
+replaces `usbser.sys` for the device, so `la-cli serial://COMx` stops working
+until the device is uninstalled and re-enumerated (Device Manager, delete the
+driver, scan for hardware changes). The raw test itself needs no admin rights.
+
+**Pre-registered observations and acceptance (extends section 11).** At port
+open the capture must show whether Windows issues `SET_INTERFACE` (0x0B) or
+`CLEAR_FEATURE` (0x01), for which interface/endpoint, and the ordering of
+`SET_LINE_CODING`/`SET_CONTROL_LINE_STATE`; if neither reset request appears,
+the reset path cannot explain any change. The raw 12-write `records` burst must
+reproduce or not reproduce `sent=12 acked=6 missing=[2,4,6,8,10,12]` with zero
+write errors; a clean raw run with a lossy serial run would implicate
+`usbser.sys` or the CDC class path, a lossy raw run clears them. One host write
+is one transport send, not one USB packet. Repeated loss-free runs are required
+before success is claimed; the device JTAG trace remains the first-divergence
+authority. No result is claimed before the reboot and the board load.
+
+**xHCI caveat.** USBPcap's USB 3.0 support is partial and this PC has only AMD
+`ROOT_HUB30` roots (no EHCI companion). If captures are empty after the reboot,
+fall back to the USB 2.0 PCIe EHCI card control or a wire capture; `-I` has
+already been run and the filter reports standard HWIDs.
