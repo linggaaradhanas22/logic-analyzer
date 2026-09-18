@@ -230,19 +230,19 @@ value; U03 confirms the controller registers on target), `CfgInitialize`,
 `XPAR_XUSBPS_0_INTERRUPTS` `0x4015` = SPI 21 = GIC ID 53, installed through
 `la_irq_connect()` at priority `0xA0`, handler `XUsbPs_IntrHandler`.
 
-**ISR deferral.** The vendor dispatcher does bounded register work and invokes
-our endpoint callbacks. Our callbacks are notification-only: EP0 setup copies
-the 8-byte setup packet (`XUsbPs_EpGetSetupData`) and notifies; OUT data pops
-the completed buffer with `XUsbPs_EpBufferReceive` (required because the
-vendor RX handler advances its descriptor cursor per callback) and pushes a
-`{generation, ptr, len, handle}` record; IN completion pushes a record. No
-class processing, bulk copy, parser feed, allocation, blocking or console I/O
-runs in interrupt context. A general handler is registered so the vendor reset
-fallback never spins. All class requests, copies, `rx_sb` writes, submissions
-and re-priming run in UsbTask. Records carry the session generation; the task
-drops stale records and counts them. After a bus reset/unconfigure the driver
-has already flushed its descriptors, so stale RX handles are discarded, never
-released.
+**ISR deferral (amended during U03 bench).** The vendor RX interrupt loop
+requires the endpoint callback to pop **and release** every completed
+descriptor before it advances; a deferred pop leaves descriptors inactive and
+spins the ISR forever (bench 2026-09-18: `ulPortInterruptNesting` stuck at 1,
+`xTickCount` frozen, console dead). The implemented bring-up path therefore
+leaves the UI and SLE sources masked and services setups and endpoint
+completions from UsbTask (`la_usb_poll_setup`, `la_usb_poll_rx`,
+`la_usb_poll_tx`, including the vendor cursor advance); only bus reset,
+error and port change remain interrupt-driven, and their general handler is
+notification-only. A polled service is a sleep-based periodic service, not a
+busy-wait. The original notification-only-callback design remains the target
+if a pop-and-release-safe deferral is demonstrated; `la_usb_core` keeps the
+session/generation model and its host tests.
 
 **Endpoints and descriptors.** EP0 control 64 B (2 buffers); EP1 OUT/IN bulk,
 16 x 512 B buffers each at HS, 64-byte packets at FS; EP2 IN interrupt 16 B

@@ -16,6 +16,7 @@
 #include "xil_printf.h"
 #include "xinterrupt_wrap.h"
 #include "xparameters.h"
+#include "xusbps_endpoint.h"
 
 #include <string.h>
 
@@ -29,90 +30,95 @@ static void la_usb_isr_notify(la_usb_dev_t *dev, uint32_t bits)
     portYIELD_FROM_ISR(woken);
 }
 
-static void la_usb_rx_completion(la_usb_dev_t *dev, uint8_t ep)
+int la_usb_poll_setup(la_usb_dev_t *dev, XUsbPs_SetupData *setup)
 {
-    la_usb_completion_t completion;
+    u32 epstat;
+
+    if (dev == NULL || setup == NULL) {
+        return 0;
+    }
+    epstat = XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
+                            XUSBPS_EPSTAT_OFFSET);
+    if ((epstat & 0x1u) == 0u) {
+        return 0;
+    }
+    if (XUsbPs_EpGetSetupData(&dev->usb, 0, setup) != XST_SUCCESS) {
+        return 0;
+    }
+    /* The vendor ISR used to re-prime EP0 OUT after the setup; with UI
+     * masked the poll does it. */
+    (void)XUsbPs_EpPrime(&dev->usb, 0u, XUSBPS_EP_DIRECTION_OUT);
+    dev->setup_count++;
+    return 1;
+}
+
+int la_usb_poll_rx(la_usb_dev_t *dev, la_usb_completion_t *completion)
+{
     uint8_t *ptr = NULL;
     uint32_t length = 0u;
     uint32_t handle = 0u;
+    uint8_t ep;
 
-    if (XUsbPs_EpBufferReceive(&dev->usb, ep, &ptr, &length, &handle) !=
-        XST_SUCCESS) {
-        return;
+    if (dev == NULL || completion == NULL) {
+        return 0;
     }
-    completion.generation = dev->session.generation;
-    completion.handle = handle;
-    completion.ptr = ptr;
-    completion.len = length;
-    completion.ep = ep;
-    {
-        UBaseType_t saved = taskENTER_CRITICAL_FROM_ISR();
+    for (ep = 0u; ep < 2u; ep++) {
+        XUsbPs_EpOut *out;
 
-        (void)la_usb_ring_push(&dev->rx_ring, &completion);
-        taskEXIT_CRITICAL_FROM_ISR(saved);
-    }
-    la_usb_isr_notify(dev, LA_USB_NOTIFY_RX_DONE);
-}
-
-static void la_usb_ep0_handler(void *reference, u8 ep, u8 event, void *data)
-{
-    la_usb_dev_t *dev = (la_usb_dev_t *)reference;
-
-    (void)data;
-    if (event == XUSBPS_EP_EVENT_SETUP_DATA_RECEIVED) {
-        if (XUsbPs_EpGetSetupData(&dev->usb, (int)ep, &dev->setup) ==
+        if (XUsbPs_EpBufferReceive(&dev->usb, ep, &ptr, &length, &handle) !=
             XST_SUCCESS) {
-            dev->setup_pending = 1u;
-            dev->setup_count++;
-            la_usb_isr_notify(dev, LA_USB_NOTIFY_EP0_SETUP);
+            continue;
         }
-    } else if (event == XUSBPS_EP_EVENT_DATA_RX) {
-        la_usb_rx_completion(dev, ep);
+        /* The vendor RX interrupt loop advances the software cursor after
+         * each pop; the polled service must do the same or the ring stalls
+         * on the re-activated descriptor. */
+        out = &dev->usb.DeviceConfig.Ep[ep].Out;
+        out->dTDCurr = XUsbPs_dTDGetNLP(out->dTDCurr);
+        XUsbPs_dTDInvalidateCache(out->dTDCurr);
+        completion->generation = dev->session.generation;
+        completion->handle = handle;
+        completion->ptr = ptr;
+        completion->len = length;
+        completion->ep = ep;
+        return 1;
     }
+    return 0;
 }
 
-static void la_usb_bulk_rx_handler(void *reference, u8 ep, u8 event, void *data)
+void la_usb_poll_tx(la_usb_dev_t *dev)
 {
-    la_usb_dev_t *dev = (la_usb_dev_t *)reference;
+    u32 complete;
 
-    (void)data;
-    if (event == XUSBPS_EP_EVENT_DATA_RX) {
-        la_usb_rx_completion(dev, ep);
-    }
-}
-
-static void la_usb_tx_handler(void *reference, u8 ep, u8 event, void *data)
-{
-    la_usb_dev_t *dev = (la_usb_dev_t *)reference;
-    BaseType_t woken = pdFALSE;
-    int32_t slot;
-
-    (void)ep;
-    (void)data;
-    if (event != XUSBPS_EP_EVENT_DATA_TX) {
+    if (dev == NULL) {
         return;
     }
-    slot = dev->tx_inflight;
-    if (slot >= 0 && slot < (int32_t)LA_USB_TX_FRAME_COUNT) {
-        dev->tx_slot_state[slot] = 0u;
+    complete = XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
+                              XUSBPS_EPCOMPL_OFFSET);
+    if (complete == 0u) {
+        return;
     }
-    dev->tx_inflight = -1;
-    (void)xSemaphoreGiveFromISR(dev->tx_free_sem, &woken);
-    if (dev->task != NULL) {
-        xTaskNotifyFromISR(dev->task, LA_USB_NOTIFY_TX_DONE, eSetBits, &woken);
+    XUsbPs_WriteReg(dev->usb.Config.BaseAddress, XUSBPS_EPCOMPL_OFFSET,
+                    complete);
+    /* EP1 IN completion bit (EP0 IN is one bit below it). */
+    if ((complete & (0x00010000u << 1)) != 0u && dev->tx_inflight >= 0) {
+        int32_t slot = dev->tx_inflight;
+
+        if (slot < (int32_t)LA_USB_TX_FRAME_COUNT) {
+            dev->tx_slot_state[slot] = 0u;
+        }
+        dev->tx_inflight = -1;
+        (void)xSemaphoreGive(dev->tx_free_sem);
     }
-    portYIELD_FROM_ISR(woken);
 }
 
 static void la_usb_general_handler(void *reference, u32 status)
 {
     la_usb_dev_t *dev = (la_usb_dev_t *)reference;
 
-    /* The suspend status is level-asserted while the bus stays idle; with
-     * the SLE source enabled it stormed the CPU after the first idle gap
-     * (bench 2026-09-18), so the bring-up profile does not enable it.
-     * Suspend/resume handling is a U05 item (resume is still visible as a
-     * port-change event). */
+    /* UI and SLE are never enabled in the polled bring-up path: the UI
+     * summary re-asserts from the level-held suspend bit (storm, bench
+     * 2026-09-18) and the vendor RX loop requires pop-and-release inside the
+     * endpoint callback. Only reset/error/port-change reach this handler. */
     dev->session_status = status;
     dev->session_pending = 1u;
     dev->isr_events++;
@@ -159,7 +165,6 @@ int la_usb_dev_init(la_usb_dev_t *dev, StreamBufferHandle_t rx_sb,
     dev->task = task;
     dev->tx_inflight = -1;
     la_usb_session_init(&dev->session);
-    la_usb_ring_init(&dev->rx_ring);
 
     dev->tx_free_sem = xSemaphoreCreateCountingStatic(
         LA_USB_TX_FRAME_COUNT, LA_USB_TX_FRAME_COUNT, &dev->tx_sem_struct);
@@ -223,12 +228,9 @@ int la_usb_dev_init(la_usb_dev_t *dev, StreamBufferHandle_t rx_sb,
         xil_printf("LA USB fatal: IntrSetHandler failed\r\n");
         return -7;
     }
-    (void)XUsbPs_EpSetHandler(&dev->usb, 0, XUSBPS_EP_DIRECTION_OUT,
-                              la_usb_ep0_handler, dev);
-    (void)XUsbPs_EpSetHandler(&dev->usb, 1, XUSBPS_EP_DIRECTION_OUT,
-                              la_usb_bulk_rx_handler, dev);
-    (void)XUsbPs_EpSetHandler(&dev->usb, 1, XUSBPS_EP_DIRECTION_IN,
-                              la_usb_tx_handler, dev);
+    /* Endpoint handlers are intentionally not registered: the vendor RX
+     * loop requires pop-and-release inside the callback, and the polled
+     * service (la_usb_poll_*) replaces it. See la_usb_dev.h. */
 
     if (la_irq_connect(LA_USB_GIC_ENCODED, XUsbPs_IntrHandler, &dev->usb,
                        (uintptr_t)XPAR_XUSBPS_0_INTERRUPT_PARENT,
@@ -249,9 +251,10 @@ int la_usb_dev_init(la_usb_dev_t *dev, StreamBufferHandle_t rx_sb,
     }
     XUsbPs_Start(&dev->usb);
     (void)XUsbPs_EpPrime(&dev->usb, 1u, XUSBPS_EP_DIRECTION_OUT);
-    XUsbPs_IntrEnable(&dev->usb,
-                      XUSBPS_IXR_UR_MASK | XUSBPS_IXR_UI_MASK |
-                          XUSBPS_IXR_UE_MASK | XUSBPS_IXR_PC_MASK);
+    /* UI stays masked (polled endpoint service); SLE stays masked (level
+     * storm). Reset/error/port-change remain interrupt-driven. */
+    XUsbPs_IntrEnable(&dev->usb, XUSBPS_IXR_UR_MASK | XUSBPS_IXR_UE_MASK |
+                                    XUSBPS_IXR_PC_MASK);
     vPortEnableInterrupt(LA_USB_GIC_ENCODED);
     return 0;
 }
@@ -357,12 +360,7 @@ void la_usb_rx_release(la_usb_dev_t *dev,
 
 int la_usb_ep0_send(la_usb_dev_t *dev, const uint8_t *data, size_t length)
 {
-    int status = XUsbPs_EpBufferSend(&dev->usb, 0u, data, (u32)length);
-
-    if (status != XST_SUCCESS) {
-        xil_printf("USB ep0 rc=%d head=%p tail=%p\r\n", status,
-                   (void *)dev->usb.DeviceConfig.Ep[0].In.dTDHead,
-                   (void *)dev->usb.DeviceConfig.Ep[0].In.dTDTail);
+    if (XUsbPs_EpBufferSend(&dev->usb, 0u, data, (u32)length) != XST_SUCCESS) {
         dev->ep0_errors++;
         return -1;
     }

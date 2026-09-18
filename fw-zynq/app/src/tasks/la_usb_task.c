@@ -4,7 +4,10 @@
  * UsbTask is the only task that talks to the XUsbPs device: it processes
  * standard and CDC class control requests, copies OUT payloads into the
  * CmdTask RX StreamBuffer, submits TxTask frames and applies session
- * actions. The interrupt callbacks in la_usb_dev.c only pop/copy/notify.
+ * actions. Reset/error/port-change are the only interrupt-driven events
+ * (notification only); setups and endpoint completions are polled because
+ * the vendor RX interrupt loop requires pop-and-release inside the endpoint
+ * callback (see la_usb_dev.h).
  *
  * EP0 control transfers are serialized by the host; class requests with an
  * OUT data stage (SET_LINE_CODING) latch the wait flag and complete when the
@@ -38,8 +41,6 @@ static void usb_apply_session(la_app_t *app, la_usb_event_t event, uint8_t arg)
     la_usb_dev_t *dev = &app->usb;
     unsigned actions = la_usb_session_event(&dev->session, event, arg);
 
-    xil_printf("USB session ev=%u arg=%u act=%02x st=%u\r\n", (unsigned)event,
-               (unsigned)arg, actions, (unsigned)dev->session.state);
     if ((actions & LA_USB_ACT_INVALIDATE) != 0u) {
         /* Stale driver handles are never released: the vendor reset already
          * flushed its descriptors. Drop the held completion and queued TX. */
@@ -113,9 +114,7 @@ static void usb_get_descriptor(la_usb_dev_t *dev, const XUsbPs_SetupData *setup)
     if ((size_t)setup->wLength < length) {
         length = setup->wLength;
     }
-    if (la_usb_ep0_send(dev, data, length) != 0) {
-        xil_printf("USB ep0 send failed (desc %u)\r\n", (unsigned)type);
-    }
+    (void)la_usb_ep0_send(dev, data, length);
 }
 
 static void usb_handle_standard(la_app_t *app, const XUsbPs_SetupData *setup,
@@ -175,29 +174,17 @@ static void usb_handle_standard(la_app_t *app, const XUsbPs_SetupData *setup,
     }
 }
 
-static void usb_handle_setup(la_app_t *app)
+static void usb_handle_setup(la_app_t *app, const XUsbPs_SetupData *setup)
 {
     la_usb_dev_t *dev = &app->usb;
-    XUsbPs_SetupData setup;
-    uint8_t direction;
+    uint8_t direction = ((setup->bmRequestType & 0x80u) != 0u)
+                            ? XUSBPS_EP_DIRECTION_IN
+                            : XUSBPS_EP_DIRECTION_OUT;
 
-    if (dev->setup_pending == 0u) {
-        return;
-    }
-    setup = dev->setup;
-    dev->setup_pending = 0u;
-    direction = ((setup.bmRequestType & 0x80u) != 0u)
-                    ? XUSBPS_EP_DIRECTION_IN
-                    : XUSBPS_EP_DIRECTION_OUT;
-    xil_printf("USB setup %02x %02x v=%04x i=%04x l=%u\r\n",
-               (unsigned)setup.bmRequestType, (unsigned)setup.bRequest,
-               (unsigned)setup.wValue, (unsigned)setup.wIndex,
-               (unsigned)setup.wLength);
-
-    if ((setup.bmRequestType & 0x60u) == 0x00u) {
-        usb_handle_standard(app, &setup, direction);
-    } else if ((setup.bmRequestType & 0x60u) == 0x20u) {
-        switch (setup.bRequest) {
+    if ((setup->bmRequestType & 0x60u) == 0x00u) {
+        usb_handle_standard(app, setup, direction);
+    } else if ((setup->bmRequestType & 0x60u) == 0x20u) {
+        switch (setup->bRequest) {
         case 0x20u: /* SET_LINE_CODING: wait for the 7-byte OUT stage */
             s_ep0_wait_data = 1u;
             s_ep0_wait_start = xTaskGetTickCount();
@@ -206,7 +193,7 @@ static void usb_handle_setup(la_app_t *app)
             (void)la_usb_ep0_send(dev, (const uint8_t *)dev->line_coding, 7u);
             break;
         case 0x22u: /* SET_CONTROL_LINE_STATE: advisory DTR/RTS */
-            dev->control_line_state = setup.wValue;
+            dev->control_line_state = setup->wValue;
             (void)la_usb_ep0_send(dev, NULL, 0u);
             break;
         case 0x23u: /* SEND_BREAK: accepted, no action */
@@ -221,13 +208,12 @@ static void usb_handle_setup(la_app_t *app)
     }
 }
 
-static void usb_handle_ep0_data(la_usb_dev_t *dev)
+static void usb_handle_ep0_data(la_usb_dev_t *dev,
+                                const la_usb_completion_t *entry)
 {
-    xil_printf("USB ep0 data len=%u wait=%u\r\n", (unsigned)s_pending.len,
-               (unsigned)s_ep0_wait_data);
     if (s_ep0_wait_data != 0u) {
-        if (s_pending.len >= 7u) {
-            memcpy((void *)dev->line_coding, s_pending.ptr, 7u);
+        if (entry->len >= 7u) {
+            memcpy((void *)dev->line_coding, entry->ptr, 7u);
             s_ep0_wait_data = 0u;
             (void)la_usb_ep0_send(dev, NULL, 0u);
         } else {
@@ -236,8 +222,7 @@ static void usb_handle_ep0_data(la_usb_dev_t *dev)
             dev->ep0_errors++;
         }
     }
-    la_usb_rx_release(dev, &s_pending);
-    s_rx_pending = 0u;
+    la_usb_rx_release(dev, entry);
 }
 
 static void usb_pump_rx(la_app_t *app)
@@ -245,20 +230,15 @@ static void usb_pump_rx(la_app_t *app)
     la_usb_dev_t *dev = &app->usb;
 
     if (s_rx_pending == 0u) {
-        int popped;
-
-        taskENTER_CRITICAL();
-        popped = la_usb_ring_pop(&dev->rx_ring, dev->session.generation,
-                                 &s_pending);
-        taskEXIT_CRITICAL();
-        if (popped == 0) {
+        if (la_usb_poll_rx(dev, &s_pending) == 0) {
             return;
         }
         s_rx_pending = 1u;
         s_rx_offset = 0u;
     }
     if (s_pending.ep == 0u) {
-        usb_handle_ep0_data(dev);
+        usb_handle_ep0_data(dev, &s_pending);
+        s_rx_pending = 0u;
         return;
     }
     while (s_rx_offset < s_pending.len) {
@@ -283,16 +263,19 @@ void la_usb_task(void *parameters)
     uint32_t bits;
 
     for (;;) {
+        XUsbPs_SetupData setup;
+
         bits = 0u;
         (void)xTaskNotifyWait(0u, LA_USB_NOTIFY_ALL, &bits,
                               pdMS_TO_TICKS(LA_USB_SERVICE_PERIOD_MS));
         if ((bits & LA_USB_NOTIFY_SESSION) != 0u) {
             usb_handle_session(app);
         }
-        if ((bits & LA_USB_NOTIFY_EP0_SETUP) != 0u) {
-            usb_handle_setup(app);
+        if (la_usb_poll_setup(dev, &setup) != 0) {
+            usb_handle_setup(app, &setup);
         }
         usb_pump_rx(app);
+        la_usb_poll_tx(dev);
         la_usb_tx_pump(dev);
         if (s_ep0_wait_data != 0u &&
             (xTaskGetTickCount() - s_ep0_wait_start) >

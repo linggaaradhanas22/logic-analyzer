@@ -58,7 +58,6 @@ typedef struct la_usb_dev {
     TaskHandle_t task;
     StreamBufferHandle_t rx_sb;
     la_usb_session_t session;
-    la_usb_ring_t rx_ring;
 
     StaticSemaphore_t tx_sem_struct;
     SemaphoreHandle_t tx_free_sem;
@@ -111,6 +110,17 @@ void la_usb_tx_reset(la_usb_dev_t *dev);
 /* RX service (UsbTask): releases a popped completion and re-primes the
  * endpoint. */
 void la_usb_rx_release(la_usb_dev_t *dev, const la_usb_completion_t *completion);
+
+/* Polled endpoint service (UsbTask). The vendor RX interrupt loop requires
+ * the endpoint callback to pop AND release every completed descriptor before
+ * it advances; a deferred pop leaves descriptors inactive and spins the ISR
+ * forever (bench 2026-09-18: ulPortInterruptNesting stuck at 1, tick frozen).
+ * The bring-up path therefore leaves UI masked and services setups and
+ * completions from task context; only reset/error/port-change stay
+ * interrupt-driven. */
+int la_usb_poll_setup(la_usb_dev_t *dev, XUsbPs_SetupData *setup);
+int la_usb_poll_rx(la_usb_dev_t *dev, la_usb_completion_t *completion);
+void la_usb_poll_tx(la_usb_dev_t *dev);
 
 /* EP0 control responses (UsbTask). */
 int la_usb_ep0_send(la_usb_dev_t *dev, const uint8_t *data, size_t length);
