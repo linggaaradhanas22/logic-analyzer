@@ -30,7 +30,9 @@
 #define LA_USB_EP0_DATA_TIMEOUT_MS 500u
 
 static uint8_t s_scratch[LA_USB_STRING_MAX];
-static la_usb_completion_t s_pending;
+static const uint8_t *s_stage_ptr;
+static uint16_t s_stage_len;
+static uint8_t s_stage_ep;
 static uint8_t s_rx_pending;
 static uint32_t s_rx_offset;
 static uint8_t s_ep0_wait_data;
@@ -181,6 +183,10 @@ static void usb_handle_setup(la_app_t *app, const XUsbPs_SetupData *setup)
                             ? XUSBPS_EP_DIRECTION_IN
                             : XUSBPS_EP_DIRECTION_OUT;
 
+    xil_printf("USB su %02x %02x %04x %04x %u\r\n",
+               (unsigned)setup->bmRequestType, (unsigned)setup->bRequest,
+               (unsigned)setup->wValue, (unsigned)setup->wIndex,
+               (unsigned)setup->wLength);
     if ((setup->bmRequestType & 0x60u) == 0x00u) {
         usb_handle_standard(app, setup, direction);
     } else if ((setup->bmRequestType & 0x60u) == 0x20u) {
@@ -208,51 +214,58 @@ static void usb_handle_setup(la_app_t *app, const XUsbPs_SetupData *setup)
     }
 }
 
-static void usb_handle_ep0_data(la_usb_dev_t *dev,
-                                const la_usb_completion_t *entry)
+static void usb_handle_ep0_data(la_usb_dev_t *dev, const uint8_t *ptr,
+                                uint16_t length)
 {
     if (s_ep0_wait_data != 0u) {
-        if (entry->len >= 7u) {
-            memcpy((void *)dev->line_coding, entry->ptr, 7u);
+        if (length >= 7u) {
+            memcpy((void *)dev->line_coding, ptr, 7u);
             s_ep0_wait_data = 0u;
             (void)la_usb_ep0_send(dev, NULL, 0u);
+        } else if (length == 0u) {
+            /* The status stage of the previous control transfer can still be
+             * in the EP0 OUT ring when the next setup arrives; drop it and
+             * keep waiting for the real class data (bench 2026-09-18). */
         } else {
             s_ep0_wait_data = 0u;
             la_usb_ep0_stall(dev, XUSBPS_EP_DIRECTION_OUT);
             dev->ep0_errors++;
         }
     }
-    la_usb_rx_release(dev, entry);
 }
 
 static void usb_pump_rx(la_app_t *app)
 {
     la_usb_dev_t *dev = &app->usb;
+    const uint8_t *ptr;
 
     if (s_rx_pending == 0u) {
-        if (la_usb_poll_rx(dev, &s_pending) == 0) {
+        ptr = la_usb_stage_pop(dev, &s_stage_len, &s_stage_ep);
+        if (ptr == NULL) {
             return;
         }
-        s_rx_pending = 1u;
+        s_stage_ptr = ptr;
         s_rx_offset = 0u;
+        s_rx_pending = 1u;
     }
-    if (s_pending.ep == 0u) {
-        usb_handle_ep0_data(dev, &s_pending);
+    if (s_stage_ep == 0u) {
+        usb_handle_ep0_data(dev, s_stage_ptr, s_stage_len);
+        la_usb_stage_release(dev);
         s_rx_pending = 0u;
         return;
     }
-    while (s_rx_offset < s_pending.len) {
-        size_t sent = xStreamBufferSend(dev->rx_sb, s_pending.ptr + s_rx_offset,
-                                        s_pending.len - s_rx_offset, 0);
+    while (s_rx_offset < s_stage_len) {
+        size_t sent = xStreamBufferSend(dev->rx_sb, s_stage_ptr + s_rx_offset,
+                                        s_stage_len - s_rx_offset, 0);
         if (sent == 0u) {
-            /* rx_sb full: keep the driver buffer (no re-prime) so the
-             * controller NAKs instead of dropping bytes. */
+            /* rx_sb full: keep the staged entry (the ISR ring is bounded and
+             * drops with a counted overflow) and retry next service. */
             return;
         }
         s_rx_offset += (uint32_t)sent;
     }
-    dev->rx_bytes += s_pending.len;
-    la_usb_rx_release(dev, &s_pending);
+    dev->rx_bytes += s_stage_len;
+    la_usb_stage_release(dev);
     s_rx_pending = 0u;
 }
 
@@ -271,11 +284,10 @@ void la_usb_task(void *parameters)
         if ((bits & LA_USB_NOTIFY_SESSION) != 0u) {
             usb_handle_session(app);
         }
-        if (la_usb_poll_setup(dev, &setup) != 0) {
+        if (la_usb_setup_take(dev, &setup) != 0) {
             usb_handle_setup(app, &setup);
         }
         usb_pump_rx(app);
-        la_usb_poll_tx(dev);
         la_usb_tx_pump(dev);
         if (s_ep0_wait_data != 0u &&
             (xTaskGetTickCount() - s_ep0_wait_start) >

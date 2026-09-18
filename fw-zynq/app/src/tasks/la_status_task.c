@@ -44,63 +44,40 @@ void la_status_task(void *parameters)
             min = status;
         }
         app->min_free_stack = min;
-
-        xil_printf("LA status: stacks acq=%u cmd=%u tx=%u status=%u words\r\n",
-                   (unsigned)acq, (unsigned)cmd, (unsigned)tx,
-                   (unsigned)status);
-        xil_printf("LA status: rx=%u tx=%u retx=%u drops=%u pl=%u dma=%u live_max_us=%u\r\n",
-                   (unsigned)app->rx_frames, (unsigned)app->tx_frames,
-                   (unsigned)app->tx_retransmits, (unsigned)app->tx_drops,
-                   (unsigned)app->irq.pl_count, (unsigned)app->irq.dma_count,
-                   (unsigned)app->live_max_latency_us);
+        /* Bring-up diagnostic line (the long status blocks are disabled until
+         * the print-path fault is understood). */
 #if LA_TRANSPORT_USB
-        xil_printf("LA status: usb setup=%u irq=%u rx=%u ovf=%u txb=%u txd=%u"
-                   " uns=%u err=%u sess=%u hs=%u\r\n",
+        xil_printf("LA st: su=%u rx=%u fr=%u ev=%u ovf=%u bad=%u err=%u txb=%u txd=%u hs=%u\r\n",
                    (unsigned)app->usb.setup_count,
-                   (unsigned)app->usb.isr_events,
                    (unsigned)app->usb.rx_bytes,
+                   (unsigned)app->rx_frames,
+                   (unsigned)app->usb.rx_events,
                    (unsigned)app->usb.rx_overflows,
+                   (unsigned)app->usb.rx_bad,
+                   (unsigned)app->usb.ep0_errors,
                    (unsigned)app->usb.tx_bytes,
                    (unsigned)app->usb.tx_drops,
-                   (unsigned)app->usb.unsupported,
-                   (unsigned)app->usb.ep0_errors,
-                   (unsigned)app->usb.session_events,
                    (unsigned)la_usb_high_speed(&app->usb));
-#endif
-        xil_printf("LA status: dec words %u %u %u busy_us %u %u %u\r\n",
-                   (unsigned)app->decoder_words[0],
-                   (unsigned)app->decoder_words[1],
-                   (unsigned)app->decoder_words[2],
-                   (unsigned)app->decoder_busy_us[0],
-                   (unsigned)app->decoder_busy_us[1],
-                   (unsigned)app->decoder_busy_us[2]);
-        xil_printf("LA status: isr us %u/%u/%u wake us %u/%u/%u\r\n",
-                   (unsigned)la_irq_stats_min_us(&app->irq.isr_stats),
-                   (unsigned)la_irq_stats_avg_us(&app->irq.isr_stats),
-                   (unsigned)la_irq_stats_max_us(&app->irq.isr_stats),
-                   (unsigned)la_irq_stats_min_us(&app->irq.wake_stats),
-                   (unsigned)la_irq_stats_avg_us(&app->irq.wake_stats),
-                   (unsigned)la_irq_stats_max_us(&app->irq.wake_stats));
         {
-            uint32_t spi_tx = 0u;
-            uint32_t spi_rx = 0u;
-            uint32_t spi_underruns = 0u;
-            uint32_t spi_errors = 0u;
-            la_spi_debug_t dbg;
+            uint32_t head = app->usb.rx_trace_head & 15u;
+            uint32_t index;
+            uint32_t values[8];
 
-            la_spi_snapshot(&spi_tx, &spi_rx, &spi_underruns, &spi_errors);
-            la_spi_debug(&dbg);
-            xil_printf("LA status: spi tx=%u rx=%u underrun=%u err=%u\r\n",
-                       (unsigned)spi_tx, (unsigned)spi_rx,
-                       (unsigned)spi_underruns, (unsigned)spi_errors);
-            xil_printf("LA status: spi2 ring=%u fifo=%u ready=%u isr=%u ue=%u he=%u oth=%u rise=%u fall=%u drop=%u tdrop=%u pass=%u buf=%u\r\n",
-                       (unsigned)dbg.ring_used, (unsigned)dbg.fifo_occ,
-                       (unsigned)dbg.ready, (unsigned)dbg.isr_events,
-                       (unsigned)dbg.isr_underrun, (unsigned)dbg.isr_half_empty,
-                       (unsigned)dbg.isr_other, (unsigned)dbg.ready_rises,
-                       (unsigned)dbg.ready_falls, (unsigned)dbg.frames_dropped,
-                       (unsigned)app->tx_drops, (unsigned)dbg.task_passes,
-                       (unsigned)dbg.buffered);
+            for (index = 0u; index < 4u; index++) {
+                uint32_t slot = (head + 12u + index) & 15u;
+                values[index * 2u] = app->usb.rx_trace[slot][0];
+                values[index * 2u + 1u] = app->usb.rx_trace[slot][1];
+            }
+            xil_printf("LA rx: %u/%u %u/%u %u/%u %u/%u\r\n",
+                       (unsigned)values[0], (unsigned)values[1],
+                       (unsigned)values[2], (unsigned)values[3],
+                       (unsigned)values[4], (unsigned)values[5],
+                       (unsigned)values[6], (unsigned)values[7]);
         }
+#else
+        xil_printf("LA st: acq=%u cmd=%u tx=%u status=%u\r\n",
+                   (unsigned)acq, (unsigned)cmd, (unsigned)tx,
+                   (unsigned)status);
+#endif
     }
 }

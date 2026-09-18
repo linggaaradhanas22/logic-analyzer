@@ -52,6 +52,14 @@
 #define LA_USB_NOTIFY_TX_FRAME ((uint32_t)0x00000010u)
 #define LA_USB_NOTIFY_ALL ((uint32_t)0x0000001Fu)
 
+#define LA_USB_STAGE_COUNT 8u
+
+typedef struct la_usb_stage {
+    uint8_t data[LA_USB_BULK_BUF_SIZE] __attribute__((aligned(64)));
+    uint16_t len;
+    uint8_t ep;
+} la_usb_stage_t;
+
 typedef struct la_usb_dev {
     XUsbPs usb;
     XUsbPs_DeviceConfig device_config;
@@ -61,6 +69,12 @@ typedef struct la_usb_dev {
 
     StaticSemaphore_t tx_sem_struct;
     SemaphoreHandle_t tx_free_sem;
+    la_usb_stage_t stages[LA_USB_STAGE_COUNT];
+    volatile uint32_t stage_head; /* ISR producer */
+    volatile uint32_t stage_tail; /* task consumer */
+    volatile uint32_t stage_count;
+    volatile uint8_t setup_ready;
+    XUsbPs_SetupData setup_data;
     uint8_t tx_frames[LA_USB_TX_FRAME_COUNT][LA_USB_TX_FRAME_BYTES]
         __attribute__((aligned(64)));
     volatile uint8_t tx_slot_state[LA_USB_TX_FRAME_COUNT]; /* 0 free, 1 ready, 2 in flight */
@@ -77,6 +91,10 @@ typedef struct la_usb_dev {
 
     volatile uint32_t rx_bytes;
     volatile uint32_t rx_overflows;
+    volatile uint32_t rx_bad;    /* driver entries outside the DMA pool */
+    volatile uint32_t rx_events; /* OUT completion callbacks serviced */
+    volatile uint32_t rx_trace[16][2]; /* last (ep, length) completions */
+    volatile uint32_t rx_trace_head;
     volatile uint32_t tx_bytes;
     volatile uint32_t tx_drops;
     volatile uint32_t setup_count;
@@ -111,15 +129,16 @@ void la_usb_tx_reset(la_usb_dev_t *dev);
  * endpoint. */
 void la_usb_rx_release(la_usb_dev_t *dev, const la_usb_completion_t *completion);
 
-/* Polled endpoint service (UsbTask). The vendor RX interrupt loop requires
- * the endpoint callback to pop AND release every completed descriptor before
- * it advances; a deferred pop leaves descriptors inactive and spins the ISR
- * forever (bench 2026-09-18: ulPortInterruptNesting stuck at 1, tick frozen).
- * The bring-up path therefore leaves UI masked and services setups and
- * completions from task context; only reset/error/port-change stay
- * interrupt-driven. */
-int la_usb_poll_setup(la_usb_dev_t *dev, XUsbPs_SetupData *setup);
-int la_usb_poll_rx(la_usb_dev_t *dev, la_usb_completion_t *completion);
+/* Endpoint service (UsbTask). The vendor RX interrupt loop requires the
+ * endpoint callback to pop AND release every completed descriptor before it
+ * advances, so the ISR copies each payload into the bounded staging ring,
+ * releases and re-primes immediately (bench 2026-09-18: deferring the
+ * release desynced the ring and dropped every other packet). The task
+ * consumes one staged entry at a time and must release it before the next
+ * pop; the entry pointer stays valid until then. */
+const uint8_t *la_usb_stage_pop(la_usb_dev_t *dev, uint16_t *len, uint8_t *ep);
+void la_usb_stage_release(la_usb_dev_t *dev);
+int la_usb_setup_take(la_usb_dev_t *dev, XUsbPs_SetupData *setup);
 void la_usb_poll_tx(la_usb_dev_t *dev);
 
 /* EP0 control responses (UsbTask). */

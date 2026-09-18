@@ -122,34 +122,40 @@ the release identity recorded as an open U07/U09 gate. Evidence:
 
 ### USB migration execution - U03 (2026-09-18, WIP bench)
 
-**U03 implementation complete locally; bench enumeration is WIP, not a PASS.**
-Built the direct-USB CDC-ACM stack (`la_usb_core`, `la_usb_desc`,
-`la_usb_dev`, `la_usb_task`), the `LA_TRANSPORT_USB` app/profile integration,
-the build selection (`fw-zynq -- --profile usb` builds `la_app_usb`;
-`jtag-zynq -- --profile usb` loads it), the USB-profile `LINK_CFG` rejection
-(unsupported NAK before any state change) and native descriptor tests
-(`test-native` 17/17). The gateway profile still builds unchanged.
+**U03 implementation complete locally; bench is WIP with a bulk-OUT packet
+loss blocker, not a PASS.** Built the direct-USB CDC-ACM stack (`la_usb_core`,
+`la_usb_desc`, `la_usb_dev`, `la_usb_task`), the `LA_TRANSPORT_USB`
+app/profile integration, the build selection (`fw-zynq -- --profile usb`
+builds `la_app_usb`; `jtag-zynq -- --profile usb` loads it), the USB-profile
+`LINK_CFG` rejection and native tests (`test-native` 17/17). The gateway
+profile still builds unchanged.
 
-Bench (2026-09-18, J10 direct to a PC port and also through the USB hub):
-the device negotiated **high speed** on both, and Windows bound `usbser.sys`
-to `USB\VID_1209&PID_0001\LA-USB-TEST-0001` (**COM12, Status OK**) after a
-complete enumeration: device/config/string descriptors, SET_CONFIGURATION,
-GET/SET_LINE_CODING, SET_CONTROL_LINE_STATE (25 control requests, 0 errors).
-Four bench defects were found and fixed on the way: (1) the SDT
-`XUsbPs_LookupConfig` base address was truncated to u16; (2) the DMA pool was
-not zeroed before `XUsbPs_ConfigureDevice`, so garbage dTD/dQH bits made the
-controller DMA to wild addresses; (3) the level-asserted suspend (SLE)
-interrupt plus the UI summary stormed the CPU when the bus idled; (4) the
-vendor RX interrupt loop requires pop-and-release inside the endpoint
-callback, so the deferred-pop ISR spun forever (`ulPortInterruptNesting`
-stuck at 1, tick frozen) - the bring-up path now polls setups/completions
-from UsbTask and keeps only reset/error/port-change interrupt-driven
-(`docs/usb-link.md` section 9 amended). **Remaining blocker:** about 5 s
-after enumeration the app corrupts memory around the status-task `.rodata`
-format string (`LA status: dec words` becomes binary) and the PS ends up in
-reset, so the COM port cannot be opened (`OSError 121` on configure). No COM
-transfer, open/close or reset-cycle evidence yet; the `usbpsu` driver remains
-the fallback if the old `usbps` device path cannot be stabilized.
+Bench (2026-09-18, J10 direct to a PC port and also through the hub):
+complete enumeration with **high speed**, `usbser.sys` auto-binding
+(`USB\VID_1209&PID_0001\LA-USB-TEST-0001`, COM12 Status OK) and clean
+control transfers (144+ setups, 0 errors, including GET/SET_LINE_CODING).
+`la-cli ping` and `la-cli status` have succeeded over USB. Fixed on the way:
+(1) SDT `XUsbPs_LookupConfig` u16 truncation; (2) the DMA pool was not zeroed
+before `XUsbPs_ConfigureDevice` (wild controller DMA); (3) the SLE/UI
+suspend storm; (4) the vendor RX loop requires pop-and-release in the
+callback - the driver now copies each completion into a bounded staging ring
+and releases/re-primes inside the callback; (5) the driver never sets the
+endpoint control registers, so EP1/EP2 stayed disabled (`EPCTRL1=0`, host
+tokens timed out) - they are now enabled at SET_CONFIGURATION; (6) the
+previous transfer's 0-length status completion could be mistaken for
+`SET_LINE_CODING` data - dropped while waiting.
+
+**Remaining blocker: EP1 bulk OUT loses roughly half of the host's
+transfers.** Evidence: 50 writes at 50 ms -> 25 completions; 10 writes ->
+9; 8 writes at 300 ms -> 4; one 140-byte write in FS mode completed a
+64-byte packet and the remaining 76 bytes never arrived; the dTD ring is
+fully active and correct (all 16 tokens `0x02008080`, circular NLP, pool
+buffers), `EPRDY=3`, `EPCTRL1=0x00800080`, `out_waiting=0`, no staging
+overflow and no driver-entry errors (`bad=0`, `ovf=0`). Both HS and forced
+FS lose; control transfers are clean. A status-print side effect remains
+too: the long status blocks corrupt `.rodata` (short diagnostic lines are
+stable). No open/close or reset-cycle evidence yet; the gateway remains the
+working data path.
 
 ### USB migration execution - U02 (2026-09-18)
 
@@ -457,7 +463,7 @@ publish.
 
 | Date | Work completed | Result |
 |---|---|---|
-| 2026-09-18 | U03 direct-USB implementation + bench bring-up (WIP). New `la_usb_core` (session model), `la_usb_desc` (CDC-ACM descriptors, `wTotalLength` 75, test PID `0x1209:0x0001` warning), `la_usb_dev` (XUsbPs wrapper: zeroed 64 KiB non-cached DMA pool at NC offset 0x00900000, 8 x 1088-byte TX pool, polled setup/RX/TX service with the vendor cursor advance, reset/error/port-change ISR notification only), `la_usb_task` (EP0 standard/CDC requests, `rx_sb` producer, TX pump, session actions), `LA_TRANSPORT_USB` integration in `la_app`/`main`/`la_tx_task`/`la_cmd_dispatch` (LINK_CFG unsupported NAK)/`la_status_task`, build profiles in `tools/run.py` + `fw-zynq/scripts` + `jtag_load.tcl`, and native `la_native_usb_desc`/`la_native_usb_core` tests. Bench: HS on the hub and on a direct PC port, complete enumeration and `usbser.sys` binding (`USB\VID_1209&PID_0001\LA-USB-TEST-0001`, COM12 Status OK), 25 control requests with 0 errors (SET_CONFIGURATION, GET/SET_LINE_CODING, SET_CONTROL_LINE_STATE). Fixed: SDT `LookupConfig` u16 truncation, missing DMA-pool zeroing (wild controller DMA), SLE/UI suspend storm, and the deferred-pop vendor RX spin. | WIP/BLOCKED on a post-enumeration memory corruption: ~5 s in, the status-task `.rodata` format string is overwritten with binary data and the PS ends in reset, so COM12 cannot be opened (`OSError 121`). No transfer/open-close/reset evidence yet; no hardware PASS claimed. Local gates PASS: `test-native` 17/17; USB profile builds (`la_app_usb.elf`, `LA_TRANSPORT_USB=1`, XUsbPs linked, geometry intact) and the gateway profile still builds. Next: identify the writer of the `.rodata` corruption (suspects: USB controller DMA via a stale dTD, PS reset source) or pivot to `usbpsu`. |
+| 2026-09-18 | U03 direct-USB implementation + bench bring-up (WIP). New `la_usb_core` (session model), `la_usb_desc` (CDC-ACM descriptors, `wTotalLength` 75, test PID `0x1209:0x0001` warning), `la_usb_dev` (XUsbPs wrapper: zeroed 64 KiB non-cached DMA pool at NC offset 0x00900000, 8 x 1088-byte TX pool, polled setup/RX/TX service with the vendor cursor advance, reset/error/port-change ISR notification only), `la_usb_task` (EP0 standard/CDC requests, `rx_sb` producer, TX pump, session actions), `LA_TRANSPORT_USB` integration in `la_app`/`main`/`la_tx_task`/`la_cmd_dispatch` (LINK_CFG unsupported NAK)/`la_status_task`, build profiles in `tools/run.py` + `fw-zynq/scripts` + `jtag_load.tcl`, and native `la_native_usb_desc`/`la_native_usb_core` tests. Bench: HS on the hub and on a direct PC port, complete enumeration and `usbser.sys` binding (`USB\VID_1209&PID_0001\LA-USB-TEST-0001`, COM12 Status OK), 25 control requests with 0 errors (SET_CONFIGURATION, GET/SET_LINE_CODING, SET_CONTROL_LINE_STATE). Fixed: SDT `LookupConfig` u16 truncation, missing DMA-pool zeroing (wild controller DMA), SLE/UI suspend storm, and the deferred-pop vendor RX spin. | WIP/BLOCKED on EP1 bulk OUT packet loss after a successful enumeration and control path. Bench session 2 (same day): fixed the driver's missing endpoint enables (EPCTRL1/2 were 0, so host tokens to EP1 timed out), the EP0 stale-status/class-data confusion, the deferred-release ring desync (now pop+copy into a bounded staging ring + release in the callback), and confirmed HS enumeration, `usbser.sys` binding (COM12 OK), `la-cli ping`/`status` successes. Remaining: ~50% of host bulk OUT transfers never complete a dTD (50 writes -> 25 completions; 10 -> 9; 8 at 300 ms -> 4; a 140-byte FS write delivered only its first 64-byte packet) while the dTD ring is fully active (`0x02008080` tokens, circular NLP, `EPRDY=3`, `EPCTRL1=0x00800080`, `out_waiting=0`, `bad=0`, `ovf=0`); both HS and forced FS lose. Long status prints also still corrupt `.rodata` (short lines are stable). No open/close/reset-cycle evidence; no hardware PASS claimed. Local gates PASS: `test-native` 17/17; USB and gateway profiles build. Next: resolve the EP1 OUT completion loss (driver dTD/dQH handling or a different device-mode approach) and the status-print fault. |
 | 2026-09-18 | U02 integration contract frozen (continuous execution, stop on request). Audited the generated `XUsbPs` driver: `EpBufferReceive` pops without re-activating, the vendor RX dispatcher advances its descriptor cursor per callback (so the pop must stay in interrupt context), `EpBufferRelease` re-activates, the reset path has an infinite fallback unless a general handler is registered, and `EpStall`/`EpBufferSendWithZLT` exist. Froze `docs/usb-link.md` section 9: GIC ID 53 via `la_irq_connect`, notification-only callbacks with deferred class processing and stale-generation dropping, CDC-ACM descriptors with IAD/`wTotalLength` 66 and automatic `usbser.sys` binding, test identity `0x1209:0x0001` (release identity open), advisory line coding/DTR, no-ZLP byte stream, non-cached 64 KiB DMA pool at NC offset `0x00900000`, 8 x 1088-byte TX pool, 16-entry completion ring, `rx_sb` NAK backpressure, gateway-default `fw-zynq -- --profile usb` builds and `test_usb_*` selectors. Added portable `la_usb_core.{h,c}` and host tests. | PASS (local): `test-native` 16/16 including the new `la_native_usb_core`; report `build/reports/usb-u02-contract.md`, canonical `build/reports/test-native.json`. No target code, build, load or hardware run; U03 not started. Next: U03 driver/task implementation and local profile builds, then the [HUMAN] JTAG enumeration session. |
 | 2026-09-18 | U01 board and platform feasibility complete (continuous execution authorized by the 2026-09-18 user instruction, stop on request). Inspected the actual `logic_analyzer.xsa` (`system.hwh`: USB0 enabled, 60 MHz, MIO 28..39, reset MIO 46, USB1 disabled), the generated FreeRTOS BSP (`XPAR_XUSBPS_0_BASEADDR 0xe0002000`, encoded IRQ `0x4015`, MIT-licensed `usbps`/`XUsbPs` sources, no CDC example) and the installed `usbps_v2_9` examples; evaluated the old AMD CDC techtip (bare-metal SDK 2015.1, custom Windows driver, click-through RefDesLicense, AR#61313 ULPI caveat) as reference only. Recorded the physical checklist: REV D.0, JP1 unsoldered/open, JP2 shunt removed, JP5=JTAG, JP6=USB (power from J12), J11 empty, J10 on the USB hub by user direction (direct PC port is the first isolation step), FTDI `COM7` serial `210351BE7ACEB`, no board modification, fresh power with no image. Identity basis: pid.codes test PID `0x1209:0x0001` for in-house use only; release identity open. Host check: `la-cli ports` shows only COM7 and the gateway is not attached, so the optional gateway baseline is BLOCKED, not failed. | PASS (local evidence + checklist): `build/reports/usb-u01-feasibility.md`. No firmware built, no image loaded, no hardware PASS claimed. Open: HS vs FS until U03, release VID/PID, hub-first deviation recorded in the report. Next: U02 contract freeze. |
 | 2026-09-18 | U00 execution baseline complete (first authorized U packet). Authorized scope: execute the first incomplete eligible U packet (U00) of `docs/usb-migration-implementation-instructions.md`; hardware load, product adoption, publication and release were not authorized. Synced: `git fetch` clean, `main` at `b611390` matching `origin/main`, worktree clean except the preserved untracked `docs/hardwarex/` and `docs/learning/`. Preserved and hashed the rollback identity under ignored `build/usb-migration/baseline/` (P9.1 JA-1-fixed bitstream `06488a9...`, XSA `0719cbd...`, loaded Zynq ELF `9067cfa...`, BOOT.BIN `bc1d1a1...`, S3 gateway `0c96ed8...`, classic package set, timing/DRC/utilization, toolchain/board locks) with `SHA256SUMS.txt`; no rebuild ran, so `build/vitis/ws` is untouched. Ran the required off-board baseline checks. | PASS: `test-native` 15/15 (`build/reports/test-native.json`) and `test-host` 84/84 (`build/reports/test-host.json`), copies under `build/reports/usb-migration/U00/`; report `build/reports/usb-u00-baseline.md`; no pre-existing failures to isolate. No flash, JTAG load, E2E or bench step ran. Open blockers carried: S3 SPI 2:1 byte drop (open, not relabeled fixed), S3 USB-OTG full-speed ~1.2 MB/s below the 1.5 MB/s gate, U01 `[HUMAN]` board/power/identity checklist, U02 ISR-deferral/identity decisions, P10.4 release hold. Next: U01 local feasibility evidence plus the physical checklist; U02 design may proceed locally, no U03 load until U01/U02 gates pass. Committed and pushed as `72a4bc3 U00: establish the USB migration execution baseline`; `git ls-remote origin refs/heads/main` matched `git rev-parse HEAD`, and this status-only close-out records that verified push. |
