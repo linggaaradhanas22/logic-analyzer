@@ -147,15 +147,22 @@ previous transfer's 0-length status completion could be mistaken for
 
 **Remaining blocker: EP1 bulk OUT loses roughly half of the host's
 transfers.** Evidence: 50 writes at 50 ms -> 25 completions; 10 writes ->
-9; 8 writes at 300 ms -> 4; one 140-byte write in FS mode completed a
-64-byte packet and the remaining 76 bytes never arrived; the dTD ring is
-fully active and correct (all 16 tokens `0x02008080`, circular NLP, pool
-buffers), `EPRDY=3`, `EPCTRL1=0x00800080`, `out_waiting=0`, no staging
-overflow and no driver-entry errors (`bad=0`, `ovf=0`). Both HS and forced
-FS lose; control transfers are clean. A status-print side effect remains
-too: the long status blocks corrupt `.rodata` (short diagnostic lines are
-stable). No open/close or reset-cycle evidence yet; the gateway remains the
-working data path.
+9; 8 writes at 300 ms -> 4; 12 writes -> 6; one 140-byte write in FS mode
+completed a 64-byte packet and the remaining 76 bytes never arrived; the dTD
+ring is fully active and correct (all 16 tokens `0x02008080`, circular NLP,
+pool buffers), `EPRDY=3`, `EPCTRL1=0x00800080`, `out_waiting=0`, no staging
+overflow and no driver-entry errors (`bad=0`, `ovf=0`). The software and
+hardware cursors stay in sync (`sw=hw`). A controlled two-batch test showed
+the first four packets of a batch accepted (dTD 0-3) and then a silent
+stall while the endpoint was still primed; a task-context sweep
+(`la_usb_sweep_rx`, which also drains EPCOMPL for stranded IN completions)
+was added to recover lost-interrupt stalls, but the loss persists (12 writes
+-> 3-6 received). Both HS and forced FS lose; control transfers are clean.
+A status-print side effect remains too: the long status blocks corrupt
+`.rodata` (short diagnostic lines are stable). No open/close or reset-cycle
+evidence yet; the gateway remains the working data path. Next tactic:
+verify the Zynq device-mode dQH/dTD field encoding against UG585 and the
+AMD CDC techtip before further blind changes.
 
 ### USB migration execution - U02 (2026-09-18)
 
