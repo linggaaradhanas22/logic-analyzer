@@ -180,7 +180,8 @@ AMD CDC techtip before further blind changes.
 
 ### USB migration execution - U03 offline hardening (2026-09-18, no bench)
 
-**Bench-blocked work completed while J10/J12 are disconnected.** Preserved the
+**Bench-blocked work completed while J10/J12 are disconnected (commit
+`4f8a9e7`, pushed to `origin/main`).** Preserved the
 bench baseline (commit `d1e36e1`, `la_app_usb.elf` SHA-256
 `1C1F3122...1EC31CB`, copies and hashes under
 `build/reports/usb-migration/U03/`) and audited the `d1e36e1` toggle-reset fix
