@@ -230,7 +230,8 @@ the loss.
 ### USB migration execution - U03 bench session (2026-09-18)
 
 **Bench ran with the instrumented image; the bulk-OUT loss is now measured and
-localized, but not fixed.** Loaded the USB-profile image over JTAG
+localized, but not fixed (commit `e781dca`).** Loaded the USB-profile image
+over JTAG
 (`jtag-zynq -- --profile usb`, PL/FSBL/app PASS), COM12 enumerated
 (VID 1209:0001), and ran the numbered-record detector. The pending 12-write
 experiment: `sent=12 acked=6 missing=[2,4,6,8,10,12]`, zero write errors, zero
