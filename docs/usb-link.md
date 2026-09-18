@@ -367,3 +367,52 @@ existing E2E suite, exact payload integrity (zero CRC/format errors), and
 repeated open/close and re-enumeration cycles. Any unexplained drop keeps the
 result WIP; the device trace classifies the first divergent boundary
 (host -> controller -> staging -> parser -> response).
+
+## 12. U03 bulk-OUT bench findings (2026-09-18)
+
+**Measured baseline failure.** The numbered-record detector
+(`python tools/run.py test-e2e -- --target serial://COM12 -k test_usb`) against
+the instrumented baseline image sent 12 `TEST_RECORD` frames 50 ms apart:
+`sent=12 acked=6 missing=[2,4,6,8,10,12]`, zero write errors, zero CRC/format
+errors, no duplicates and no reordering. The loss is exactly alternating and
+repeatable. The gateway profile remains the working data path.
+
+**First divergent boundary.** The device trace (`la_usb_trace_ring`, 512
+entries, dumped with `tools/usb_trace.py`) shows only **seven EP1 OUT
+completions** for the 13 host writes (one PING plus six records); the six
+missing records never reached the controller. Every accepted packet completed
+the next EP1 dTD in sequence (dTD 0..6), and the staging ring, parser and
+response path accounted for every accepted packet. The first divergence is
+host -> controller: the controller ACKed the missing packets (the host saw no
+write error) and discarded them.
+
+**Endpoint type.** The base driver never programs the EPCR endpoint type; the
+vendor Chapter 9 example does (`xusbps_ch9_audio.c:1096`). Bench experiments:
+- EP1 left control-typed (`EPCTRL1=0x00800080`): the alternating ACK-discard
+  loss above.
+- EP1 programmed BULK at SET_CONFIGURATION or at init: the core NAKs every
+  bulk OUT packet (host writes time out). The type change turns the mismatch
+  into a hard failure instead of an ACK-discard.
+The type programming is therefore not enabled in the committed image until the
+data-toggle behavior can be observed.
+
+**Toggle mechanisms tested (no change to the alternating loss):**
+- EPCR `RXR`/`TXR` writes (the documented "Data Toggle Reset" bits) at
+  configuration, before/after the flush, and while the endpoint was disabled.
+- disable -> `RXR` -> enable cycles.
+- removing the init-time EP1 OUT prime.
+- priming EP1 OUT only after a serviced completion (vendor RX loop pattern,
+  `xusbps_intr.c:360`) instead of on every sweep pass.
+
+**Load-bearing write.** Without the EPFLUSH of EP1 OUT at SET_CONFIGURATION
+the core NAKs every bulk OUT packet even with `EPRDY=3` and an active dTD ring.
+With it the core accepts packets but behaves as if the OUT endpoint expects
+DATA1 while the host starts at DATA0, which produces the exact alternating
+ACK-discard. The EPFLUSH is kept as the known baseline behavior.
+
+**Not yet resolved.** Whether the device expects DATA1 (stuck toggle) or the
+host starts at DATA1 cannot be distinguished without observing the PIDs and
+handshakes. Next bench conditions: (1) a direct USB 2.0 port (the current bench
+uses an AMD xHCI USB 3.x root hub; no other PC was available), and (2) a USB
+protocol analyzer if the host-side control does not change the behavior. No
+firmware result is claimed as passing.

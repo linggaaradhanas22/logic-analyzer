@@ -67,6 +67,7 @@ def account_test_records(result: dict) -> dict:
     sent_sequences = [sequence for _record_id, sequence in result["sent"]]
     acked = [entry for entry in result["acked"] if isinstance(entry, int)]
     naks = [entry for entry in result["acked"] if not isinstance(entry, int)]
+    write_errors = result.get("write_errors", [])
     seen: set[int] = set()
     duplicates: list[int] = []
     for sequence in acked:
@@ -84,10 +85,12 @@ def account_test_records(result: dict) -> dict:
         "duplicates": duplicates,
         "reordered": observed != expected,
         "naks": naks,
+        "write_errors": write_errors,
         "crc_errors": result["parser"]["crc_errors"],
         "format_errors": result["parser"]["format_errors"],
         "clean": (not missing and not duplicates and observed == expected and
-                  not naks and result["parser"]["crc_errors"] == 0 and
+                  not naks and not write_errors and
+                  result["parser"]["crc_errors"] == 0 and
                   result["parser"]["format_errors"] == 0),
     }
 
@@ -278,19 +281,27 @@ class AnalyzerClient:
         to back, then collects the per-record ACKs for a bounded settle window.
 
         Returns {"sent": [(record_id, sequence), ...], "acked": [...],
-        "parser": {...}}. `acked` holds the acknowledged request sequences in
-        arrival order plus ("nak", sequence, error) tuples. One host write is
-        one transport send; it is not assumed to be one USB packet or one
-        device completion. The device-side JTAG trace records the same ids."""
+        "write_errors": [(record_id, message), ...], "parser": {...}}.
+        `acked` holds the acknowledged request sequences in arrival order plus
+        ("nak", sequence, error) tuples. One host write is one transport send;
+        it is not assumed to be one USB packet or one device completion. A
+        write that times out (device NAKs) is recorded, not retried, so the
+        burst keeps its timing. The device-side JTAG trace records the same
+        ids."""
         sent: list[tuple[int, int]] = []
         acked: list = []
+        write_errors: list[tuple[int, str]] = []
         deadline = time.monotonic() + settle_s
 
         for record_id in record_ids:
             sequence = self._next_sequence()
-            self._transport.send(
-                p.encode(p.TEST_RECORD, sequence, p.pack_test_record(record_id))
-            )
+            try:
+                self._transport.send(
+                    p.encode(p.TEST_RECORD, sequence,
+                             p.pack_test_record(record_id))
+                )
+            except TransportError as exc:
+                write_errors.append((record_id, str(exc)))
             sent.append((record_id, sequence))
             if gap_s > 0.0:
                 time.sleep(gap_s)
@@ -305,7 +316,8 @@ class AnalyzerClient:
             return False
 
         self._pump(deadline, on_frame, deadline_ok=True)
-        return {"sent": sent, "acked": acked, "parser": self._parser_stats()}
+        return {"sent": sent, "acked": acked, "write_errors": write_errors,
+                "parser": self._parser_stats()}
 
     def trace_dump(self, timeout_s: float = 30.0) -> list[str]:
         """P8.3: stops tracing and collects the LOG dump until the END line.

@@ -27,7 +27,12 @@ while {$remaining > 0} {
   set values [mrd -force $addr $chunk]
   puts -nonewline $fh "WORDS $chunk"
   foreach value $values {
-    puts -nonewline $fh [format " 0x%08X" $value]
+    set clean [string trimright [string trim $value] ":"]
+    if {[regexp {^[0-9A-Fa-f]+$} $clean]} {
+      puts -nonewline $fh [format " 0x%08X" [expr "0x$clean"]]
+    } else {
+      puts -nonewline $fh " 0x00000000"
+    }
   }
   puts $fh ""
   set addr [expr {$addr + $chunk * 4}]

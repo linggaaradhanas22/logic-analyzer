@@ -101,7 +101,12 @@ def parse_dump(text: str) -> tuple[int, list[tuple[int, int, int, int]]]:
         if line.startswith("HEAD "):
             head = int(_HEX.search(line).group(1), 16)
         elif line.startswith("WORDS "):
-            words.extend(int(value, 16) for value in _HEX.findall(line))
+            declared = int(line.split()[1])
+            tokens = [int(value, 16) for value in _HEX.findall(line)]
+            # XSDB's mrd list prints "address value" pairs for each word.
+            if len(tokens) == 2 * declared:
+                tokens = tokens[1::2]
+            words.extend(tokens)
     if head is None:
         raise SystemExit("dump has no HEAD line")
     entries = [

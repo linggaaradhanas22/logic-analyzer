@@ -106,18 +106,30 @@ class TcpTransport(Transport):
 
 
 class SerialTransport(Transport):
-    def __init__(self, port: str, baud: int = 921600, timeout_s: float = 1.0) -> None:
+    def __init__(self, port: str, baud: int = 921600, timeout_s: float = 1.0,
+                 write_timeout_s: float = 1.0) -> None:
         try:
-            self._serial = serial.Serial(port=port, baudrate=baud, timeout=timeout_s)
+            self._serial = serial.Serial(port=port, baudrate=baud,
+                                         timeout=timeout_s,
+                                         write_timeout=write_timeout_s)
         except serial.SerialException as exc:
             raise TransportError(f"cannot open serial port {port!r}: {exc}") from exc
         self._description = f"serial://{port}"
 
     def send(self, data: bytes) -> None:
         try:
-            self._serial.write(data)
+            written = self._serial.write(data)
+        except serial.SerialTimeoutException as exc:
+            raise TransportError(
+                f"write timed out on {self._description} "
+                f"(device NAKed or stalled): {exc}"
+            ) from exc
         except serial.SerialException as exc:
             raise TransportError(f"send failed on {self._description}: {exc}") from exc
+        if written != len(data):
+            raise TransportError(
+                f"short write on {self._description}: {written}/{len(data)} bytes"
+            )
 
     def recv(self, max_bytes: int, timeout_s: float) -> bytes:
         try:

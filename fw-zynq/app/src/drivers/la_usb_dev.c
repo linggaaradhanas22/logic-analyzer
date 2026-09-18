@@ -46,6 +46,15 @@ void la_usb_toggle_reset(la_usb_dev_t *dev, uint8_t number, uint8_t direction)
     XUsbPs_SetBits(&dev->usb, XUSBPS_EPCRn_OFFSET(number), mask);
 }
 
+/* Bench finding 2026-09-18 (docs/usb-link.md section 12): the base driver's
+ * XUsbPs_EpEnable only sets the RXE/TXE bits and never programs the EPCR
+ * endpoint type, so EP1 stays control-typed (EPCTRL1=0x00800080). The vendor
+ * Chapter 9 example programs the type (xusbps_ch9_audio.c:1096). Bench
+ * experiment: programming EP1 as BULK made the core NAK every bulk OUT
+ * packet instead of ACK-discarding every other one, so the type programming
+ * is deliberately not enabled here until the data-toggle behavior is
+ * understood with a protocol analyzer. */
+
 static void la_usb_isr_notify(la_usb_dev_t *dev, uint32_t bits)
 {
     BaseType_t woken = pdFALSE;
@@ -155,9 +164,14 @@ void la_usb_sweep_rx(la_usb_dev_t *dev)
             serviced++;
         }
         if (serviced != 0u) {
+            /* Prime only after servicing a completion, matching the vendor RX
+             * loop (xusbps_intr.c:360). An unconditional every-pass prime was
+             * suspected of resetting the endpoint state; the bench experiment
+             * showed the alternating loss is unchanged by this, so the
+             * conditional form is kept as the closer match to the vendor. */
+            (void)XUsbPs_EpPrime(&dev->usb, ep, XUSBPS_EP_DIRECTION_OUT);
             la_usb_trace_event(LA_USB_TRACE_SWEEP, ep, serviced, 0u);
         }
-        (void)XUsbPs_EpPrime(&dev->usb, ep, XUSBPS_EP_DIRECTION_OUT);
     }
     complete = XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
                               XUSBPS_EPCOMPL_OFFSET);
@@ -442,15 +456,13 @@ int la_usb_reconfigure(la_usb_dev_t *dev)
     (void)XUsbPs_EpEnable(&dev->usb, 1u,
                           XUSBPS_EP_DIRECTION_OUT | XUSBPS_EP_DIRECTION_IN);
     (void)XUsbPs_EpEnable(&dev->usb, 2u, XUSBPS_EP_DIRECTION_IN);
-    /* USB 2.0 section 9.4.7 requires SET_CONFIGURATION to reset every
-     * endpoint's data toggle to DATA0. Use the EPCR TXR/RXR bits that the
-     * XUsbPs headers document as "Data Toggle Reset" (docs/usb-link.md
-     * section 10); an EPFLUSH is documented only as a FIFO/endpoint flush.
-     * The previous EPFLUSH + tx_inflight = -1 form also stranded an in-flight
-     * TX slot; the IN completion still owns and returns it. */
-    la_usb_toggle_reset(dev, 1u, XUSBPS_EP_DIRECTION_OUT);
-    la_usb_toggle_reset(dev, 1u, XUSBPS_EP_DIRECTION_IN);
-    la_usb_toggle_reset(dev, 2u, XUSBPS_EP_DIRECTION_IN);
+    /* Bench finding 2026-09-18 (docs/usb-link.md section 12): without this
+     * EPFLUSH the core NAKs every bulk OUT packet even though EPRDY is set
+     * and the dTD ring is active; with it the core accepts packets but
+     * ACK-discards exactly every other one. The flush is kept as the known
+     * baseline behavior until the data-toggle state can be observed. */
+    XUsbPs_WriteReg(dev->usb.Config.BaseAddress, XUSBPS_EPFLUSH_OFFSET,
+                    1u << 1);
     la_usb_trace_event(LA_USB_TRACE_RESET, 1u,
                        XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
                                       XUSBPS_EPCR1_OFFSET),

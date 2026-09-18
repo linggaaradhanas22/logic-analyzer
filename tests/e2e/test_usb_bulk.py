@@ -20,10 +20,14 @@ from __future__ import annotations
 import pytest
 
 from host.la_cli.client import AnalyzerClient, account_test_records
-from host.la_cli.transport import open_uri
+from host.la_cli.transport import TransportError, open_uri
 
 # The recorded 2026-09-18 baseline used 50 ms between host writes.
 BASELINE_GAP_S = 0.05
+
+# A single PING is one bulk OUT frame; under the recorded ~50% loss it can be
+# discarded, so the fixture retries before declaring the link dead.
+PING_ATTEMPTS = 8
 
 
 @pytest.fixture(scope="module")
@@ -34,7 +38,20 @@ def client(request):
     if not str(target).lower().startswith("serial"):
         pytest.skip("the U03 bulk tests require the direct-USB serial target")
     analyzer = AnalyzerClient(open_uri(target))
-    analyzer.ping()
+    last_error: Exception | None = None
+    for _ in range(PING_ATTEMPTS):
+        try:
+            analyzer.ping(timeout_s=1.5)
+            last_error = None
+            break
+        except TransportError as exc:
+            last_error = exc
+    if last_error is not None:
+        analyzer.close()
+        pytest.fail(
+            f"USB device did not answer PING after {PING_ATTEMPTS} attempts: "
+            f"{last_error}"
+        )
     yield analyzer
     analyzer.close()
 
@@ -44,6 +61,7 @@ def _report(accounting: dict) -> str:
         f"sent={accounting['sent']} acked={accounting['acked']} "
         f"missing={accounting['missing']} duplicates={accounting['duplicates']} "
         f"reordered={accounting['reordered']} naks={accounting['naks']} "
+        f"write_errors={accounting['write_errors']} "
         f"crc={accounting['crc_errors']} fmt={accounting['format_errors']}"
     )
 

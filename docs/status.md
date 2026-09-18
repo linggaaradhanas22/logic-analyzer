@@ -227,6 +227,45 @@ test_usb`, dump `la_usb_trace_ring`, and record whether SET_INTERFACE or
 CLEAR_FEATURE occurs at port open and whether the corrected reset path changes
 the loss.
 
+### USB migration execution - U03 bench session (2026-09-18)
+
+**Bench ran with the instrumented image; the bulk-OUT loss is now measured and
+localized, but not fixed.** Loaded the USB-profile image over JTAG
+(`jtag-zynq -- --profile usb`, PL/FSBL/app PASS), COM12 enumerated
+(VID 1209:0001), and ran the numbered-record detector. The pending 12-write
+experiment: `sent=12 acked=6 missing=[2,4,6,8,10,12]`, zero write errors, zero
+CRC/format errors, no duplicates and no reordering - exactly alternating loss,
+repeatable. The JTAG trace (512 entries) shows only seven EP1 OUT completions
+for the 13 host writes; the lost records never reached the controller, so the
+first divergence is host -> controller (ACKed then discarded), not staging,
+parser or response.
+
+Endpoint-type and toggle experiments (each built, loaded and re-tested):
+- Programming EPCR EP1 as BULK (the driver never sets the type; the vendor
+  Chapter 9 example does) makes the core NAK every bulk OUT packet instead of
+  ACK-discarding every other one.
+- EPCR RXR/TXR writes (the documented "Data Toggle Reset" bits), before/after
+  the flush, while disabled, and disable/enable cycles: no change.
+- Removing the init-time EP1 prime and priming only after a serviced
+  completion (vendor RX-loop pattern): no change.
+- Without the SET_CONFIGURATION EPFLUSH of EP1 OUT the core NAKs every packet
+  even with EPRDY=3 and an active dTD ring; the flush is load-bearing and is
+  kept as the baseline behavior.
+
+The instrumented baseline image (USB profile, ELF SHA-256
+`F625E3AB...FCA513A9`, copied to `build/release/la_app_usb.elf`) reproduces the
+failure exactly. The remaining ambiguity - whether the device expects DATA1 or
+the host starts at DATA1 - needs a USB protocol analyzer; a direct USB 2.0 port
+is the first host-side control (the bench uses an AMD xHCI USB 3.x root hub; no
+other PC available). No bench PASS is claimed; the gateway remains the working
+data path. Verification: `test-native` 18/18, `test-host` 87 passed,
+`fw-zynq -- --profile usb` PASS. Evidence:
+`build/reports/usb-migration/U03/usb-trace-final-decoded.txt`,
+`usb-trace-final-baseline.txt`, `baseline-hashes.txt` and the detector failure
+output. Next: move J10 to a direct USB 2.0 port (or obtain an analyzer), rerun
+the 12-write detector, compare the trace; do not re-enable the type programming
+until the PID/toggle behavior is observable.
+
 ### USB migration execution - U02 (2026-09-18)
 
 **U02 complete; contract frozen.** `docs/usb-link.md` section 9 is the frozen
