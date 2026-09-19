@@ -113,13 +113,16 @@ is unknown - this firmware implements it.
 ### TRACE_CTRL, type `0x18`
 
 An additive v1 extension for the P8.3 task/queue trace. The payload is
-exactly 4 bytes: `action:u8` followed by 3 reserved bytes that must be zero.
-Action 1 (`STOP`) disables trace recording; action 2 (`START`) clears the
-trace ring and enables recording; action 3 (`DUMP`) disables recording and
-dumps the ring. Invalid actions are rejected with NAK bad-field. The receiver
-acknowledges the frame, and for `DUMP` follows the ACK with a sequence of
-`LOG` frames carrying the dump; the final line begins with `END `, so a host
-can detect the end without a second command. The dump lines are ASCII:
+exactly 4 bytes: `action:u8`, `start:u16` LE, `count:u8`. Action 1 (`STOP`)
+disables trace recording; action 2 (`START`) clears the trace ring and enables
+recording; action 3 (`DUMP`) disables recording and dumps records `[start,
+start+count)` (count 0 or above the firmware maximum is clamped; the maximum is
+64 records per request). `STOP`/`START` ignore `start`/`count`. Invalid actions
+are rejected with NAK bad-field. The receiver acknowledges the frame, and for
+`DUMP` follows the ACK with a sequence of `LOG` frames carrying the dump; the
+final line begins with `END <next> <total> <dropped>`, so a host can loop
+chunks until `next >= total` without a second command. The object table is
+emitted only for `start == 0`. The dump lines are ASCII:
 
 | Line | Meaning |
 |---|---|
@@ -127,7 +130,7 @@ can detect the end without a second command. The dump lines are ASCII:
 | `TASK <number> <id-hex> <name>` | task object (id is the TCB pointer) |
 | `QUEUE <id-hex> <name>` | queue or stream-buffer object |
 | `REC <time> <token> <object> <value> <id-hex>` | one record, oldest first |
-| `END <records> <total> <dropped>` | record count, accepted count, wrap loss |
+| `END <next> <total> <dropped>` | next record index, accepted count, wrap loss |
 
 Record tokens: `IN`/`OUT` (task switched in/out), `QS`/`QR`/`QF`/`RX` (queue
 send, receive, send-failed, receive-failed), `SS`/`SR`/`SF`/`SE` (stream

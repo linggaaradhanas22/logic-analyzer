@@ -57,6 +57,13 @@ authoritative execution ledger is `docs/status.md`.
   (the gateway's and the ESP32 ROM's) fails to open with `GetCommState` hangs
   or errors 22/31. Keep **both** USB cables connected: with only one cable the
   S3 browns out (`E BOD`) under Wi-Fi transmit peaks.
+- **Direct Zynq USB link: correctness only; drain 0.03-0.85 MB/s measured
+  (2026-09-19).** The Zynq PS USB0 CDC-ACM profile enumerates at high speed,
+  passes the burst/trace/recovery suites and transfers 4 MiB byte-exactly, but
+  the U06 gate (>= 1.5 MB/s over 64 MiB) fails: the single-in-flight 1 KiB
+  chunk path is latency-bound. A queued in-flight experiment reordered chunks
+  and was reverted. Per the U07 decision the gateway remains the primary
+  transport and direct USB stays WIP (`docs/usb-link.md` section 16).
 - **Gateway loopback echo: ~40–44 kB/s round trip**, unchanged from 921600 to
   2 Mbps. This is a relay-processing measurement, not a universal one-way
   limit or a profiled root cause.

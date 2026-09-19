@@ -675,3 +675,34 @@ entries and the pump now records `TX_SUBMIT`/`EP_STATE`. Regressions clear:
 P6.2 matrix 18/18, P9.2 18/1 (live). Evidence:
 `build/reports/usb-u04-protocol.md`. U05 (external loopback, live gates,
 recovery, soak) and U06 (64 MiB drain) remain.
+
+## 16. U07 adoption decision: DEFER (2026-09-19)
+
+Direct USB is **not adopted as the primary transport** at this time. The
+correctness gates pass, but the U06 performance gate fails and the plan makes
+adoption conditional on it.
+
+| Gate | Result |
+|---|---|
+| U03 enumeration, open/close, reset, short/exact transfers | PASS (local) |
+| U04 commands, parser, chunked trace | PASS 5/5 + 6/6 |
+| U05 common burst matrices + 500-capture soak | PASS; external/live wiring gates BLOCKED |
+| U06 64 MiB drain >= 1.5 MB/s | **FAIL** (0.03-0.85 MB/s; bytes exact) |
+
+Measured limits: 4 MiB byte-exact capture at 0.19 MB/s through the client
+(0.85 MB/s with a tight host loop); the wired 100 MS/s acquisition scope is
+unchanged and unaffected. Recovery: close-during-capture returns to IDLE
+within 3 s; reset cycles and stale-reply handling pass. Power/cable: J10
+through a USB 2.0 hub to the PC, J12 power, JP6=USB; high speed.
+
+Code footprint: the USB profile builds `la_app_usb` (text 209,072 / data 3,720
+/ bss 294,784) versus the gateway `la_app` (text 191,144 / data 3,688 / bss
+243,936); the gateway profile is the default and is unchanged.
+
+Disposition: the **gateway remains the primary and supported transport**
+(P9.1, P9.4 and P10.1 keep their current status); direct USB stays a
+WIP/experimental profile with all correctness findings preserved, and the
+release identity gate stays open. No wireless or browser feature is removed.
+The decision can be revisited by fixing the queued IN-transfer batching,
+enlarging the DATA_CHUNK payload (protocol amendment) or raising the USB task
+service rate, then re-running U06.

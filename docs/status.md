@@ -518,6 +518,44 @@ raise the USB task service rate. Evidence:
 `build/reports/usb-u06-performance.{md,json}`. Next: U07 records the adoption
 decision (performance-blocked), then U08/U09.
 
+### USB migration execution - U07 decision: DEFER (2026-09-19)
+
+**Direct USB is not adopted as the primary transport.** Gate table: U03
+enumeration/open-close/reset/short+exact transfers PASS; U04 commands, parser
+and chunked trace PASS; U05 common burst matrices and the 500-capture soak
+PASS (external/live gates BLOCKED on wiring); U06 64 MiB drain >= 1.5 MB/s
+**FAIL** (0.03-0.85 MB/s, byte-exact). Measured limits, recovery behavior
+(close-during-capture to IDLE within 3 s), power/cable arrangement (J10
+through a USB 2.0 hub, J12 power, high speed) and the code footprint (USB
+`la_app_usb` text 209,072 / data 3,720 / bss 294,784 versus gateway `la_app`
+text 191,144 / data 3,688 / bss 243,936) are recorded in `docs/usb-link.md`
+section 16. Disposition: the **gateway remains primary and supported**; P9.1,
+P9.4 and P10.1 keep their current status; direct USB stays a WIP/experimental
+profile with all findings preserved; the release identity gate stays open; no
+wireless or browser feature is removed. Revisit by fixing the queued
+IN-transfer batching, enlarging the DATA_CHUNK payload (protocol amendment) or
+raising the USB task service rate, then re-running U06. Files updated:
+`docs/usb-link.md`, `docs/plan.md`, `docs/limits.md`, this ledger.
+
+### USB migration execution - U08 and U09 (2026-09-19)
+
+**U08 documentation reconciled; U09 packaging passes, SD boot and tag remain
+blocked.** U08: `docs/plan.md` carries the U07 defer decision,
+`docs/protocol.md` documents the chunked `TRACE_CTRL` payload and
+`END next total dropped`, `docs/limits.md` records the direct-USB performance
+limit, and `docs/using-the-analyzer.md` marks the direct-USB profile as
+experimental/deferred. README, architecture, RTOS design, wiring, SPI link and
+test plan describe the unchanged gateway/S3 transport and needed no edit; the
+portal/manuscript contain no direct-USB adoption claim, so no rebuild was
+required. Evidence: `build/reports/usb-u08-doc-review.md`. U09 (gateway
+release profile per the defer): `release` PASS 22/22 native tests,
+`fw-zynq` gateway PASS, `boot` PASS (`BOOT.BIN` 2,396,368 bytes from the
+current FSBL/`la_fw.elf`/bitstream), `package` PASS (BOOT.BIN, ESP32
+bootloader/partition/`la_gateway.bin`, host wheel and SHA-256 manifest).
+Blocked/not authorized: the `[HUMAN]` SD boot and on-image gates, the `v1.0`
+tag and publication, and wiring photos. Evidence:
+`build/reports/usb-u09-release.md`.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |
