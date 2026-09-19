@@ -488,7 +488,7 @@ the example until the next `jtag-zynq -- --profile usb` (or gateway) load.
 Next tactic: align `la_usb_reconfigure` with the exact vendor sequence above
 and re-run the numbered-record detector and trace.
 
-## 14. U03 host-side controls: USBPcap capture and raw libusb bulk (2026-09-18)
+## 14. U03 host-side controls: USBPcap capture and raw libusb bulk (2026-09-18, results 2026-09-19)
 
 **Purpose.** This is the free, same-PC control set for U03: a URB-level
 USBPcap capture of what Windows submits (including the control requests at
@@ -508,15 +508,19 @@ controls bound the host and class-driver side of the loss.
 | pyusb + libusb-package | 1.3.1 / 1.0.26.2 | project `.venv` | optional extra `usb-bench` in `pyproject.toml` |
 | Zadig | 2.9 | `.tools\zadig\zadig-2.9.exe` (ignored) | SHA-256 `4ECAA95DF3DA3621486A043AEF8B3050B8BAFE7C901402871E816229EF82039B` |
 
-**Blocker: reboot required before USBPcap works.** The INF registered
-`USBPcap` in the USB class `UpperFilters`
-(`HKLM\SYSTEM\CurrentControlSet\Control\Class\{36fc9e60-...}`), but the driver
-service is still `Stopped`, `\\.\USBPcapN` does not exist, and
-`USBPcapCMD --extcap-interfaces` prints nothing. A disable/enable of the Zybo
-root hub and a `pnputil /restart-device` did not attach the filter; the USBPcap
-README states "After installing, reboot." The board, FTDI console and root hubs
-are healthy (`Get-PnpDevice` all `OK`). Post-reboot first checks:
-`python tools/usb_capture.py list` (expect `USBPcap1..4`) and a short capture.
+**USBPcap attach (2026-09-19).** The INF registered `USBPcap` in the USB class
+`UpperFilters`, but neither the reboot nor a root-hub disable/enable attached
+the filter. `pnputil /restart-device` per root hub did attach it (the USBPcap
+README's reboot advice is necessary but not sufficient here): three of the four
+AMD root hubs now expose `USBPcap3/4/5` and capture real traffic
+(`smoke-hub1.pcap` 27,207 bytes, 546 bulk URBs decoded with tshark). The root
+hub that hosts J10 (`USB\ROOT_HUB30\5&7EC62FA&0&0`, parent
+`PCI\VEN_1022&DEV_1118...`) stays in a persistent "pending system reboot to
+complete a previous operation" state: `pnputil /restart-device`,
+`/scan-devices` and a parent-controller restart all fail or re-queue, and no
+USBPcap interface exists for it, so the device-hub capture remains BLOCKED.
+Workaround: move the external hub to a port on a filtered controller, or cold
+shut down. Capture and decode themselves are verified on the other hubs.
 
 **Npcap note.** Wireshark 4.6 warns that Npcap is missing and that WinPcap
 4.1.3 is installed. Npcap is not needed for USBPcap captures and pcap file
@@ -534,26 +538,44 @@ install Npcap and let it remove WinPcap.
   EP IN reads), `records` (the same numbered `TEST_RECORD` detector as
   `tests/e2e/test_usb_bulk.py`, with the shared ACK accounting).
 
-**Raw libusb driver binding.** Windows needs WinUSB on `1209:0001`: run
-`.tools\zadig\zadig-2.9.exe`, enable *List All Devices*, select
-`1209:0001 (LA-USB-TEST-0001)`, target `WinUSB`, *Replace Driver*. This
-replaces `usbser.sys` for the device, so `la-cli serial://COMx` stops working
-until the device is uninstalled and re-enumerated (Device Manager, delete the
-driver, scan for hardware changes). The raw test itself needs no admin rights.
+**Raw libusb driver binding and restore.** Windows needs WinUSB on
+`1209:0001`: run `.tools\zadig\zadig-2.9.exe`, enable *List All Devices*,
+select `1209:0001 (LA-USB-TEST-0001)`, target `WinUSB`, *Replace Driver*. Zadig
+installed `oem33.inf` (`rtos_logic_analyzer.inf`, provider libwdi); this
+replaces `usbser.sys` for the device, so `la-cli serial://COMx` stops working.
+Replacing the device alone is not enough because the package re-binds on
+rescan; the working restore is
+`pnputil /delete-driver oem33.inf /uninstall` followed by
+`pnputil /scan-devices`, after which the device re-enumerated as
+`USB Serial Device (COM13)` with `usbser.sys`. The raw test itself needs no
+admin rights.
 
-**Pre-registered observations and acceptance (extends section 11).** At port
-open the capture must show whether Windows issues `SET_INTERFACE` (0x0B) or
-`CLEAR_FEATURE` (0x01), for which interface/endpoint, and the ordering of
-`SET_LINE_CODING`/`SET_CONTROL_LINE_STATE`; if neither reset request appears,
-the reset path cannot explain any change. The raw 12-write `records` burst must
-reproduce or not reproduce `sent=12 acked=6 missing=[2,4,6,8,10,12]` with zero
-write errors; a clean raw run with a lossy serial run would implicate
-`usbser.sys` or the CDC class path, a lossy raw run clears them. One host write
-is one transport send, not one USB packet. Repeated loss-free runs are required
-before success is claimed; the device JTAG trace remains the first-divergence
-authority. No result is claimed before the reboot and the board load.
+**Results (2026-09-19).** The serial baseline on COM12 reproduced the recorded
+failure twice: `sent=12 acked=6 missing=[2,4,6,8,10,12]`, then
+`[14,16,18,20,22,24]`, no write errors. The device trace over 125 setups in the
+ring window shows only line-coding/DTR requests - **zero** `SET_INTERFACE`
+(0x0B) and **zero** `CLEAR_FEATURE` (0x01) - so the Windows open path never
+exercises the toggle-reset path (pre-registered observation 1 answered). Raw
+libusb `records --count 12 --gap-ms 50` reproduces the alternating loss three
+times (`sent=12 acked=6 missing=[0,2,4,6,8,10]`, zero write errors, CRC,
+duplicates or reordering), which clears `usbser.sys` and the CDC class path.
+Adding the control sequence (`--control`: SET_LINE_CODING,
+SET_CONTROL_LINE_STATE, SET_INTERFACE, CLEAR_FEATURE OUT/IN) **removes the
+alternating host->controller loss**: the device trace shows all 12 OUT
+completions and all 12 FRAMEs reaching the parser, confirming the data-toggle
+desync as the cause. A separate device TX-path defect remains: ACKs stop after
+eight frames (TX_DONE entries end at slot 7 and include `slot=0xFFFFFFFF`
+no-in-flight completions), so the control runs still report
+`missing=[0,9,10,11]`/`[0,11]`. Acceptance still requires repeated clean runs;
+the device JTAG trace remains the first-divergence authority. Next: fix
+`la_usb_reconfigure` to reset the OUT toggle exactly as the vendor example does
+(EPCR type + TXR/RXR) and re-test with the raw tool, then root-cause the TX
+stall. Evidence summary:
+`build/reports/usb-migration/U03/host-controls/summary.md` (ignored).
 
-**xHCI caveat.** USBPcap's USB 3.0 support is partial and this PC has only AMD
-`ROOT_HUB30` roots (no EHCI companion). If captures are empty after the reboot,
-fall back to the USB 2.0 PCIe EHCI card control or a wire capture; `-I` has
-already been run and the filter reports standard HWIDs.
+**xHCI note.** USBPcap captures fine on this xHCI-only host (three AMD
+`ROOT_HUB30` roots; 546 bulk URBs decoded), and `-I` reported only standard
+root-hub HWIDs. The remaining gap is the stuck pending PnP state on the
+device's root hub, not controller support; the USB 2.0 PCIe EHCI card or a
+wire capture remain the fallbacks for the device-hub URB view if the port move
+is not possible.

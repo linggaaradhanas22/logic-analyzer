@@ -42,12 +42,13 @@ _TSHARK_FIELDS = [
     "usb.transfer_type",
     "usb.endpoint_address",
     "usb.data_len",
-    "usb.setup.bmRequestType",
+    "usb.bmRequestType",
     "usb.setup.bRequest",
     "usb.setup.wValue",
     "usb.setup.wIndex",
     "usb.setup.wLength",
     "usb.capdata",
+    "usb.data_fragment",
 ]
 
 

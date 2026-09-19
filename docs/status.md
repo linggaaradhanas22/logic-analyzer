@@ -366,6 +366,47 @@ Next: reboot Windows, verify `usb_capture.py list` and a short capture, load
 decode` table, and compare both against the serial detector and the JTAG
 trace. Restore `usbser.sys` after the raw test.
 
+### USB migration execution - U03 host controls run (2026-09-19)
+
+**The host controls ran; the data-toggle desync is confirmed as the
+alternating bulk-OUT loss and a separate device TX-path defect surfaced.**
+Rebuilt the USB ELF (`fw-zynq -- --profile usb`, text 209008 / data 3720 /
+bss 281408) and loaded it over JTAG. USBPcap attach needed
+`pnputil /restart-device` on each root hub (a reboot alone did not attach the
+filter); three of the four AMD roots now expose `USBPcap3/4/5` and captured
+real traffic (`smoke-hub1.pcap` 27,207 bytes, 546 bulk URBs decoded by
+tshark; the `usb_capture.py` decode field list was corrected to tshark 4.6's
+`usb.bmRequestType`). The root hub hosting J10
+(`USB\ROOT_HUB30\5&7EC62FA&0&0`) is stuck in a persistent "pending system
+reboot" state (`pnputil /restart-device`, `/scan-devices` and a parent
+controller restart all fail or re-queue), so the device-hub URB capture is
+BLOCKED; workaround is moving the external hub to a filtered port or a cold
+shutdown.
+
+Bench evidence. Serial baseline on COM12 reproduced the recorded failure twice
+(`missing=[2,4,6,8,10,12]`, then `[14,16,18,20,22,24]`). The device trace
+(125 setups in the ring window) contains **zero** `SET_INTERFACE` (0x0B) and
+**zero** `CLEAR_FEATURE` (0x01) - Windows only issues line-coding/DTR
+requests, so the toggle-reset path is never exercised (pre-registered
+observation 1 answered). Raw libusb/WinUSB (Zadig `oem33.inf`) reproduced the
+alternating loss three times: `sent=12 acked=6 missing=[0,2,4,6,8,10]`, zero
+write errors/CRC/duplicates/reordering - `usbser.sys` and the CDC class path
+are cleared. With the `--control` sequence (SET_LINE_CODING,
+SET_CONTROL_LINE_STATE, SET_INTERFACE, CLEAR_FEATURE OUT/IN) the alternating
+loss disappears: the device trace shows all 12 OUT completions and all 12
+FRAMEs, confirming the data-toggle desync. Residual control-run misses
+(`[0,9,10,11]`, `[0,11]`) are a separate device TX-path stall: TX_DONE entries
+stop at slot 7 and include `slot=0xFFFFFFFF` no-in-flight completions, so ACKs
+stop after eight frames. Restored `usbser.sys` with
+`pnputil /delete-driver oem33.inf /uninstall` + `/scan-devices` (device is now
+`USB Serial Device (COM13)`; status alternates success/timeout as recorded).
+Evidence: `build/reports/usb-migration/U03/host-controls/summary.md` and the
+pcap/trace files beside it (ignored local evidence). No firmware fix or clean
+run is claimed. Next: change `la_usb_reconfigure` to reset the OUT toggle
+exactly as the vendor example does (EPCR type + TXR/RXR, no EPFLUSH-only
+reset) and re-test with `usb_raw_bulk.py records`; root-cause the ACK TX stall;
+optionally move the J10 hub to a filtered root-hub port for the URB capture.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

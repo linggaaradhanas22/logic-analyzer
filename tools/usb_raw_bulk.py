@@ -313,6 +313,8 @@ def main(argv: list[str] | None = None) -> int:
                                args.gap_ms, args.timeout_ms, args.settle_ms)
         summary = account_test_records(result)
         if args.json:
+            summary = dict(summary)
+            summary["acked_order"] = result["acked"]
             print(json.dumps(summary, indent=2))
         else:
             print(
