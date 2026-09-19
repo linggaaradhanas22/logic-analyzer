@@ -103,6 +103,13 @@ def crc16_ccitt(data: bytes) -> int:
     return crc
 
 
+def _crc16_table():
+    global _CRC16_TABLE
+    if _CRC16_TABLE is None:
+        crc16_ccitt(b"")
+    return _CRC16_TABLE
+
+
 def crc32_ieee(data: bytes) -> int:
     """CRC-32/IEEE (reflected 0xEDB88320, init/final 0xFFFFFFFF)."""
     global _CRC32_TABLE
@@ -500,8 +507,90 @@ class FrameParser:
         self.dropped_bytes = 0
 
     def feed(self, data: bytes, on_frame) -> None:
-        for value in data:
-            self._byte(value, on_frame)
+        """Incremental feed with a table-driven CRC and bulk payload copies.
+
+        The per-byte method-call path dominated the 4 MiB USB drain
+        verification (U06, ~0.7 MB/s host-side), so the hot states are
+        inlined here."""
+        table = _crc16_table()
+        index = 0
+        total = len(data)
+        while index < total:
+            state = self._state
+            if state == "sof":
+                found = data.find(SOF, index)
+                if found < 0:
+                    self.dropped_bytes += total - index
+                    return
+                self.dropped_bytes += found - index
+                index = found + 1
+                self._state = "type"
+                self._crc_running = 0xFFFF
+            elif state == "payload":
+                need = self._length - len(self._payload)
+                take = need if need <= total - index else total - index
+                chunk = data[index:index + take]
+                self._payload += chunk
+                crc = self._crc_running
+                for value in chunk:
+                    crc = ((crc << 8) & 0xFFFF) ^ table[((crc >> 8) ^ value) & 0xFF]
+                self._crc_running = crc
+                index += take
+                if len(self._payload) == self._length:
+                    self._state = "crc_lo"
+            elif state == "type":
+                value = data[index]
+                index += 1
+                self._type = value
+                crc = self._crc_running
+                self._crc_running = ((crc << 8) & 0xFFFF) ^ table[((crc >> 8) ^ value) & 0xFF]
+                self._state = "sequence"
+            elif state == "sequence":
+                value = data[index]
+                index += 1
+                self._sequence = value
+                crc = self._crc_running
+                self._crc_running = ((crc << 8) & 0xFFFF) ^ table[((crc >> 8) ^ value) & 0xFF]
+                self._state = "length_lo"
+            elif state == "length_lo":
+                value = data[index]
+                index += 1
+                self._length = value
+                crc = self._crc_running
+                self._crc_running = ((crc << 8) & 0xFFFF) ^ table[((crc >> 8) ^ value) & 0xFF]
+                self._state = "length_hi"
+            elif state == "length_hi":
+                value = data[index]
+                index += 1
+                self._length |= value << 8
+                crc = self._crc_running
+                self._crc_running = ((crc << 8) & 0xFFFF) ^ table[((crc >> 8) ^ value) & 0xFF]
+                if self._length > MAX_PAYLOAD:
+                    self.format_errors += 1
+                    self._restart_after(value)
+                else:
+                    self._payload = bytearray()
+                    self._state = "crc_lo" if self._length == 0 else "payload"
+            elif state == "crc_lo":
+                value = data[index]
+                index += 1
+                self._received_crc = value
+                self._state = "crc_hi"
+            elif state == "crc_hi":
+                value = data[index]
+                index += 1
+                self._received_crc |= value << 8
+                if self._received_crc == self._crc_running:
+                    self.frames += 1
+                    if on_frame is not None:
+                        on_frame(self._type, self._sequence, bytes(self._payload))
+                    self._restart_after(0)
+                else:
+                    self.crc_errors += 1
+                    self._restart_after(value)
+            else:  # pragma: no cover - defensive
+                self._restart_after(data[index])
+                index += 1
 
     def _byte(self, value: int, on_frame) -> None:
         if self._state == "sof":

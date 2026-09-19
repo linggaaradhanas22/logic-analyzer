@@ -132,3 +132,48 @@ def test_usb_parser_garbage_and_bad_crc_recovery(request) -> None:
     finally:
         transport.close()
     assert any(mt == p.PONG for mt, _seq, _payload in frames), frames
+
+
+def test_usb_close_during_capture_recovers(request) -> None:
+    """Closing the port mid-capture must return the device to IDLE within 3 s.
+
+    The TxTask abandons a burst whose ACKs stop (LA_TX_ACK_TIMEOUT_MS), which
+    releases the capture buffer and lets the acquisition FSM recover."""
+    target = _target(request)
+    transport = open_uri(target)
+    parser = p.FrameParser()
+    frames: list = []
+    config = p.pack_config(
+        ctrl_flags=p.CTRL_SELFTEST_EN, sample_div=99, mode=p.MODE_RAW,
+        chan_en=0xFF, trig_mask=0, trig_value=0, post_samples=1_000_000,
+        timeout=0)
+    try:
+        transport.send(p.encode(p.CONFIG, 0, config))
+        _read_frames(transport, parser, frames, 3.0,
+                     stop=lambda: any(mt == p.ACK for mt, _s, _p in frames))
+        transport.send(p.encode(p.ARM, 1))
+        time.sleep(0.2)
+    finally:
+        transport.close()
+
+    time.sleep(4.0)
+    client = AnalyzerClient(open_uri(target))
+    try:
+        last_error: Exception | None = None
+        for _ in range(PING_ATTEMPTS):
+            try:
+                client.ping(timeout_s=1.5)
+                last_error = None
+                break
+            except TransportError as exc:
+                last_error = exc
+        assert last_error is None, last_error
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            status = client.status(timeout_s=2.0)
+            if status["state"] == 0:
+                break
+            time.sleep(0.1)
+        assert status["state"] == 0, status
+    finally:
+        client.close()

@@ -163,7 +163,10 @@ class AnalyzerClient:
                 if deadline_ok:
                     return
                 raise TransportError(f"timeout waiting for the analyzer on {self.description}")
-            data = self._transport.recv(4096, min(remaining, 0.5))
+            # Keep the recv window short: a 0.5 s cap made every partial read
+            # wait out the timeout and throttled the 4 MiB USB drain to
+            # ~0.03 MB/s (U06).
+            data = self._transport.recv(4096, min(remaining, 0.02))
             if not data:
                 if self._transport.eof:
                     raise TransportError(

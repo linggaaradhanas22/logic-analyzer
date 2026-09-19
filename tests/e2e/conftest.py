@@ -113,3 +113,10 @@ def pytest_addoption(parser) -> None:
         help="P9.1 drain gate: total MiB of verified payload (0 disables; "
         "the plan gate uses 64)",
     )
+    parser.addoption(
+        "--usb-drain-mb",
+        type=int,
+        default=64,
+        help="U06 USB drain gate: total MiB of verified payload per trial "
+        "(0 disables; the plan gate uses 64)",
+    )

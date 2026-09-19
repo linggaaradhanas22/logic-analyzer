@@ -493,6 +493,31 @@ CRC check resynchronizes; recovery is deterministic with a bounded flush.
 Next: U05 (external loopback matrix, live decoders/stop, recovery cases, soak)
 then U06 (64 MiB USB drain >= 1.5 MB/s).
 
+### USB migration execution - U05 and U06 (2026-09-19)
+
+**U05 correctness gates pass over USB; the wiring-gated matrices are BLOCKED.
+U06 fails the 1.5 MB/s drain gate (correctness exact, throughput short).**
+Over `serial://COM13`: P6.2 internal selftest matrix 18/18; `test_zynq_burst`
+7 passed/1 skipped; the 500-capture soak passed (527.8 s, exact length and
+zero parser errors per capture); P9.2 sizes 18 passed/1 skipped; the U04
+transport suite 6/6 including close-during-capture recovery to IDLE within
+3 s. Blocked, not counted as passing: the external JE->JC matrix (jumpers not
+installed), the live decoder/stop/p99 gates (live patgen wiring absent), the
+elevation-gated reset-during-capture check (UAC unanswered) and the
+[HUMAN] unplug/replug cases. Evidence:
+`build/reports/usb-u05-regression.md`.
+
+U06: a 4 MiB capture is byte-exact (4,194,304 bytes, 4,129 chunks, zero CRC or
+format errors, DATA_END CRC match) but the rate is 0.03-0.85 MB/s depending on
+the host read cadence, below the 1.5 MB/s gate. The client read cap was fixed
+(500 ms -> 20 ms; a ~10x capture improvement) and the parser CRC is now
+table-driven; an 8-deep multi-in-flight TX experiment reordered chunks under
+long transfers and was reverted. Required design amendment: fix queued
+IN-transfer batching, enlarge the DATA_CHUNK payload (protocol amendment) or
+raise the USB task service rate. Evidence:
+`build/reports/usb-u06-performance.{md,json}`. Next: U07 records the adoption
+decision (performance-blocked), then U08/U09.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |
