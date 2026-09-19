@@ -48,12 +48,12 @@ void la_usb_toggle_reset(la_usb_dev_t *dev, uint8_t number, uint8_t direction)
 
 /* Bench finding 2026-09-18 (docs/usb-link.md section 12): the base driver's
  * XUsbPs_EpEnable only sets the RXE/TXE bits and never programs the EPCR
- * endpoint type, so EP1 stays control-typed (EPCTRL1=0x00800080). The vendor
- * Chapter 9 example programs the type (xusbps_ch9_audio.c:1096). Bench
- * experiment: programming EP1 as BULK made the core NAK every bulk OUT
- * packet instead of ACK-discarding every other one, so the type programming
- * is deliberately not enabled here until the data-toggle behavior is
- * understood with a protocol analyzer. */
+ * endpoint type, so EP1 stays control-typed (EPCTRL1=0x00800080). The 2026-09-19
+ * host controls (section 14) confirmed the data-toggle desync: the Windows host
+ * starts at DATA0 and a toggle reset removes the alternating ACK-discard. The
+ * vendor Chapter 9 example programs the type and resets both toggles in one
+ * EPCR write after enabling the endpoints (xusbps_ch9_storage.c:389), and
+ * `la_usb_reconfigure` now follows that sequence. */
 
 static void la_usb_isr_notify(la_usb_dev_t *dev, uint32_t bits)
 {
@@ -435,7 +435,8 @@ int la_usb_dev_init(la_usb_dev_t *dev, StreamBufferHandle_t rx_sb,
                         pending);
     }
     XUsbPs_Start(&dev->usb);
-    (void)XUsbPs_EpPrime(&dev->usb, 1u, XUSBPS_EP_DIRECTION_OUT);
+    /* The vendor primes EP1 OUT only at SET_CONFIGURATION (the endpoint is
+     * disabled until then); la_usb_reconfigure owns the prime. */
     /* UI drives the vendor endpoint dispatch (pop/copy/release in the
      * callback); SLE stays masked because it level-storms while the bus is
      * idle. Reset/error/port-change are also enabled. */
@@ -447,22 +448,19 @@ int la_usb_dev_init(la_usb_dev_t *dev, StreamBufferHandle_t rx_sb,
 
 int la_usb_reconfigure(la_usb_dev_t *dev)
 {
-    /* Bench finding 2026-09-18: the driver's ConfigureDevice initializes the
-     * queue heads and descriptors but never sets the endpoint control
-     * registers, so EP1/EP2 stay disabled and host tokens to them time out
-     * (Write timeout). Enable the data endpoints at SET_CONFIGURATION and
-     * re-prime the OUT ring. A full XUsbPs_ConfigureDevice re-run from task
-     * context is deferred until the ISR/task interaction is proven. */
+    /* Vendor Chapter 9 sequence (xusbps_ch9_storage.c:389): enable the data
+     * endpoints, program the EP1 BULK type and reset both data toggles in one
+     * EPCR write, then prime the OUT ring. The bench control (docs/usb-link.md
+     * section 14) confirmed the host starts at DATA0; without the toggle reset
+     * the device ACK-discards every other OUT packet. The EPFLUSH that the
+     * section-12 experiments found load-bearing is gone: it was only needed
+     * while the type bits stayed at their control default. */
     (void)XUsbPs_EpEnable(&dev->usb, 1u,
                           XUSBPS_EP_DIRECTION_OUT | XUSBPS_EP_DIRECTION_IN);
     (void)XUsbPs_EpEnable(&dev->usb, 2u, XUSBPS_EP_DIRECTION_IN);
-    /* Bench finding 2026-09-18 (docs/usb-link.md section 12): without this
-     * EPFLUSH the core NAKs every bulk OUT packet even though EPRDY is set
-     * and the dTD ring is active; with it the core accepts packets but
-     * ACK-discards exactly every other one. The flush is kept as the known
-     * baseline behavior until the data-toggle state can be observed. */
-    XUsbPs_WriteReg(dev->usb.Config.BaseAddress, XUSBPS_EPFLUSH_OFFSET,
-                    1u << 1);
+    XUsbPs_SetBits(&dev->usb, XUSBPS_EPCR1_OFFSET,
+                   XUSBPS_EPCR_TXT_BULK_MASK | XUSBPS_EPCR_RXT_BULK_MASK |
+                       XUSBPS_EPCR_TXR_MASK | XUSBPS_EPCR_RXR_MASK);
     la_usb_trace_event(LA_USB_TRACE_RESET, 1u,
                        XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
                                       XUSBPS_EPCR1_OFFSET),

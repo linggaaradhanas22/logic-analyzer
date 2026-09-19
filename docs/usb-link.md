@@ -579,3 +579,34 @@ root-hub HWIDs. The remaining gap is the stuck pending PnP state on the
 device's root hub, not controller support; the USB 2.0 PCIe EHCI card or a
 wire capture remain the fallbacks for the device-hub URB view if the port move
 is not possible.
+
+## 15. U03 fix: vendor toggle sequence and burst pools (2026-09-19)
+
+**Firmware.** `la_usb_reconfigure` now follows the vendor Chapter 9 sequence
+exactly (`xusbps_ch9_storage.c:389`): `XUsbPs_EpEnable(1, OUT|IN)`,
+`XUsbPs_EpEnable(2, IN)`, one `XUsbPs_SetBits(XUSBPS_EPCR1_OFFSET, TXT_BULK |
+RXT_BULK | TXR | RXR)` write, then `XUsbPs_EpPrime(1, OUT)`. The EPFLUSH is
+gone (it was only load-bearing while the type bits stayed at their control
+default) and the init-time EP1 prime is removed; EP1 stays disabled until
+SET_CONFIGURATION, matching the vendor. The section-12 experiments had set the
+type without the toggle reset and with the flush present, which is why they
+saw either a hard NAK or no change; the host controls (section 14) then proved
+the Windows host starts at DATA0, so the device-side toggle reset is the fix.
+
+**Pools.** `LA_USB_STAGE_COUNT` 8 -> 16 (one full OUT dTD ring) and
+`LA_USB_TX_FRAME_COUNT` 8 -> 16 in `la_usb_dev.h`.
+
+**Host.** `AnalyzerClient.test_records` now drains received frames after every
+write (`_drain`, 1 ms non-blocking-safe recv) instead of sending the whole
+burst before reading. Without it the 200-record stream overflowed the device
+TX pool and dropped ACKs; the "TX stall" reported in the section-14 control
+runs was that pool overflow, not a controller fault.
+
+**Results (2026-09-19).** `python tools/run.py test-e2e -- --target
+serial://COM13 -k test_usb` passed 3/3 twice in a row: the 12-write burst, the
+12-write repeat (two consecutive bursts) and the 200-record stream, all clean
+with zero write errors, CRC/format errors, duplicates, reordering or NAKs.
+`test-native` 18/18 and `test-host` 87 passed. The alternating bulk-OUT loss is
+fixed on the product path. The raw libusb re-run was not repeated (the serial
+path is the product acceptance); the device-hub USBPcap capture remains
+blocked by the pending PnP state from section 14.

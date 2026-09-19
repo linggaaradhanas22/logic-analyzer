@@ -172,6 +172,17 @@ class AnalyzerClient:
                 continue
             self._parser.feed(data, on_frame)
 
+    def _drain(self, handler) -> None:
+        """Reads whatever is already buffered without waiting for a deadline.
+
+        The 1 ms recv keeps TCP non-blocking-safe while still returning
+        immediately on an idle serial link."""
+        while True:
+            data = self._transport.recv(4096, 0.001)
+            if not data:
+                return
+            self._parser.feed(data, handler)
+
     def ping(self, timeout_s: float = 5.0) -> dict:
         deadline = time.monotonic() + timeout_s
         result: dict = {}
@@ -286,12 +297,23 @@ class AnalyzerClient:
         ("nak", sequence, error) tuples. One host write is one transport send;
         it is not assumed to be one USB packet or one device completion. A
         write that times out (device NAKs) is recorded, not retried, so the
-        burst keeps its timing. The device-side JTAG trace records the same
-        ids."""
+        burst keeps its timing. ACKs are drained after every write so a long
+        stream does not overflow the device TX pool before the settle window
+        (2026-09-19: the 200-record stream must stay clean). The device-side
+        JTAG trace records the same ids."""
         sent: list[tuple[int, int]] = []
         acked: list = []
         write_errors: list[tuple[int, str]] = []
         deadline = time.monotonic() + settle_s
+
+        def on_frame(message_type, sequence, payload):
+            if message_type == p.ACK and len(payload) >= 2 and \
+                    payload[0] == p.TEST_RECORD:
+                acked.append(payload[1])
+            elif message_type == p.NAK and len(payload) >= 3 and \
+                    payload[0] == p.TEST_RECORD:
+                acked.append(("nak", payload[1], payload[2]))
+            return False
 
         for record_id in record_ids:
             sequence = self._next_sequence()
@@ -305,15 +327,7 @@ class AnalyzerClient:
             sent.append((record_id, sequence))
             if gap_s > 0.0:
                 time.sleep(gap_s)
-
-        def on_frame(message_type, sequence, payload):
-            if message_type == p.ACK and len(payload) >= 2 and \
-                    payload[0] == p.TEST_RECORD:
-                acked.append(payload[1])
-            elif message_type == p.NAK and len(payload) >= 3 and \
-                    payload[0] == p.TEST_RECORD:
-                acked.append(("nak", payload[1], payload[2]))
-            return False
+            self._drain(on_frame)
 
         self._pump(deadline, on_frame, deadline_ok=True)
         return {"sent": sent, "acked": acked, "write_errors": write_errors,

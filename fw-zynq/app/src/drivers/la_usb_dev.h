@@ -41,7 +41,9 @@
 #define LA_USB_NOTIFY_BUF_SIZE 16u
 #define LA_USB_DMA_POOL_BYTES (64u * 1024u)
 #define LA_USB_TX_FRAME_BYTES 1088u
-#define LA_USB_TX_FRAME_COUNT 8u
+/* 16 slots: one full OUT dTD ring worth of ACKs can be in flight while the
+ * host is still writing (2026-09-19 200-record burst). */
+#define LA_USB_TX_FRAME_COUNT 16u
 #define LA_USB_TX_WAIT_MS 500u
 #define LA_USB_GIC_ENCODED XPAR_XUSBPS_0_INTERRUPTS
 
@@ -53,7 +55,9 @@
 #define LA_USB_NOTIFY_TX_FRAME ((uint32_t)0x00000010u)
 #define LA_USB_NOTIFY_ALL ((uint32_t)0x0000001Fu)
 
-#define LA_USB_STAGE_COUNT 8u
+/* Matches the OUT dTD ring depth: a full controller burst can be staged
+ * before the task drains it (2026-09-19 200-record burst). */
+#define LA_USB_STAGE_COUNT 16u
 
 typedef struct la_usb_stage {
     uint8_t data[LA_USB_BULK_BUF_SIZE] __attribute__((aligned(64)));

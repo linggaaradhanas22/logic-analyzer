@@ -407,6 +407,34 @@ exactly as the vendor example does (EPCR type + TXR/RXR, no EPFLUSH-only
 reset) and re-test with `usb_raw_bulk.py records`; root-cause the ACK TX stall;
 optionally move the J10 hub to a filtered root-hub port for the URB capture.
 
+### USB migration execution - U03 toggle fix (2026-09-19)
+
+**The alternating bulk-OUT loss is fixed on the product path; the full U03
+detector suite passes twice.** `la_usb_reconfigure` now follows the vendor
+Chapter 9 sequence exactly (`xusbps_ch9_storage.c:389`): EpEnable EP1 OUT/IN
+and EP2 IN, one `XUsbPs_SetBits(EPCR1, TXT_BULK | RXT_BULK | TXR | RXR)` write,
+then EpPrime EP1 OUT; the EPFLUSH and the init-time EP1 prime are removed so
+EP1 stays disabled until SET_CONFIGURATION, as in the vendor example. The
+section-12 type-only experiments failed because they kept the flush and omitted
+the toggle reset; the section-14 host controls proved the Windows host starts
+at DATA0. Burst capacity was also fixed: `LA_USB_STAGE_COUNT` 8 -> 16 and
+`LA_USB_TX_FRAME_COUNT` 8 -> 16 (`la_usb_dev.h`), and
+`AnalyzerClient.test_records` now drains ACKs after every write
+(`client.py::_drain`, 1 ms non-blocking-safe recv). Without the concurrent
+drain the 200-record stream overflowed the 8-slot TX pool - the section-14
+"TX stall" was that overflow, not a controller fault.
+
+Verification: `python tools/run.py test-e2e -- --target serial://COM13
+-k test_usb` PASS 3/3 twice in a row (12-write, 12-write repeat x2, 200-record
+stream; zero write errors, CRC/format errors, duplicates, reordering or NAKs);
+`test-native` 18/18; `test-host` 87 passed; `fw-zynq -- --profile usb` PASS
+(text 209072 / data 3720 / bss 294784) and `jtag-zynq -- --profile usb` PASS
+(COM13 enumeration). No gateway-profile change. The raw libusb re-run was not
+repeated; the device-hub USBPcap capture stays blocked by the section-14
+pending PnP state. Next: decide whether U03 closes here (raw-path re-check and
+U04+ gates in `docs/usb-migration-implementation-instructions.md` remain) or
+the device-hub URB capture is worth a port move.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

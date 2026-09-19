@@ -221,6 +221,16 @@ def records_burst(dev, ep_out: int, ep_in: int, count: int, gap_ms: float,
             acked.append(("nak", payload[1], payload[2]))
         return False
 
+    def drain(timeout_ms: int) -> None:
+        while True:
+            try:
+                data = bytes(dev.read(ep_in, 4096, timeout=timeout_ms))
+            except usb.core.USBError:
+                return
+            if not data:
+                return
+            parser.feed(data, on_frame)
+
     for record_id in range(count):
         frame = p.encode(p.TEST_RECORD, sequence, p.pack_test_record(record_id))
         try:
@@ -233,6 +243,7 @@ def records_burst(dev, ep_out: int, ep_in: int, count: int, gap_ms: float,
         sequence = (sequence + 1) & 0xFF
         if gap_ms > 0:
             time.sleep(gap_ms / 1000.0)
+        drain(1)
 
     deadline = time.monotonic() + settle_ms / 1000.0
     while time.monotonic() < deadline:
