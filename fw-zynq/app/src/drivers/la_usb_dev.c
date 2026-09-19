@@ -488,11 +488,19 @@ int la_usb_enqueue(la_usb_dev_t *dev, const uint8_t *frame, size_t length)
         dev->tx_drops++;
         return -1;
     }
+    /* CmdTask (ACKs/STATUS/LOG) and TxTask (DATA/events) enqueue
+     * concurrently. Reserve the slot atomically (state 3) before copying so
+     * two producers cannot pick the same free slot - bench 2026-09-19: the
+     * race swapped two DATA_CHUNK frames and the burst host saw offsets
+     * 0, 2032, 1016, 3048. */
+    taskENTER_CRITICAL();
     for (slot = 0; slot < (int)LA_USB_TX_FRAME_COUNT; slot++) {
         if (dev->tx_slot_state[slot] == 0u) {
+            dev->tx_slot_state[slot] = 3u;
             break;
         }
     }
+    taskEXIT_CRITICAL();
     if (slot == (int)LA_USB_TX_FRAME_COUNT) {
         (void)xSemaphoreGive(dev->tx_free_sem);
         dev->tx_drops++;
@@ -500,7 +508,11 @@ int la_usb_enqueue(la_usb_dev_t *dev, const uint8_t *frame, size_t length)
     }
     memcpy(dev->tx_frames[slot], frame, length);
     dev->tx_slot_len[slot] = (uint32_t)length;
+    taskENTER_CRITICAL();
     dev->tx_slot_state[slot] = 1u;
+    dev->tx_ready[dev->tx_ready_head] = (uint8_t)slot;
+    dev->tx_ready_head = (dev->tx_ready_head + 1u) % LA_USB_TX_FRAME_COUNT;
+    taskEXIT_CRITICAL();
     if (dev->task != NULL) {
         (void)xTaskNotify(dev->task, LA_USB_NOTIFY_TX_FRAME, eSetBits);
     }
@@ -510,42 +522,60 @@ int la_usb_enqueue(la_usb_dev_t *dev, const uint8_t *frame, size_t length)
 void la_usb_tx_pump(la_usb_dev_t *dev)
 {
     int slot;
+    uint32_t tail;
 
     if (dev->tx_inflight >= 0) {
         return;
     }
-    for (slot = 0; slot < (int)LA_USB_TX_FRAME_COUNT; slot++) {
-        if (dev->tx_slot_state[slot] == 1u) {
-            break;
+    for (;;) {
+        taskENTER_CRITICAL();
+        if (dev->tx_ready_head == dev->tx_ready_tail) {
+            taskEXIT_CRITICAL();
+            return;
         }
+        tail = dev->tx_ready_tail;
+        slot = (int)dev->tx_ready[tail];
+        if (dev->tx_slot_state[slot] != 1u) {
+            dev->tx_ready_tail = (tail + 1u) % LA_USB_TX_FRAME_COUNT;
+            taskEXIT_CRITICAL();
+            continue;
+        }
+        /* Mark in-flight before the submission: a fast completion callback can
+         * otherwise observe an empty in-flight slot and never free it. */
+        dev->tx_slot_state[slot] = 2u;
+        dev->tx_inflight = slot;
+        taskEXIT_CRITICAL();
+        break;
     }
-    if (slot == (int)LA_USB_TX_FRAME_COUNT) {
-        return;
-    }
-    /* Mark in-flight before the submission: a fast completion callback can
-     * otherwise observe an empty in-flight slot and never free it. */
-    dev->tx_slot_state[slot] = 2u;
-    dev->tx_inflight = slot;
     if (XUsbPs_EpBufferSend(&dev->usb, 1u, dev->tx_frames[slot],
                             dev->tx_slot_len[slot]) != XST_SUCCESS) {
+        taskENTER_CRITICAL();
         dev->tx_slot_state[slot] = 1u;
         dev->tx_inflight = -1;
-        return; /* descriptor ring busy; retry on the next service pass */
+        taskEXIT_CRITICAL();
+        return; /* descriptor ring busy; retry in order on the next pass */
     }
     dev->tx_bytes += dev->tx_slot_len[slot];
+    taskENTER_CRITICAL();
+    dev->tx_ready_tail = (tail + 1u) % LA_USB_TX_FRAME_COUNT;
+    taskEXIT_CRITICAL();
 }
 
 void la_usb_tx_reset(la_usb_dev_t *dev)
 {
     int slot;
 
+    taskENTER_CRITICAL();
     for (slot = 0; slot < (int)LA_USB_TX_FRAME_COUNT; slot++) {
         if (dev->tx_slot_state[slot] != 0u) {
             dev->tx_slot_state[slot] = 0u;
             (void)xSemaphoreGive(dev->tx_free_sem);
         }
     }
+    dev->tx_ready_head = 0u;
+    dev->tx_ready_tail = 0u;
     dev->tx_inflight = -1;
+    taskEXIT_CRITICAL();
 }
 
 void la_usb_rx_release(la_usb_dev_t *dev,

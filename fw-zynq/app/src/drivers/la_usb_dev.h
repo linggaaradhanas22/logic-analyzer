@@ -82,9 +82,16 @@ typedef struct la_usb_dev {
     XUsbPs_SetupData setup_data;
     uint8_t tx_frames[LA_USB_TX_FRAME_COUNT][LA_USB_TX_FRAME_BYTES]
         __attribute__((aligned(64)));
-    volatile uint8_t tx_slot_state[LA_USB_TX_FRAME_COUNT]; /* 0 free, 1 ready, 2 in flight */
+    volatile uint8_t tx_slot_state[LA_USB_TX_FRAME_COUNT]; /* 0 free, 1 ready, 2 in flight, 3 reserved */
     volatile uint32_t tx_slot_len[LA_USB_TX_FRAME_COUNT];
     volatile int32_t tx_inflight;
+    /* FIFO of ready slot indices: the pump must send in enqueue order. A
+     * lowest-free-slot scan reuses a slot freed mid-burst and lets a later
+     * frame overtake an earlier one (bench 2026-09-19: DATA_CHUNK sequence
+     * 14,16,15 reached the host). */
+    volatile uint8_t tx_ready[LA_USB_TX_FRAME_COUNT];
+    volatile uint32_t tx_ready_head;
+    volatile uint32_t tx_ready_tail;
 
     volatile uint8_t setup_pending;
     volatile uint8_t session_pending;

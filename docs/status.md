@@ -435,6 +435,40 @@ pending PnP state. Next: decide whether U03 closes here (raw-path re-check and
 U04+ gates in `docs/usb-migration-implementation-instructions.md` remain) or
 the device-hub URB capture is worth a port move.
 
+### USB migration execution - U03 closed, U04 WIP (2026-09-19)
+
+**U03 closed locally; U04 burst coverage passes over USB, but the new
+transport suite is WIP (1/5).** U03 evidence is
+`build/reports/usb-u03-enumeration.md`: identity/descriptors, class and
+line-coding requests, 20/20 open/close cycles with a PING, 10/10
+`pnputil /restart-device` reset cycles with a PING, 11-byte short-packet
+bursts and a 512-byte exact-multiple transfer (`OUT_DTD len=512`,
+`RX_SB accepted=512`). Gaps: an explicit unsupported-class-request probe and
+the raw-libusb re-run.
+
+Two further USB transport bugs were found by the common suites and fixed in
+`la_usb_dev.c/h`: (1) concurrent `la_usb_enqueue` producers could reserve the
+same slot - reservation is now atomic under a critical section; (2) the pump
+sent the lowest-index ready slot, so a slot freed mid-burst let a later frame
+overtake an earlier one (device trace: DATA_CHUNK sequence 14, 16, 15) - a
+FIFO ready queue now preserves enqueue order. With the fixes,
+`tests/e2e/test_zynq_burst.py` 7 passed/1 skipped, `test_e2e_burst.py` 18/18
+and `test_p92_sizes.py` 18 passed/1 skipped over `serial://COM13`, covering
+PING/STATUS, CONFIG/ARM/ABORT, capacity NAK, short tails, multi-descriptor
+captures and raw/transition packing.
+
+U04 WIP: the new `tests/e2e/test_usb_transport.py` passes only
+`test_usb_link_cfg_rejected` (every `LINK_CFG`, including `LINK_UART`, is
+NAKed `unsupported` on the USB profile). `TRACE_CTRL START` is ACKed but the
+dump times out and leaves the device unresponsive until a JTAG reload; the
+raw-parser split/coalesced/garbage tests then fail as a cascade. On a fresh
+device an isolated garbage + bad-CRC + 2 KiB-flush + PING probe did recover
+with a PONG. Parser characteristic: a corrupted length field blinds the
+receiver for up to `LA_PROTO_MAX_PAYLOAD` (1024) bytes before the CRC check
+resynchronizes; recovery is deterministic but needs bounded flush traffic.
+No `build/reports/usb-u04-protocol.md` yet. Next: fix or bound the USB trace
+dump, re-run the transport suite on a fresh device, then continue U05.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

@@ -610,3 +610,45 @@ with zero write errors, CRC/format errors, duplicates, reordering or NAKs.
 fixed on the product path. The raw libusb re-run was not repeated (the serial
 path is the product acceptance); the device-hub USBPcap capture remains
 blocked by the pending PnP state from section 14.
+
+### 15.1 U03 closure and U04 progress (2026-09-19, later session)
+
+**U03 closed locally.** Evidence `build/reports/usb-u03-enumeration.md`:
+enumeration and identity, class/line-coding requests, 20/20 open/close cycles
+with a PING each, 10/10 host-driven reset/re-enumeration cycles
+(`pnputil /restart-device`) with a PING each, 11-byte short-packet bursts
+(detector suite), and a 512-byte exact-multiple transfer confirmed in the
+device trace (`OUT_DTD ep=1 len=512`, `RX_SB accepted=512`). Gaps: an explicit
+unsupported-class-request probe and the raw-libusb re-run after the fix.
+
+**Two more USB transport bugs found and fixed while running the common burst
+suites over USB.**
+
+1. Concurrent `la_usb_enqueue` producers (CmdTask ACKs/STATUS/LOG and TxTask
+   DATA/events) could both pick the same free slot: slot reservation is now
+   atomic (state 3 reserved) under `taskENTER_CRITICAL`.
+2. The pump sent the lowest-index ready slot, so a slot freed mid-burst let a
+   later frame overtake an earlier one (device trace showed DATA_CHUNK sequence
+   14, 16, 15 reaching the host and chunk offsets 0, 2032, 1016, 3048). A FIFO
+   ready queue (`tx_ready`/`tx_ready_head`/`tx_ready_tail`) now guarantees
+   enqueue-order transmission.
+
+**Common gates over USB (serial://COM13, `--target` only).**
+`tests/e2e/test_zynq_burst.py` 7 passed / 1 skipped (soak); the P6.2 selftest
+matrix `tests/e2e/test_e2e_burst.py` 18/18; `tests/e2e/test_p92_sizes.py`
+18 passed / 1 skipped (live). These cover PING/STATUS, CONFIG/ARM/ABORT,
+capacity NAK, short tails, multi-descriptor captures and raw/transition
+packing over the direct USB link.
+
+**U04 WIP - `tests/e2e/test_usb_transport.py` (1/5).** `test_usb_link_cfg_rejected`
+passes (the USB profile NAKs every `LINK_CFG`, including `LINK_UART`, with
+`ERROR_UNSUPPORTED`). `test_usb_trace_control` fails: `TRACE_CTRL START` is
+ACKed but the dump times out, and the device is unresponsive afterwards until
+a JTAG reload (the raw-parser tests then fail as a cascade). An isolated
+garbage + bad-CRC + 2 KiB-flush + PING probe on a fresh device did recover with
+a PONG, so the raw parser cases still need a clean-device run. Related parser
+characteristic: a corrupted length field makes the receiver wait for up to
+`LA_PROTO_MAX_PAYLOAD` (1024) bytes before the CRC check resynchronizes;
+recovery is deterministic but needs a bounded flush of traffic. Next: fix or
+bound the trace dump over USB, then re-run the transport suite on a fresh
+device and record `build/reports/usb-u04-protocol.md`.
