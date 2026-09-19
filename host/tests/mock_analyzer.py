@@ -180,9 +180,10 @@ class MockAnalyzer:
                 self.last_link_transport = p.unpack_link_cfg(payload)
                 self._send(connection, p.ACK, p.pack_ack(p.LINK_CFG, sequence))
             elif message_type == p.TRACE_CTRL:
-                self.last_trace_action = p.unpack_trace_ctrl(payload)
+                action, _start, _count = p.unpack_trace_ctrl(payload)
+                self.last_trace_action = action
                 self._send(connection, p.ACK, p.pack_ack(p.TRACE_CTRL, sequence))
-                if self.last_trace_action == p.TRACE_DUMP:
+                if action == p.TRACE_DUMP:
                     self._stream_trace_dump(connection)
             elif message_type == p.DECODER_CFG:
                 self.last_decoder = payload

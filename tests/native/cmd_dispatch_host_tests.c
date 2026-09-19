@@ -637,7 +637,7 @@ static int test_trace_ctrl(void)
     uint8_t payload[LA_PROTO_TRACE_CTRL_WIRE_SIZE];
 
     la_cmd_dispatch_init(&dispatch, TEST_FW_VERSION, TEST_PL_ID);
-    CHECK(la_proto_pack_trace_ctrl(LA_PROTO_TRACE_START, payload,
+    CHECK(la_proto_pack_trace_ctrl(LA_PROTO_TRACE_START, 0u, 0u, payload,
                                    sizeof(payload)) == LA_PROTO_TRACE_CTRL_WIRE_SIZE,
           "trace payload packs");
     CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_TRACE_CTRL, 0x21u, payload,
@@ -649,12 +649,15 @@ static int test_trace_ctrl(void)
     CHECK(la_cmd_dispatch_view(&dispatch) == LA_CMD_VIEW_IDLE,
           "TRACE_CTRL does not change the acquisition view");
 
-    payload[0] = LA_PROTO_TRACE_DUMP;
+    CHECK(la_proto_pack_trace_ctrl(LA_PROTO_TRACE_DUMP, 0x1234u, 0x40u, payload,
+                                   sizeof(payload)) == LA_PROTO_TRACE_CTRL_WIRE_SIZE,
+          "trace dump chunk packs");
     CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_TRACE_CTRL, 0x22u, payload,
                                 LA_PROTO_TRACE_CTRL_WIRE_SIZE, 0u, &result) == 0 &&
               result.outcome == LA_CMD_OUT_TRACE &&
-              result.action == LA_PROTO_TRACE_DUMP,
-          "TRACE_CTRL dump routed");
+              result.action == LA_PROTO_TRACE_DUMP &&
+              result.trace_start == 0x1234u && result.trace_count == 0x40u,
+          "TRACE_CTRL dump chunk routed");
 
     CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_TRACE_CTRL, 0x23u, payload, 3u,
                                 0u, &result) == 0 &&

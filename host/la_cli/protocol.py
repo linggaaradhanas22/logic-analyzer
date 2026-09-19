@@ -260,20 +260,27 @@ def unpack_link_cfg(payload: bytes) -> int:
     return transport
 
 
-def pack_trace_ctrl(action: int) -> bytes:
-    """TRACE_CTRL payload: action:u8 plus three reserved zero bytes (P8.3)."""
+def pack_trace_ctrl(action: int, start: int = 0, count: int = 0) -> bytes:
+    """TRACE_CTRL payload: action:u8, start:u16 LE, count:u8.
+
+    For DUMP, start is the first record index and count the requested record
+    count (0 = the firmware chunk maximum); STOP/START ignore both."""
     if action not in (TRACE_STOP, TRACE_START, TRACE_DUMP):
         raise ValueError(f"undefined trace action: {action}")
-    return struct.pack("<BBBB", action, 0, 0, 0)
+    if not 0 <= start <= 0xFFFF:
+        raise ValueError(f"trace start out of range: {start}")
+    if not 0 <= count <= 0xFF:
+        raise ValueError(f"trace count out of range: {count}")
+    return struct.pack("<BHB", action, start, count)
 
 
-def unpack_trace_ctrl(payload: bytes) -> int:
+def unpack_trace_ctrl(payload: bytes) -> tuple[int, int, int]:
     if len(payload) != TRACE_CTRL_SIZE:
         raise FrameError(f"TRACE_CTRL payload length {len(payload)}")
-    action = payload[0]
+    action, start, count = struct.unpack("<BHB", payload)
     if action not in (TRACE_STOP, TRACE_START, TRACE_DUMP):
         raise FrameError(f"undefined trace action: {action}")
-    return action
+    return action, start, count
 
 
 def pack_test_record(record_id: int) -> bytes:

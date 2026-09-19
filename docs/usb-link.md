@@ -649,6 +649,29 @@ garbage + bad-CRC + 2 KiB-flush + PING probe on a fresh device did recover with
 a PONG, so the raw parser cases still need a clean-device run. Related parser
 characteristic: a corrupted length field makes the receiver wait for up to
 `LA_PROTO_MAX_PAYLOAD` (1024) bytes before the CRC check resynchronizes;
-recovery is deterministic but needs a bounded flush of traffic. Next: fix or
-bound the trace dump over USB, then re-run the transport suite on a fresh
-device and record `build/reports/usb-u04-protocol.md`.
+recovery is deterministic but needs a bounded flush of traffic.
+
+### 15.2 U04 complete: chunked, paced trace dump (2026-09-19)
+
+The USB trace dump stalled for minutes because the CmdTask emitted thousands
+of LOG frames back-to-back, saturating the 16-slot USB TX pool; the command
+path then dropped frames until the dump finished. Two fixes:
+
+1. **Chunked TRACE_CTRL dump** (additive v1): the payload is
+   `action:u8, start:u16 LE, count:u8`; the firmware emits at most
+   `LA_TRACE_DUMP_CHUNK_MAX` (64) records per request plus
+   `END next total dropped`, and `AnalyzerClient.trace_dump` loops chunks and
+   strips intermediate END lines. The object table is emitted only for
+   `start == 0`.
+2. **Paced emission**: `cmd_trace_emit` yields one tick per line on the USB
+   profile so the TX pool keeps cycling.
+
+A full 4096-record dump now completes in ~34 s (was: timeout), and
+`tests/e2e/test_usb_transport.py` passes 5/5: LINK_CFG rejection for every
+transport, TRACE_CTRL start/stop/chunked dump, and parser split, coalesced,
+garbage and bad-CRC recovery. The USB event ring was also grown to 4096
+entries and the pump now records `TX_SUBMIT`/`EP_STATE`. Regressions clear:
+`test-native` 18/18, `test-host` 87, `test_zynq_burst` 7/1 (soak),
+P6.2 matrix 18/18, P9.2 18/1 (live). Evidence:
+`build/reports/usb-u04-protocol.md`. U05 (external loopback, live gates,
+recovery, soak) and U06 (64 MiB drain) remain.

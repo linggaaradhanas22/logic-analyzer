@@ -401,29 +401,37 @@ static int test_typed_protocol_payloads(void)
     }
 
     {
-        /* TRACE_CTRL additive extension: action plus three reserved zeros. */        static const uint8_t expected_trace[LA_PROTO_TRACE_CTRL_WIRE_SIZE] = {
-            0x03u, 0x00u, 0x00u, 0x00u};
+        /* TRACE_CTRL: action:u8, start:u16 LE, count:u8 (chunked dump). */
+        static const uint8_t expected_trace[LA_PROTO_TRACE_CTRL_WIRE_SIZE] = {
+            0x03u, 0x34u, 0x12u, 0x40u};
         uint8_t trace_action = 0u;
+        uint16_t trace_start = 0u;
+        uint8_t trace_count = 0u;
 
-        packed = la_proto_pack_trace_ctrl(LA_PROTO_TRACE_DUMP, payload,
-                                          sizeof(payload));
+        packed = la_proto_pack_trace_ctrl(LA_PROTO_TRACE_DUMP, 0x1234u, 0x40u,
+                                          payload, sizeof(payload));
         CHECK(packed == LA_PROTO_TRACE_CTRL_WIRE_SIZE, "TRACE_CTRL pack size");
         CHECK(memcmp(payload, expected_trace, sizeof(expected_trace)) == 0,
               "TRACE_CTRL byte vector");
-        CHECK(la_proto_unpack_trace_ctrl(&trace_action, payload, packed) == 0 &&
-                  trace_action == LA_PROTO_TRACE_DUMP,
+        CHECK(la_proto_unpack_trace_ctrl(&trace_action, &trace_start,
+                                         &trace_count, payload, packed) == 0 &&
+                  trace_action == LA_PROTO_TRACE_DUMP &&
+                  trace_start == 0x1234u && trace_count == 0x40u,
               "TRACE_CTRL round trip");
-        CHECK(la_proto_pack_trace_ctrl(0u, payload, sizeof(payload)) == 0u &&
-                  la_proto_pack_trace_ctrl(4u, payload, sizeof(payload)) == 0u,
+        CHECK(la_proto_pack_trace_ctrl(0u, 0u, 0u, payload, sizeof(payload)) == 0u &&
+                  la_proto_pack_trace_ctrl(4u, 0u, 0u, payload,
+                                           sizeof(payload)) == 0u,
               "TRACE_CTRL undefined actions rejected");
-        CHECK(la_proto_pack_trace_ctrl(LA_PROTO_TRACE_START, payload,
+        CHECK(la_proto_pack_trace_ctrl(LA_PROTO_TRACE_START, 0u, 0u, payload,
                                        LA_PROTO_TRACE_CTRL_WIRE_SIZE - 1u) == 0u &&
-                  la_proto_pack_trace_ctrl(LA_PROTO_TRACE_START, NULL,
+                  la_proto_pack_trace_ctrl(LA_PROTO_TRACE_START, 0u, 0u, NULL,
                                            sizeof(payload)) == 0u,
               "TRACE_CTRL pack guards");
         payload[0] = 9u;
-        CHECK(la_proto_unpack_trace_ctrl(&trace_action, payload, 4u) == -1 &&
-                  la_proto_unpack_trace_ctrl(&trace_action, payload, 3u) == -1,
+        CHECK(la_proto_unpack_trace_ctrl(&trace_action, &trace_start,
+                                         &trace_count, payload, 4u) == -1 &&
+                  la_proto_unpack_trace_ctrl(&trace_action, &trace_start,
+                                             &trace_count, payload, 3u) == -1,
               "TRACE_CTRL unpack rejects bad action and length");
     }
     return 0;

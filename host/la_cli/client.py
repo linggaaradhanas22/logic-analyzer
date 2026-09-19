@@ -280,10 +280,14 @@ class AnalyzerClient:
         self._send(p.LINK_CFG, p.pack_link_cfg(transport, spi_clock_mhz))
         self._expect_ack(p.LINK_CFG, "LINK_CFG", deadline)
 
-    def trace_control(self, action: int, timeout_s: float = 5.0) -> None:
-        """Sends TRACE_CTRL STOP/START (P8.3 additive v1 extension)."""
+    def trace_control(self, action: int, timeout_s: float = 5.0,
+                      start: int = 0, count: int = 0) -> None:
+        """Sends TRACE_CTRL STOP/START/DUMP (P8.3 additive v1 extension).
+
+        For DUMP, start/count select a record chunk; 0 means the firmware
+        maximum. STOP/START ignore both fields."""
         deadline = time.monotonic() + timeout_s
-        self._send(p.TRACE_CTRL, p.pack_trace_ctrl(action))
+        self._send(p.TRACE_CTRL, p.pack_trace_ctrl(action, start, count))
         self._expect_ack(p.TRACE_CTRL, "TRACE_CTRL", deadline)
 
     def test_records(self, record_ids, gap_s: float = 0.0,
@@ -333,35 +337,57 @@ class AnalyzerClient:
         return {"sent": sent, "acked": acked, "write_errors": write_errors,
                 "parser": self._parser_stats()}
 
-    def trace_dump(self, timeout_s: float = 30.0) -> list[str]:
-        """P8.3: stops tracing and collects the LOG dump until the END line.
+    def trace_dump(self, timeout_s: float = 30.0,
+                   chunk: int = 64) -> list[str]:
+        """P8.3: stops tracing and collects the LOG dump chunk by chunk.
 
-        Returns the raw dump lines (header, object table, records, END)."""
-        deadline = time.monotonic() + timeout_s
+        The firmware emits at most its chunk maximum records per request
+        (bounded responses keep slow transports responsive); each request gets
+        its own timeout_s window. Returns the raw dump lines (header, object
+        table, records, END)."""
         lines: list[str] = []
-        done = False
+        start = 0
+        final_end = ""
+        while True:
+            deadline = time.monotonic() + timeout_s
+            received: list[str] = []
+            done = False
 
-        def on_dump(message_type, sequence, payload):
-            nonlocal done
-            if message_type == p.ACK:
-                # The dump follows the ACK; keep collecting until END.
+            def on_dump(message_type, sequence, payload):
+                nonlocal done
+                if message_type == p.ACK:
+                    # The dump follows the ACK; keep collecting until END.
+                    return False
+                if message_type == p.LOG:
+                    line = payload.decode("utf-8", errors="replace")
+                    received.append(line)
+                    if line.startswith("END "):
+                        done = True
+                        return True
+                    return False
+                if message_type == p.NAK:
+                    _type, _seq, error = payload[0], payload[1], payload[2]
+                    raise AnalyzerError(f"TRACE_CTRL rejected: {nak_text(error)}", error)
                 return False
-            if message_type == p.LOG:
-                line = payload.decode("utf-8", errors="replace")
-                lines.append(line)
+
+            self._send(p.TRACE_CTRL,
+                       p.pack_trace_ctrl(p.TRACE_DUMP, start, chunk))
+            self._pump(deadline, on_dump)
+            if not done:
+                raise TransportError("trace dump ended without an END marker")
+            for line in received:
                 if line.startswith("END "):
-                    done = True
-                    return True
-                return False
-            if message_type == p.NAK:
-                _type, _seq, error = payload[0], payload[1], payload[2]
-                raise AnalyzerError(f"TRACE_CTRL rejected: {nak_text(error)}", error)
-            return False
-
-        self._send(p.TRACE_CTRL, p.pack_trace_ctrl(p.TRACE_DUMP))
-        self._pump(deadline, on_dump)
-        if not done:
-            raise TransportError("trace dump ended without an END marker")
+                    final_end = line
+                else:
+                    lines.append(line)
+            parts = received[-1].split()
+            next_index = int(parts[1]) if len(parts) > 1 else start
+            total = int(parts[2]) if len(parts) > 2 else next_index
+            if next_index <= start or next_index >= total:
+                break
+            start = next_index
+        if final_end:
+            lines.append(final_end)
         return lines
 
     def capture(self, config: bytes, timeout_s: float = 30.0) -> CaptureData:

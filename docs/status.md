@@ -469,6 +469,30 @@ resynchronizes; recovery is deterministic but needs bounded flush traffic.
 No `build/reports/usb-u04-protocol.md` yet. Next: fix or bound the USB trace
 dump, re-run the transport suite on a fresh device, then continue U05.
 
+### USB migration execution - U04 complete (2026-09-19)
+
+**U04 passes; the trace dump is now chunked and paced.** The USB dump used to
+stall for minutes because the CmdTask emitted thousands of LOG frames
+back-to-back and saturated the 16-slot USB TX pool. Fixes: an additive chunked
+`TRACE_CTRL` payload (`action:u8, start:u16 LE, count:u8`, firmware maximum 64
+records per request, `END next total dropped`) with a host loop in
+`AnalyzerClient.trace_dump`, and one `vTaskDelay(1)` per emitted line on the
+USB profile so the pool keeps cycling. The USB event ring grew to 4096 entries
+and the pump records `TX_SUBMIT`/`EP_STATE`. A full 4096-record dump completes
+in ~34 s.
+
+Verification (bench, `--target serial://COM13`): `test-e2e
+tests/e2e/test_usb_transport.py` 5/5 (LINK_CFG rejection for every transport,
+TRACE_CTRL start/stop/chunked dump, parser split/coalesced/garbage/bad-CRC
+recovery with a bounded flush); `test_zynq_burst` 7 passed/1 skipped (soak);
+P6.2 `test_e2e_burst` 18/18; `test_p92_sizes` 18 passed/1 skipped (live);
+`test-native` 18/18; `test-host` 87; both profile builds PASS. Evidence:
+`build/reports/usb-u04-protocol.md`. Parser note: a corrupted length field
+blinds the receiver for up to `LA_PROTO_MAX_PAYLOAD` (1024) bytes before the
+CRC check resynchronizes; recovery is deterministic with a bounded flush.
+Next: U05 (external loopback matrix, live decoders/stop, recovery cases, soak)
+then U06 (64 MiB USB drain >= 1.5 MB/s).
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

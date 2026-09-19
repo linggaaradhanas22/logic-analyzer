@@ -19,7 +19,7 @@
 
 #include <stdint.h>
 
-#define LA_USB_TRACE_CAPACITY 512u
+#define LA_USB_TRACE_CAPACITY 4096u
 #define LA_USB_TRACE_WORDS 4u
 
 typedef enum la_usb_trace_tag {

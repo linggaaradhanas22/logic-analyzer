@@ -396,6 +396,8 @@ int la_proto_unpack_patgen_cfg(uint32_t *patgen_ctrl,
 }
 
 size_t la_proto_pack_trace_ctrl(uint8_t action,
+                                uint16_t start,
+                                uint8_t count,
                                 uint8_t *output,
                                 size_t output_capacity)
 {
@@ -404,22 +406,26 @@ size_t la_proto_pack_trace_ctrl(uint8_t action,
         return 0u;
     }
     output[0] = action;
-    output[1] = 0u;
-    output[2] = 0u;
-    output[3] = 0u;
+    output[1] = (uint8_t)(start & 0xFFu);
+    output[2] = (uint8_t)(start >> 8);
+    output[3] = count;
     return LA_PROTO_TRACE_CTRL_WIRE_SIZE;
 }
 
 int la_proto_unpack_trace_ctrl(uint8_t *action,
+                               uint16_t *start,
+                               uint8_t *count,
                                const uint8_t *input,
                                size_t input_length)
 {
-    if (action == NULL || input == NULL ||
+    if (action == NULL || start == NULL || count == NULL || input == NULL ||
         input_length != LA_PROTO_TRACE_CTRL_WIRE_SIZE ||
         input[0] < LA_PROTO_TRACE_STOP || input[0] > LA_PROTO_TRACE_DUMP) {
         return -1;
     }
     *action = input[0];
+    *start = (uint16_t)((uint16_t)input[1] | ((uint16_t)input[2] << 8));
+    *count = input[3];
     return 0;
 }
 

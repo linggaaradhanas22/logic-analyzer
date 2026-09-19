@@ -26,9 +26,13 @@ MOCK_LINES = [
 def test_pack_trace_ctrl_layout() -> None:
     assert p.pack_trace_ctrl(p.TRACE_START) == bytes([2, 0, 0, 0])
     assert p.pack_trace_ctrl(p.TRACE_DUMP) == bytes([3, 0, 0, 0])
-    assert p.unpack_trace_ctrl(bytes([1, 0, 0, 0])) == p.TRACE_STOP
+    assert p.pack_trace_ctrl(p.TRACE_DUMP, 0x1234, 64) == bytes([3, 0x34, 0x12, 64])
+    assert p.unpack_trace_ctrl(bytes([1, 0, 0, 0])) == (p.TRACE_STOP, 0, 0)
+    assert p.unpack_trace_ctrl(bytes([3, 0x34, 0x12, 64])) == (p.TRACE_DUMP, 0x1234, 64)
     with pytest.raises(ValueError):
         p.pack_trace_ctrl(0)
+    with pytest.raises(ValueError):
+        p.pack_trace_ctrl(p.TRACE_DUMP, 0x10000, 0)
     with pytest.raises(p.FrameError):
         p.unpack_trace_ctrl(bytes([9, 0, 0, 0]))
     with pytest.raises(p.FrameError):

@@ -214,42 +214,55 @@ void la_trace_mark(uint8_t event, uint16_t value)
     trace_append(event, 0u, 0u, value);
 }
 
-uint32_t la_trace_dump(la_trace_emit_fn emit, void *context)
+uint32_t la_trace_dump(la_trace_emit_fn emit, void *context, uint32_t start,
+                       uint32_t count)
 {
     char line[80];
-    uint32_t count;
+    uint32_t available;
     uint32_t total;
     uint32_t index;
+    uint32_t end;
     uint32_t cpsr;
 
     if (emit == NULL) {
         return 0u;
     }
+    /* Chunk the dump so a slow transport never has to absorb thousands of
+     * LOG frames in one request (direct USB, bench 2026-09-19). */
+    if (count == 0u || count > LA_TRACE_DUMP_CHUNK_MAX) {
+        count = LA_TRACE_DUMP_CHUNK_MAX;
+    }
     /* Stop and snapshot under the lock: after this, no in-flight writer can
      * append, so the ring can be formatted outside the critical section. */
     cpsr = trace_irq_lock();
     la_trace_core_stop(&s_trace);
-    count = la_trace_core_count(&s_trace);
+    available = la_trace_core_count(&s_trace);
     total = la_trace_core_total(&s_trace);
     trace_irq_unlock(cpsr);
 
-    (void)snprintf(line, sizeof(line), "LA TRACE 1 %u",
-                   (unsigned)(COUNTS_PER_SECOND));
-    emit(context, line);
-    for (index = 0u; index < s_trace.object_count; ++index) {
-        const la_trace_object_t *object = &s_trace.objects[index];
-
-        if (object->kind == LA_TRACE_OBJECT_TASK) {
-            (void)snprintf(line, sizeof(line), "TASK %u %08X %s",
-                           (unsigned)object->number, (unsigned)object->id,
-                           object->name);
-        } else {
-            (void)snprintf(line, sizeof(line), "QUEUE %08X %s",
-                           (unsigned)object->id, object->name);
-        }
+    if (start == 0u) {
+        (void)snprintf(line, sizeof(line), "LA TRACE 1 %u",
+                       (unsigned)(COUNTS_PER_SECOND));
         emit(context, line);
+        for (index = 0u; index < s_trace.object_count; ++index) {
+            const la_trace_object_t *object = &s_trace.objects[index];
+
+            if (object->kind == LA_TRACE_OBJECT_TASK) {
+                (void)snprintf(line, sizeof(line), "TASK %u %08X %s",
+                               (unsigned)object->number, (unsigned)object->id,
+                               object->name);
+            } else {
+                (void)snprintf(line, sizeof(line), "QUEUE %08X %s",
+                               (unsigned)object->id, object->name);
+            }
+            emit(context, line);
+        }
     }
-    for (index = 0u; index < count; ++index) {
+    end = start + count;
+    if (end > available) {
+        end = available;
+    }
+    for (index = start; index < end; ++index) {
         const la_trace_record_t *record = la_trace_core_record_at(&s_trace, index);
 
         if (record == NULL) {
@@ -261,8 +274,8 @@ uint32_t la_trace_dump(la_trace_emit_fn emit, void *context)
                        (unsigned)record->value, (unsigned)record->id);
         emit(context, line);
     }
-    (void)snprintf(line, sizeof(line), "END %u %u %u", (unsigned)count,
+    (void)snprintf(line, sizeof(line), "END %u %u %u", (unsigned)end,
                    (unsigned)total, (unsigned)la_trace_core_dropped(&s_trace));
     emit(context, line);
-    return count;
+    return end;
 }

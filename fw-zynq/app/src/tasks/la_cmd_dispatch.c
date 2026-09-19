@@ -218,18 +218,22 @@ static int handle_trace(uint8_t sequence,
                         la_cmd_result_t *result)
 {
     uint8_t action;
+    uint16_t start;
+    uint8_t count;
 
     if (length != LA_PROTO_TRACE_CTRL_WIRE_SIZE) {
         result_nak(result, LA_PROTO_TRACE_CTRL, sequence, LA_PROTO_ERROR_BAD_LENGTH);
         return 0;
     }
-    if (la_proto_unpack_trace_ctrl(&action, payload, length) != 0) {
+    if (la_proto_unpack_trace_ctrl(&action, &start, &count, payload, length) != 0) {
         result_nak(result, LA_PROTO_TRACE_CTRL, sequence, LA_PROTO_ERROR_BAD_FIELD);
         return 0;
     }
     result_ack(result, LA_PROTO_TRACE_CTRL, sequence);
     result->outcome = LA_CMD_OUT_TRACE;
     result->action = action;
+    result->trace_start = start;
+    result->trace_count = count;
     return 0;
 }
 

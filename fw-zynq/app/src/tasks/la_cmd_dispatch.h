@@ -108,6 +108,8 @@ typedef struct la_cmd_result {
     uint8_t error;    /* LA_PROTO_ERROR_* code for NAK outcomes */
     uint8_t slot;     /* decoder slot for OUT_DECODER_CFG */
     uint8_t action;   /* LA_PROTO_TRACE_* action for OUT_TRACE */
+    uint16_t trace_start; /* first record index for a chunked OUT_TRACE DUMP */
+    uint8_t trace_count;  /* requested record count (0 = firmware maximum) */
     uint8_t transport; /* LA_PROTO_LINK_* transport for OUT_LINK_CFG */
     uint8_t payload[LA_PROTO_PONG_WIRE_SIZE]; /* valid for OUT_PONG */
 } la_cmd_result_t;

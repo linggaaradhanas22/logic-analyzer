@@ -16,6 +16,8 @@ typedef struct la_cmd_ctx {
     la_proto_parser_t parser;
     la_cmd_dispatch_t dispatch;
     uint8_t trace_dump_pending; /* set by OUT_TRACE(DUMP); run after the feed */
+    uint16_t trace_dump_start;  /* first record index of the pending chunk */
+    uint8_t trace_dump_count;   /* requested record count (0 = max) */
     uint8_t rx_chunk[LA_CMD_RX_CHUNK];
 } la_cmd_ctx_t;
 
@@ -103,11 +105,25 @@ static void cmd_post_log(la_cmd_ctx_t *ctx, const char *text)
 static void cmd_trace_emit(void *context, const char *line)
 {
     cmd_post_log((la_cmd_ctx_t *)context, line);
+#if LA_TRANSPORT_USB
+    /* Pace the dump to the USB TX drain: back-to-back LOG frames saturate
+     * the 16-slot pool and the transport stalls for minutes (bench
+     * 2026-09-19). One tick per line keeps the pool cycling. */
+    vTaskDelay(1);
+#endif
 }
 
 static void cmd_dump_trace(la_cmd_ctx_t *ctx)
 {
-    (void)la_trace_dump(cmd_trace_emit, ctx);
+#if LA_TRANSPORT_USB
+    la_usb_trace_event(LA_USB_TRACE_SESSION, 0xD002u, ctx->trace_dump_start,
+                       ctx->trace_dump_count);
+#endif
+    (void)la_trace_dump(cmd_trace_emit, ctx, ctx->trace_dump_start,
+                        ctx->trace_dump_count);
+#if LA_TRANSPORT_USB
+    la_usb_trace_event(LA_USB_TRACE_SESSION, 0xD003u, 0u, 0u);
+#endif
 }
 
 static void cmd_forward_ctrl(la_cmd_ctx_t *ctx, la_ctrl_kind_t kind,
@@ -238,6 +254,12 @@ static void cmd_handle_outcome(la_cmd_ctx_t *ctx, const la_cmd_result_t *result)
             break;
         case LA_PROTO_TRACE_DUMP:
         default:
+#if LA_TRANSPORT_USB
+            la_usb_trace_event(LA_USB_TRACE_SESSION, 0xD001u,
+                               result->trace_start, result->trace_count);
+#endif
+            ctx->trace_dump_start = result->trace_start;
+            ctx->trace_dump_count = result->trace_count;
             ctx->trace_dump_pending = 1u;
             break;
         }

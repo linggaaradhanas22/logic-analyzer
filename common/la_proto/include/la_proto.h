@@ -266,10 +266,18 @@ typedef enum la_proto_trace_action {
     LA_PROTO_TRACE_DUMP = 3
 } la_proto_trace_action_t;
 
+/* TRACE_CTRL payload: action:u8, start:u16 LE, count:u8. For DUMP, start is
+ * the first record index and count the requested record count (0 = the
+ * firmware chunk maximum); STOP/START ignore start/count. The chunking keeps
+ * each dump response bounded on slow transports (direct USB, 2026-09-19). */
 LA_PROTO_API size_t la_proto_pack_trace_ctrl(uint8_t action,
+                                             uint16_t start,
+                                             uint8_t count,
                                              uint8_t *output,
                                              size_t output_capacity);
 LA_PROTO_API int la_proto_unpack_trace_ctrl(uint8_t *action,
+                                            uint16_t *start,
+                                            uint8_t *count,
                                             const uint8_t *input,
                                             size_t input_length);
 

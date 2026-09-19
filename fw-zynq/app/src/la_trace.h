@@ -27,6 +27,9 @@
 
 typedef void (*la_trace_emit_fn)(void *context, const char *line);
 
+/* Maximum records emitted per dump call when count is 0 or larger. */
+#define LA_TRACE_DUMP_CHUNK_MAX 64u
+
 /* Zeroes the ring and the object table. Call before registering objects. */
 void la_trace_init(void);
 
@@ -51,8 +54,11 @@ void la_trace_stream(void *stream, unsigned int event, unsigned int bytes);
 /* Application markers. */
 void la_trace_mark(uint8_t event, uint16_t value);
 
-/* Stops tracing, then emits the whole ring through emit (never NULL) and
- * returns the number of records dumped. */
-uint32_t la_trace_dump(la_trace_emit_fn emit, void *context);
+/* Stops tracing, then emits records [start, start+count) (count 0 or >
+ * LA_TRACE_DUMP_CHUNK_MAX is clamped to the maximum) plus an
+ * `END next total dropped` line, and returns the next record index. The
+ * object table is emitted only for start == 0. */
+uint32_t la_trace_dump(la_trace_emit_fn emit, void *context, uint32_t start,
+                       uint32_t count);
 
 #endif /* LA_TRACE_H */

@@ -549,12 +549,21 @@ void la_usb_tx_pump(la_usb_dev_t *dev)
     }
     if (XUsbPs_EpBufferSend(&dev->usb, 1u, dev->tx_frames[slot],
                             dev->tx_slot_len[slot]) != XST_SUCCESS) {
+        la_usb_trace_event(LA_USB_TRACE_EP_STATE,
+                           XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
+                                          XUSBPS_EPRDY_OFFSET),
+                           XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
+                                          XUSBPS_EPCOMPL_OFFSET),
+                           XUsbPs_ReadReg(dev->usb.Config.BaseAddress,
+                                          XUSBPS_EPCR1_OFFSET));
         taskENTER_CRITICAL();
         dev->tx_slot_state[slot] = 1u;
         dev->tx_inflight = -1;
         taskEXIT_CRITICAL();
         return; /* descriptor ring busy; retry in order on the next pass */
     }
+    la_usb_trace_event(LA_USB_TRACE_TX_SUBMIT, (uint32_t)slot,
+                       dev->tx_slot_len[slot], dev->tx_bytes);
     dev->tx_bytes += dev->tx_slot_len[slot];
     taskENTER_CRITICAL();
     dev->tx_ready_tail = (tail + 1u) % LA_USB_TX_FRAME_COUNT;
