@@ -1073,6 +1073,31 @@ canvas pixels, the `page w10 | server w10` marker and **zero console errors**
 (evidence `build/reports/ui-w03-browser-smoke.txt`). The [HUMAN] click-through
 remains scheduled with W09. Next: W05/W06/W07 wiring tests, docs and bench.
 
+### Unified UI - W05/W06/W07 export, trace and offline-open coverage (2026-09-20)
+
+**W05-W07 complete locally.** Export coverage: `test_ui_export.py` (valid
+sigrok zip with metadata and `logic-1-1`, VCD probes/timescale/rate comment,
+event CSV rows sorted with the `# la-ui` metadata line, sample CSV rows and
+round trip, `.sr`/`.vcd` sample round trips, transition-capture export
+reconstruction). Trace coverage: `test_ui_trace.py` (the `timeline_model`
+lanes/spans/marker groups/ISR lane-less markers/ordering). Offline open:
+`test_ui_open.py` (exact `.sr` round trip, `.vcd` rate recovery from the
+la-cli comment and the GCD heuristic without it, the trailing-constant-run
+warning, sample CSV round trip, event CSV annotations, bad zip/header/
+timescale/empty inputs, probe-count mismatch). Page: the annotation row,
+trace lanes and the live stats path are exercised by `page_check.mjs`
+(annotationSlots, traceLanes, stats/statsPills/slotStartDisabled checks), and
+`app.js` now shares one `applySlots()` for `/api/state` and SSE stats so slot
+pills and buttons update promptly. Files: `host/la_ui/static/app.js`,
+`host/tests/{test_ui_export,test_ui_trace,test_ui_open}.py`,
+`host/tests/page_check.mjs`, this ledger.
+
+Verification: `.venv\Scripts\python.exe -m pytest host/tests -q` PASS 165
+passed (16 new); `node host/tests/page_check.mjs` PAGE CHECK OK. The VCD
+trailing-constant-run limitation is inherent to the format and is surfaced as
+a warning; `.sr` is the exact-count path. Next: W08 docs, packaging and the
+regression suite.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

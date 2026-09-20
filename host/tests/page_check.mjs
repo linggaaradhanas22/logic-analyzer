@@ -200,6 +200,7 @@ try {
         { kind: 7, name: "ADDRESS", t_sample: 300, data: "50", channel: 1, flags: 0 }],
   });
   waveform.render();
+  checks.annotationSlots = waveform.annotationSlots.length === 1;
   waveform.view = { start: 0, span: 8 };
   waveform.setDetail(0, new Uint8Array([1, 0, 1, 1, 0, 0, 1, 0]));
   waveform.pattern = "1011";
@@ -226,6 +227,19 @@ try {
   });
   trace.render();
   checks.trace = true;
+  checks.traceLanes = trace.model.lanes.length === 1;
+
+  app.updateStats({
+    state: "streaming", events: 1234, dropped: 7, ring_dropped: 3,
+    client_dropped: 4, slots: ["streaming", "idle", "unconfigured"],
+    slot_labels: ["uart:rx=0,baud=115200", "", ""],
+  });
+  checks.stats = documentStub.getElementById("sb-events").textContent ===
+    "events 1234";
+  checks.statsPills = documentStub.getElementById("live-pill-0").textContent ===
+    "streaming";
+  checks.slotStartDisabled =
+    documentStub.getElementById("live-start-0").disabled === true;
 
   checks.livePanes = app.state.live.length === 3;
   checks.channelRows = documentStub.getElementById("chan-list").children.length === 8;

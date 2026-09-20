@@ -459,7 +459,24 @@
     setDisabled("btn-trace-stop", !state.connected || state.session !== "idle");
     setDisabled("btn-trace-dump", !state.connected || state.session !== "idle");
     setDisabled("btn-patgen", !state.connected || state.session !== "idle");
+    applySlots();
+    text("sb-session", `session ${state.session}`);
+    if (state.job) {
+      text("cap-status", `${state.job.label}: ${Math.round(
+        state.job.progress * 100)}%`);
+      setDisabled("btn-abort", false);
+    } else {
+      setDisabled("btn-abort", true);
+    }
+    if (snapshot.captures && snapshot.captures.length) {
+      text("capture-sub", `${snapshot.captures.length} capture(s) in the session`);
+    }
+    if (snapshot.trace_ready && !state.traceTimeline.model) {
+      loadTraceModel();
+    }
+  }
 
+  function applySlots() {
     for (let slot = 0; slot < 3; slot++) {
       const pill = $("live-pill-" + slot);
       const slotState = state.slots[slot] || "unconfigured";
@@ -477,19 +494,6 @@
     }
     setDisabled("btn-live-stop-all", state.session === "idle");
     text("sb-session", `session ${state.session}`);
-    if (state.job) {
-      text("cap-status", `${state.job.label}: ${Math.round(
-        state.job.progress * 100)}%`);
-      setDisabled("btn-abort", false);
-    } else {
-      setDisabled("btn-abort", true);
-    }
-    if (snapshot.captures && snapshot.captures.length) {
-      text("capture-sub", `${snapshot.captures.length} capture(s) in the session`);
-    }
-    if (snapshot.trace_ready && !state.traceTimeline.model) {
-      loadTraceModel();
-    }
   }
 
   async function refreshState() {
@@ -774,7 +778,7 @@
     state.session = stats.state || state.session;
     state.slots = stats.slots || state.slots;
     state.slotLabels = stats.slot_labels || state.slotLabels;
-    text("sb-session", `session ${state.session}`);
+    applySlots();
     text("sb-events", `events ${stats.events || 0}`);
     text("sb-drops", `drops ${stats.dropped || 0} ` +
       `(ring ${stats.ring_dropped || 0}, client ${stats.client_dropped || 0})`);
@@ -941,7 +945,7 @@
     state.stateTimer = setInterval(refreshState, 1500);
   }
 
-  window.LAApp = { init, state, PAGE_VERSION };
+  window.LAApp = { init, state, PAGE_VERSION, updateStats };
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import csv
 import io
+import math
 import re
 import zipfile
 from pathlib import Path
@@ -97,6 +98,7 @@ def _open_vcd(name: str, data: bytes) -> Capture:
     changes: list[tuple[int, int, int]] = []
     current_time = 0
     saw_timescale = False
+    comment_rate = 0
     lines = text.splitlines()
     index = 0
     while index < len(lines):
@@ -114,6 +116,15 @@ def _open_vcd(name: str, data: bytes) -> Capture:
                 timescale_mag = int(match.group(1))
                 timescale_unit = match.group(2)
                 saw_timescale = True
+            continue
+        if line.startswith("$comment"):
+            parts = [line]
+            while "$end" not in parts[-1] and index < len(lines):
+                parts.append(lines[index].strip())
+                index += 1
+            match = re.search(r"(\d+)\s*Hz", " ".join(parts))
+            if match:
+                comment_rate = int(match.group(1))
             continue
         if line.startswith("$var"):
             parts = line.split()
@@ -143,30 +154,30 @@ def _open_vcd(name: str, data: bytes) -> Capture:
     if not changes:
         raise OpenError(f"{name}: VCD has no value changes")
 
-    # Our writer emits integer time units per sample; recover the sample rate
-    # from the timescale by choosing a rate whose sample period divides the
-    # unit (the writer's own inverse mapping).
     unit_hz = _UNIT_HZ[timescale_unit]
-    sample_rate = DEFAULT_SAMPLE_RATE_HZ
+    sample_rate = comment_rate
     warnings: list[str] = []
-    # Reconstruct sample indices from the VCD times. The project's writer uses
-    # a timescale whose unit is at most one sample period, so index =
-    # round(t * rate / unit_hz) with the requested rate; without metadata we
-    # take the smallest power-of-ten rate that makes the last index an
-    # integer.
-    max_time = changes[-1][0]
-    if max_time <= 0:
-        raise OpenError(f"{name}: VCD has no positive timestamps")
-    for candidate in (100_000_000, 10_000_000, 1_000_000, 100_000, 10_000,
-                      1_000, 100, 10, 1):
-        scaled = max_time * candidate / unit_hz
-        if abs(scaled - round(scaled)) < 1e-9:
-            sample_rate = candidate
-            break
+    if not sample_rate:
+        # No la-cli comment: the writer emits every change at a multiple of
+        # the sample period, so the greatest common divisor of the nonzero
+        # change times is the best available period estimate.
+        period_units = 0
+        for when, _channel, _value in changes:
+            if when > 0:
+                period_units = math.gcd(period_units, when)
+        if period_units > 0 and unit_hz % period_units == 0:
+            candidate = unit_hz // period_units
+            if 1 <= candidate <= 1_000_000_000:
+                sample_rate = candidate
+        if not sample_rate:
+            sample_rate = DEFAULT_SAMPLE_RATE_HZ
+        warnings.append(
+            f"VCD has no sample-rate comment; reconstructed at {sample_rate} Hz")
     warnings.append(
-        f"VCD has no sample rate metadata; reconstructed at {sample_rate} Hz")
+        "VCD stores value changes only; a trailing constant run cannot be "
+        "recovered (use .sr for an exact sample count)")
     samples_per_unit = sample_rate / unit_hz
-    last_index = int(round(max_time * samples_per_unit))
+    last_index = int(round(changes[-1][0] * samples_per_unit))
     samples = np.zeros(last_index + 1, dtype=np.uint8)
     for when, channel, value in changes:
         sample_index = int(round(when * samples_per_unit))
