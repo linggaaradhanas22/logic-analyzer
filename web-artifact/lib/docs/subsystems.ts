@@ -340,8 +340,8 @@ export const SUBSYSTEMS: SubsystemDoc[] = [
       },
       {
         status: 'blocked',
-        summary: 'The SPI bulk path is bench-clean for framed transfers, but the sustained host drain gate is blocked on the ESP32 Wi-Fi relay.',
-        scope: '0.28 MB/s measured against the 1.5 MB/s target; the ESP32-S3 USB-OTG transport port is the planned replacement.',
+        summary: 'The SPI bulk path is bench-clean for framed transfers; the gateway drain stays blocked while the default direct-USB drain passes the gate.',
+        scope: '0.28 MB/s measured through the Wi-Fi relay against the 1.5 MB/s target; the direct Zynq USB profile measures 1.62 MB/s and is the default product transport since the 2026-09-20 V00 pivot.',
         sources: [{ label: 'P9.1 measured results', path: 'docs/spi-link.md', kind: 'doc' }],
       },
     ],
@@ -419,8 +419,8 @@ export const SUBSYSTEMS: SubsystemDoc[] = [
     status: [
       {
         status: 'bench-verified',
-        summary: 'The gateway relays burst and live sessions, serves the web view and survives the recorded fault injections.',
-        scope: 'Burst captures over TCP, P5.5 loopback, P8.4 TCP-kill/garbage/WDT tests and the P10.1 web gate.',
+        summary: 'The gateway relays burst and live sessions, serves the web view and survives the recorded fault injections. It is the supported optional wireless profile, not the default transport.',
+        scope: 'Burst captures over TCP, P5.5 loopback, P8.4 TCP-kill/garbage/WDT tests and the P10.1 web gate; USB is the default since the V00 pivot.',
         date: '14 Sep 2026',
         sources: [{ label: 'P5/P8/P10 bench evidence', path: 'docs/status.md', kind: 'doc' }],
       },
@@ -504,9 +504,9 @@ export const SUBSYSTEMS: SubsystemDoc[] = [
     status: [
       {
         status: 'host-tested',
-        summary: 'Protocol, client, export, live and trace logic have pytest coverage against a full mock analyzer.',
-        scope: '83/83 host tests at the P7.7 close; mocks do not prove target timing or Wi-Fi behavior.',
-        date: '13 Sep 2026',
+        summary: 'Protocol, client, export, live, trace and the V02 host live-web bridge have pytest coverage against a full mock analyzer.',
+        scope: '107/107 host tests after the V02/V03 bridge (2026-09-20); mocks do not prove target timing or Wi-Fi behavior.',
+        date: '20 Sep 2026',
         sources: [{ label: 'Host test runs', path: 'docs/status.md', kind: 'doc' }],
       },
       {
@@ -533,6 +533,7 @@ export const SUBSYSTEMS: SubsystemDoc[] = [
     ],
     secondary: [
       'Live mode: client → decoded event iterator → text/CSV/web view',
+      'Host live bridge (V02-V03): SSE /events + page, bounded replay ring, single client',
       'Mock analyzer for tests; optional SUMP bridge deferred (P10.2)',
     ],
     sequence: [
@@ -556,6 +557,7 @@ export const SUBSYSTEMS: SubsystemDoc[] = [
       'The client never hard-codes a COM port; COM10+ is normalized to `\\\\.\\COM10` and candidates are listed with VID/PID.',
       'Transition records are expanded by streaming, so a large capture is not materialized in memory at once.',
       'Mock tests cover protocol and client logic; they are labeled as host tests, not target evidence.',
+      'The host live bridge reuses the gateway browser message byte-for-byte and serves SSE on 127.0.0.1:8080; it owns the analyzer target while running (docs/live-web.md).',
     ],
     components: [
       'host-cli',

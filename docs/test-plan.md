@@ -174,13 +174,14 @@ name the gates that closed them and the ones still open.
 |---|---|---|
 | P7 live decode pipeline | `test-e2e --live` (bench) | PASS 2026-09-11..13: 60 s zero-drop UART gate (repeatable), SPI/I²C 10 kHz gates, isolated-byte 428 us worst case over 20 shots, SPI overload with stage-1 loss reports, decoded-pattern stop (`EVT_TRIGGERED` match); full live suite 55 passed. Tag `v0.2-live` |
 | P8 hardening and measurement | fault-injection tests, soak, A/B throughput | PASS: TCP kill 4/4, garbage resync, WDT reset, 3 s read-stall link-overrun report, 500-capture soak, cached-pool A/B (1.29 M words/s vs 0.98 M, ~30 % fewer drops), trace dump with annotated zoom |
-| P9.1 SPI link | `test-e2e -k test_p91_spi_*` (bench) | PASS for framed bursts: 4 KB–256 KB bit-exact at 10 MHz, 20/20 at 18 MHz, 4 MiB byte-verified, 40 MHz fault injection recovers. BLOCKED: `test_p91_spi_drain_rate` (0.28 MB/s vs 1.5 MB/s target; ESP32 Wi-Fi relay) |
+| P9.1 SPI link | `test-e2e -k test_p91_spi_*` (bench) | PASS for framed bursts: 4 KB–256 KB bit-exact at 10 MHz, 20/20 at 18 MHz, 4 MiB byte-verified, 40 MHz fault injection recovers. The 1.5 MB/s drain gate passes on the default direct-USB transport (1.62 MB/s over three 64 MiB trials, U06); `test_p91_spi_drain_rate` through the gateway stays BLOCKED (0.28 MB/s, ESP32 Wi-Fi relay) |
 | P9.2 compact events | `test-native`, `test-host`, bench comparison | PASS: `EVT_CFG`/`EVT_BLOCK` round trips; measured 51.6–53.3 % wire-byte saving with identical decoded data |
 | P9.3 200 MS/s stretch | not started | Open decision; MVP remains 100 MS/s |
-| P10.1 live web view | `test-e2e -k test_p10` (bench) | PASS 2026-09-14: page served over HTTP and `/ws` carried decoded `LA-TEST\n` bytes plus stats during a live session |
+| P10.1 live web view (gateway profile) | `test-e2e -k test_p10` (bench) | PASS 2026-09-14: page served over HTTP and `/ws` carried decoded `LA-TEST\n` bytes plus stats during a live session. Retained as a gateway-profile feature after the V00 pivot |
+| V00-V04 full-USB live pivot | `test-host`, `test-e2e -k usb_live_web` (bench) | V00-V03 PASS locally (107/107 host tests); V04 PASS 8/8 over `serial://COM13` on 2026-09-20: 60 s UART zero-drop 606,411 events with an equal browser-feed count, isolated byte within 25 ms, SPI/I²C 10 kHz, stop-on, compact events, overload recovery 0.05 s, bridge reopen. [HUMAN] browser smoke and the V06 SD boot remain open |
 | P10.2 sigrok bridge | driver availability assessment | Deferred: no signed virtual-COM pair driver installed; see `docs/sigrok-bridge.md`. `.sr`/VCD export remains the required integration |
 | P10.3 docs | source review | Tracked `docs/` set plus the `web-artifact/` portal; portal validation and production build recorded in `docs/status.md` |
-| P10.4 release | `python tools/run.py boot`, release packaging | Tooling PASS on current artifacts; final BOOT.BIN + [HUMAN] SD boot + `v1.0` tag wait for the ESP32-S3 transport port |
+| P10.4 release | `python tools/run.py boot`, release packaging | Tooling PASS on current artifacts; profile-aware since V00; the [HUMAN] SD boot and the `v1.0` tag remain release gates |
 
 Human-operated programming and bench checks must remain explicitly marked
 `[HUMAN]` until observed. A green local build is not target evidence.

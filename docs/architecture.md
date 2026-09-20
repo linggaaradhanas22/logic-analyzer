@@ -114,10 +114,12 @@ signoff run replaces them.
   exercised on 2026-09-10 (LD0 heartbeat observed). `jtag-zynq` is the
   scripted load used for every later bench session.
 - The P9.1 SPI link is bench-verified for framed transfers at 5/10/18 MHz. The
-  2026-09-17 ESP32-S3 port replaces the 0.28 MB/s Wi-Fi host leg with a USB
-  CDC-ACM host transport (`la_usb`); the 64 MB drain is measured over that
-  port. The S3 USB-OTG is full-speed only (12 Mbps), so its bulk ceiling is
-  about 1.2 MB/s.
+  2026-09-20 V00 pivot makes the Zynq PS USB0 CDC-ACM profile the default
+  product transport (`la_app_usb`, 1.62 MB/s measured over 64 MiB) and moves
+  the live browser view to the PC host bridge (`host/la_live_web`, SSE); the
+  ESP32 gateway, its `la_web` page and the Wi-Fi drain (~0.28 MB/s, S3
+  USB-OTG full-speed ceiling about 1.2 MB/s) remain a supported optional
+  profile.
 - Remaining honest caveats: PS DDR behavior with the board-preset negative
   DQS-to-CLK skew values is only verified at boot/bring-up on hardware;
   `IRQ_F2P` carries three sources (analyzer, DMA, SPI) and the drivers must

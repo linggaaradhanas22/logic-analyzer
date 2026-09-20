@@ -748,6 +748,32 @@ loss. Evidence: `build/reports/usb-v04-live-web.md`,
 Still open: the [HUMAN] browser render/reload check, and the re-run against the
 V06-packaged image. Next: V05 docs and profile-aware packaging.
 
+### Full-USB live pivot - V05 docs and packaging (2026-09-20)
+
+**V05 complete; the USB-first default and the host bridge are documented and
+packaged.** `README.md`, `docs/using-the-analyzer.md` (section 7 rewritten for
+the host live view plus `--serve`/`web`/`la-web` in the command reference),
+`docs/windows-dev.md`, `docs/architecture.md`, `docs/test-plan.md` (P9.1 drain
+row, P10.1 gateway label, a new V00-V04 pivot row, P10.4 profile-aware) and
+`docs/limits.md` now state the USB default and the optional gateway profile.
+Packaging: `pyproject.toml` ships `host.la_live_web` with `static/index.html`
+as package data and both `la-cli`/`la-web` scripts; `tools/make_release.py`
+verifies the bridge files and both entry points in the wheel, requires the
+ESP32 `.bin` set only for `--profile gateway` (optional and labeled for USB),
+and `fw-zynq/scripts/make_bootbin.py` is profile-aware. The `web-artifact/`
+portal was updated only where the transport/default claim changed
+(`snapshot.ts`, `subsystems.ts`, `roadmap.ts`, `verification.ts`,
+`components/host-tools.ts`); measured evidence labels were preserved.
+
+Verification: `python -m compileall -q tools host tests fw-zynq/scripts` PASS;
+`python tools/run.py test-host` PASS 107 passed; portal `npm run validate`
+PASS (7 subsystems, 78 components, 21 registers, 24 protocol messages, 11
+roadmap phases, 55 glossary terms, 182 coverage entries); portal `npm run
+build` completed and emitted all routes (not published); `git diff --check`
+clean. Evidence: `build/reports/usb-v05-docs.md`. The full USB-profile
+`boot`/`package` run is V06. Next: V06 release (build/load/package the USB
+profile, [HUMAN] SD boot and tag authorization remain separate gates).
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

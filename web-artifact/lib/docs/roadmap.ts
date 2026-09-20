@@ -134,25 +134,25 @@ export const ROADMAP: RoadmapPhase[] = [
       'SPI bulk link, compact live events, the 200 MS/s stretch decision and Wi-Fi tuning.',
     status: 'blocked',
     statusNote:
-      'Phase in progress: P9.2 is complete and P9.1 framed bursts are bench-clean, but the 64 MB drain gate is blocked on the ESP32 Wi-Fi transport until the ESP32-S3 USB-OTG port; P9.3 and P9.4 remain open.',
+      'Phase in progress: P9.2 is complete, P9.1 framed bursts are bench-clean and the 64 MB / 1.5 MB/s drain gate passes on the default direct-USB transport (1.62 MB/s, U06 2026-09-19); the gateway drain and P9.3/P9.4 remain open as gateway-profile/optional work.',
     evidence:
-      'P9.1 framed bursts bit-exact 4 KB to 256 KB at 10 MHz, 20/20 at 18 MHz, a 4 MiB byte-verified capture and honest 40 MHz fault recovery; P9.2 compact events measured 51.6-53.3 % wire-byte saving (2026-09-12/13).',
+      'P9.1 framed bursts bit-exact 4 KB to 256 KB at 10 MHz, 20/20 at 18 MHz, a 4 MiB byte-verified capture and honest 40 MHz fault recovery; P9.2 compact events measured 51.6-53.3 % wire-byte saving (2026-09-12/13); direct USB drain 1.62 MB/s over three 64 MiB trials with byte-exact data.',
     remaining:
-      'The >=1.5 MB/s over 64 MB drain gate is blocked at 0.28 MB/s measured until the ESP32-S3 transport port; 19/20 MHz lose chunks (18 MHz ceiling); the 200 ohm SCK/MISO edge characterization is open; P9.3 200 MS/s stretch decision and P9.4 Wi-Fi tuning remain.',
+      'The gateway Wi-Fi drain is 0.28 MB/s (a supported optional profile); 19/20 MHz lose chunks (18 MHz ceiling); the 200 ohm SCK/MISO edge characterization is open; P9.3 200 MS/s stretch decision and P9.4 Wi-Fi tuning remain gateway-profile items.',
     subsystems: ['fpga-capture', 'protocol-link', 'esp32-gateway', 'host-tools'],
   },
   {
     id: 'P10',
     name: 'UX and release',
     outcome:
-      'Live web view on the ESP32, the sigrok bridge decision, consolidated documentation and release packaging (BOOT.BIN, ESP32 bin set, Python wheel).',
+      'Host live web view (with the ESP32 page retained for the gateway profile), the sigrok bridge decision, consolidated documentation and profile-aware release packaging (BOOT.BIN, optional ESP32 bin set, Python wheel).',
     status: 'blocked',
     statusNote:
-      'Phase in progress: P10.1 is bench-verified and the P10.3 portal is being written, but the release gate waits for the ESP32-S3 transport port. P10.2 is deferred by the plan condition.',
+      'Phase in progress: P10.1 is bench-verified on the gateway and the V00-V04 pivot moved the default live view to the PC host bridge (SSE); P10.2 is deferred by the plan condition and the release gate still waits on the [HUMAN] SD boot and tag authorization.',
     evidence:
-      'P10.1 page and /ws WebSocket carried the decoded LA-TEST bytes plus stats over the phone hotspot (2026-09-14) with test-esp32-mocks 4/4; boot packaged a verified BOOT.BIN from the current artifacts (2026-09-06).',
+      'P10.1 page and /ws WebSocket carried the decoded LA-TEST bytes plus stats over the phone hotspot (2026-09-14) with test-esp32-mocks 4/4; the host bridge passed the V04 USB gates 8/8 on 2026-09-20 (60 s zero-drop 606,411 events, SPI/I2C, stop-on, compact, overload recovery 0.05 s).',
     remaining:
-      'P10.2 sigrok/SUMP bridge deferred (no signed virtual-COM pair driver; docs/sigrok-bridge.md); P10.3 portal validation and production build; P10.4 final BOOT.BIN, [HUMAN] SD boot and v1.0 tag wait for the ESP32-S3 transport port.',
+      'P10.2 sigrok/SUMP bridge deferred (no signed virtual-COM pair driver; docs/sigrok-bridge.md); P10.4 profile-aware boot/package pass and the [HUMAN] SD boot + v1.0 tag authorization remain.',
     subsystems: ['esp32-gateway', 'host-tools', 'zynq-rtos'],
   },
 ];

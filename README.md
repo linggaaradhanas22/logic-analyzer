@@ -22,7 +22,7 @@ measured evidence, blockers and next actions are in `docs/status.md`.
 | ESP32 gateway (UART + SPI bulk link, TCP relay, web live view) | Optional supported profile (`--profile gateway`); bench-verified; Wi-Fi drain is its open performance limit |
 | Host `la-cli` (capture, `.sr`/VCD/PNG export, live decode, trace) | Host-tested; burst and live used on bench |
 | Direct Zynq USB transport (CDC-ACM, 1.62 MB/s measured) | Default product transport since the 2026-09-20 V00 pivot |
-| Live web view (host bridge, V01-V03; ESP32 `la_web` for the gateway profile) | Host bridge in progress; ESP32 view bench-verified (P10.1) |
+| Live web view (host bridge, V02-V04; ESP32 `la_web` for the gateway profile) | Host bridge bench-verified over USB 8/8 (V04); [HUMAN] browser smoke open; ESP32 view bench-verified (P10.1) |
 | Release packaging (profile-aware BOOT.BIN, optional ESP32 bin set, Python wheel) | Tooling present; the [HUMAN] SD boot and tag are release gates |
 
 ## Specifications
@@ -95,9 +95,12 @@ the portal at `/using`. Typical first commands:
 .venv\Scripts\la-cli.exe ping -t serial://COM13
 .venv\Scripts\la-cli.exe capture -t serial://COM13 --rate 10M --words 64k --out capture.sr
 .venv\Scripts\la-cli.exe live -t serial://COM13 --decoder uart:rx=0,baud=115200
+.venv\Scripts\la-web.exe -t serial://COM13 --decoder uart:rx=0,baud=115200
 ```
 
-The gateway profile uses `tcp://la-esp32.local:5555` with the same commands.
+`la-web` (or `la-cli live --serve`) serves the host browser view on
+`http://127.0.0.1:8080/`. The gateway profile uses
+`tcp://la-esp32.local:5555` with the same commands.
 
 ## Known limits
 

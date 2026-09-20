@@ -38,17 +38,17 @@ export const TEST_LAYERS: TestLayerDoc[] = [
   },
   {
     layer: 'Bench end-to-end',
-    tool: 'Windows pytest over the real Zynq-ESP32-host path',
+    tool: 'Windows pytest over the real Zynq host path (direct USB or the ESP32 gateway)',
     target: 'test-e2e, hil',
     boundary:
       'Covers the recorded wiring and rates. Unrecorded rates, weak Wi-Fi and missing jumpers remain unverified rather than passing.',
   },
   {
     layer: 'Release packaging',
-    tool: 'Register generation, native precheck, bootgen BOOT.BIN and bin/wheel staging',
+    tool: 'Register generation, native precheck, profile-aware bootgen BOOT.BIN and optional bin/wheel staging',
     target: 'release, boot',
     boundary:
-      'Packaging and precheck only. The final BOOT.BIN, the [HUMAN] SD boot and the v1.0 tag wait for the ESP32-S3 transport port.',
+      'Packaging and precheck only. The [HUMAN] SD boot and the v1.0 tag remain separate gates.',
   },
 ];
 
@@ -123,22 +123,22 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
   {
     target: 'fw-zynq',
     validates:
-      'Runs the Vitis Python platform/app build from the XSA and emits la_app.elf with the pinned linker script and FreeRTOS policy.',
+      'Runs the Vitis Python platform/app build from the XSA and emits the selected profile ELF (la_app_usb by default; la_app for --profile gateway) with the pinned linker script and FreeRTOS policy.',
     requires: 'AMD Vitis 2026.1 (licensed tool) and an XSA produced by the bit target.',
     report: 'build/reports/fw-zynq.json (ignored local)',
     evidence:
-      'PASS 2026-09-13 (la_app.elf text 186712 / data 3688 / bss 241840 on the P7.7 build); the ELF is loaded and running on the bench.',
+      'PASS 2026-09-19 for both profiles (USB la_app_usb text 209072 / data 3720 / bss 294784; gateway la_app text 191144 / data 3688 / bss 243936); USB is the default profile since the 2026-09-20 V00 pivot.',
     status: 'bench-verified',
   },
   {
     target: 'jtag-zynq',
     validates:
-      'Programs the PL, runs the FSBL to handoff, downloads la_app.elf and starts CPU0 through XSDB over JTAG.',
+      'Programs the PL, runs the FSBL to handoff, downloads the selected profile ELF (la_app_usb by default; la_app with --profile gateway) and starts CPU0 through XSDB over JTAG.',
     requires:
       'AMD Vitis XSDB, a Zybo Z7-10 on JTAG with its FTDI attached, and the bit/ELF artifacts; [HUMAN] bench access.',
     report: 'build/reports/jtag-zynq.json (ignored local)',
     evidence:
-      'PASS 2026-09-13: loaded the P7.7 ELF (fw 0x00090000) over the P9.1 bitstream; the decoded-pattern stop gate then passed.',
+      'PASS 2026-09-13 (gateway profile, fw 0x00090000) and repeated USB-profile loads through the U03-U05 sessions; the default profile flipped to USB in V00.',
     status: 'bench-verified',
   },
   {
@@ -155,21 +155,21 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
   {
     target: 'boot',
     validates:
-      'Packages fsbl.elf, la_fw.elf and logic_analyzer.bit into BOOT.BIN with bootgen and verifies the sync header.',
+      'Packages fsbl.elf, the selected profile application (la_app_usb by default; la_app with --profile gateway) and logic_analyzer.bit into BOOT.BIN with bootgen and verifies the sync header.',
     requires: 'Python plus Bootgen from Vitis 2026.1; the ELF and bit artifacts from fw-zynq and bit.',
     report: 'build/reports/boot.json; BOOT.BIN under build/release (ignored local)',
     evidence:
-      'PASS 2026-09-14: BOOT.BIN 2,389,904 bytes rebuilt from the current FSBL, P9.1 bitstream and la_app.elf (1,039,624 bytes). Tooling evidence only; the [HUMAN] SD boot is not performed.',
+      'PASS 2026-09-14 with the gateway profile (BOOT.BIN 2,389,904 bytes) and profile-aware since the 2026-09-20 V00 pivot; tooling evidence only, the [HUMAN] SD boot is not performed.',
     status: 'host-tested',
   },
   {
     target: 'package',
     validates:
-      'Stages the ESP32 flash set (bootloader.bin, partition-table.bin, la_gateway.bin) and builds the host Python wheel; verifies the wheel contents and writes release-manifest.json with sizes and SHA-256 hashes.',
-    requires: 'Python venv plus the fw-esp32 build and BOOT.BIN artifacts; no hardware.',
+      'Builds the host Python wheel (including the V02 live-web bridge) and, for the selected profile, stages the optional ESP32 flash set (bootloader.bin, partition-table.bin, la_gateway.bin); verifies the wheel contents and writes release-manifest.json with sizes and SHA-256 hashes.',
+    requires: 'Python venv plus the BOOT.BIN artifact; the ESP32 build is required only for --profile gateway.',
     report: 'build/reports/package.json; artifacts and release-manifest.json under build/release (ignored local)',
     evidence:
-      'PASS 2026-09-14: bootloader 26,304 B, partition table 3,072 B, gateway 910,032 B, la_host-0.0.0 wheel 57,811 B, manifest written. The v1.0 tag still waits on the ESP32-S3 transport port.',
+      'PASS 2026-09-14 for the gateway profile (bootloader 26,304 B, partition table 3,072 B, gateway 910,032 B, wheel 57,811 B); profile-aware since V00.',
     status: 'host-tested',
   },
   {
@@ -195,22 +195,22 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
   {
     target: 'test-host',
     validates:
-      'Runs the host pytest suite: protocol vectors and parser resync, client/mock flows, export writers, live client and CLI, trace rendering and the Wi-Fi helper.',
+      'Runs the host pytest suite: protocol vectors and parser resync, client/mock flows, export writers, live client and CLI, the V02 host live-web bridge (formatting parity, ring/drop policy, SSE server) and the Wi-Fi helper.',
     requires:
       'Project Python environment with pyserial, numpy, pyvcd, click, pyyaml, pytest and matplotlib; no hardware.',
     report: 'build/reports/test-host.json (ignored local)',
-    evidence: 'PASS 83/83 on 2026-09-13 with the P7.7 stop-on and CLI cases.',
+    evidence: 'PASS 107/107 on 2026-09-20 with the V02/V03 live-web bridge cases.',
     status: 'host-tested',
   },
   {
     target: 'test-e2e',
     validates:
-      'Runs the bench pytest suites against a live analyzer link: burst matrices, live decode gates, fault injection, the P9.1 SPI gates and the P10.1 web gate.',
+      'Runs the bench pytest suites against a live analyzer link: burst matrices, live decode gates, fault injection, the P9.1 SPI gates, the P10.1 gateway web gate and the V04 USB live-web bridge gates.',
     requires:
-      '[HUMAN] bench: powered Zybo with loaded firmware, ESP32 gateway on the network and the required jumpers; LA_E2E_TARGET or --target.',
+      '[HUMAN] bench: powered Zybo with loaded firmware, the required jumpers and (for the gateway gates) the ESP32 gateway on the network; LA_E2E_TARGET or --target.',
     report: 'build/reports/test-e2e.json (ignored local)',
     evidence:
-      'PASS 55 passed + 3 skipped on the P7.7 live suite (2026-09-13) and 2/2 for the P10.1 web gate (2026-09-14); without a target the runner reports BLOCKED.',
+      'PASS 55 passed + 3 skipped on the P7.7 live suite (2026-09-13), 2/2 for the P10.1 web gate (2026-09-14) and 8/8 for the V04 bridge gates over serial://COM13 (2026-09-20); without a target the runner reports BLOCKED.',
     status: 'bench-verified',
   },
   {

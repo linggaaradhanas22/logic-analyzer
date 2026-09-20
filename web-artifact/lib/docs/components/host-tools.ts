@@ -25,7 +25,7 @@ export const hostToolsComponents: ComponentDoc[] = [
       'Validate numeric options (_parse_size, _sample_div, channel range) and map a rate to SAMPLE_DIV = round(100 MHz / rate) - 1.',
       'Build the 37-byte CONFIG payload for capture, or the STREAM CONFIG plus DECODER_CFG for live, and hand it to the client.',
       'For capture, collect the burst, print the word/sample count and export through capture-export; warn if the parser saw CRC or format errors.',
-      'For live, print text or CSV rows and overrun reports; --patgen writes the pattern-generator control first and --stop-on requests the P7.7 match stop.',
+      'For live, print text or CSV rows and overrun reports; --patgen writes the pattern-generator control first and --stop-on requests the P7.7 match stop; --serve (or the la-web entry point) starts the host live web bridge instead.',
       'Close the transport in a finally block so a failure cannot leave a socket or COM port open.',
     ],
     state: [
@@ -36,7 +36,8 @@ export const hostToolsComponents: ComponentDoc[] = [
       'ports: no target; lists USB-UART (CP210x/CH340/FTDI) candidates.',
       'ping, status, abort: --target/-t required, --timeout default 5.0 s.',
       'capture: --target required; --rate default 10M; --words default 64k; --mode raw|txn default raw; --pre default 0; --trig-rise/--trig-fall channel 0..7; --out required; --timeout 30.0 s.',
-      'live: --target required; --decoder default uart:rx=0,baud=115200; --rate default 100M; --patgen off|counter|walking|prbs|uart|spi|i2c; --count optional; --compact; --stop-on hex; --csv; --timeout optional.',
+      'live: --target required; --decoder default uart:rx=0,baud=115200; --rate default 100M; --patgen off|counter|walking|prbs|uart|spi|i2c; --count optional; --compact; --stop-on hex; --csv; --serve [--bind HOST] [--port N] for the host live web bridge; --timeout optional.',
+      'web (and the la-web console script): the standalone host live web bridge with the same live options plus --bind/--port.',
       'trace: --target required; --start, --stop or --dump (default); --out; --png; --title; --timeout 30.0 s.',
       'link: --target required; --spi or --uart; --clock MHz requires --spi.',
       'Sizes accept SI suffixes (4096, 64k, 1M); the sample rate must fit within 1 Hz .. 100 MHz.',
@@ -55,7 +56,7 @@ export const hostToolsComponents: ComponentDoc[] = [
       {
         status: 'host-tested',
         summary: 'The CLI scenarios pass against the mock analyzer: ports, ping, status, capture raw/txn, NAK reporting, bad rate/channel, unknown target, abort, live text/CSV/compact/stop-on and trace commands.',
-        scope: 'test_cli.py and the CLI cases in test_live.py and test_trace.py; part of the 83/83 host suite at the P7.7 close. Mocks do not prove target timing.',
+        scope: 'test_cli.py and the CLI cases in test_live.py and test_trace.py; part of the 107/107 host suite after the V02/V03 live-web bridge. Mocks do not prove target timing.',
         date: '13 Sep 2026',
         sources: [
           { label: 'CLI tests', path: 'host/tests/test_cli.py', kind: 'test' },
@@ -132,7 +133,7 @@ export const hostToolsComponents: ComponentDoc[] = [
       {
         status: 'host-tested',
         summary: 'open_uri error cases, the mock TCP flows, timeout/EOF handling and the kill hook all pass in the host suite.',
-        scope: 'test_client_mock.py and test_live.py; part of the 83/83 host suite at the P7.7 close.',
+        scope: 'test_client_mock.py and test_live.py; part of the 107/107 host suite after the V02/V03 live-web bridge.',
         date: '13 Sep 2026',
         sources: [
           { label: 'Client/mock tests', path: 'host/tests/test_client_mock.py', kind: 'test' },
@@ -214,7 +215,7 @@ export const hostToolsComponents: ComponentDoc[] = [
       {
         status: 'host-tested',
         summary: 'test_protocol.py covers CRC reference vectors, encode layout, parser round trip/resync/oversized length, CONFIG/STATUS/PATGEN/EVT_CFG/LINK_CFG layouts, EVT_BLOCK round trip and DATA_BEGIN/END; test_live.py adds the per-decoder pack layouts.',
-        scope: 'Part of the 83/83 host suite at the P7.7 close. This proves the Python mirror, not the C ABI, which has its own native test.',
+        scope: 'Part of the 107/107 host suite after the V02/V03 live-web bridge. This proves the Python mirror, not the C ABI, which has its own native test.',
         date: '13 Sep 2026',
         sources: [
           { label: 'Protocol tests', path: 'host/tests/test_protocol.py', kind: 'test' },
@@ -390,10 +391,10 @@ export const hostToolsComponents: ComponentDoc[] = [
     name: 'Live event client',
     codeName: 'AnalyzerClient.live',
     subsystem: 'host-tools',
-    summary: 'The live-session driver: EVT_CFG/DECODER_CFG/LIVE_START setup, event collection with count/deadline/overrun/stop-on stops, post-stop drain and text/CSV rendering.',
+    summary: 'The live-session driver: EVT_CFG/DECODER_CFG/LIVE_START setup, event collection with count/deadline/overrun/stop-on stops, post-stop drain, the V02 on_event frame sink and text/CSV rendering.',
     why: 'Live decode is a stream, not a transfer: the client must bound the session, keep the count exact, surface loss instead of hiding it and always stop the firmware cleanly.',
     upstream: ['analyzer-client', 'decoder-config-payload', 'config-payload', 'status-and-events'],
-    downstream: ['host-cli (text and CSV)', 'esp32-live-view (parallel browser display)'],
+    downstream: ['host-cli (text and CSV)', 'host live-web bridge (SSE browser feed)', 'esp32-live-view (parallel browser display for the gateway profile)'],
     inputs: [
       { name: 'STREAM CONFIG', direction: 'input', form: '37 bytes', description: 'Required by the P7 firmware: STREAM control bit, transition encoding and nonzero live_flush_cycles.' },
       { name: 'DECODER_CFG', direction: 'input', form: '20 bytes', description: 'Slot, type, stop_on_len plus pattern, and the type-specific channel/baud fields.' },
@@ -403,12 +404,13 @@ export const hostToolsComponents: ComponentDoc[] = [
       { name: 'Decoded event list', direction: 'output', form: 'dicts', description: 'slot, kind, t_sample, data and arrival; overrun records carry dropped and stage.' },
       { name: 'live_stats', direction: 'output', form: 'counters', description: 'events, frames, wire_bytes and overruns.' },
       { name: 'live_match_index', direction: 'output', form: 'integer or null', description: 'The EVT_TRIGGERED sample index when a decoded stop pattern matched.' },
+      { name: 'on_event frames', direction: 'output', form: 'callback', description: 'V02 sink: each decoded event frame as dict records, including the LIVE_STOP drain; the bridge formats and publishes it.' },
     ],
     steps: [
       'Send the optional STREAM CONFIG and wait for its ACK.',
       'Always send EVT_CFG for the requested format; a pre-P9.2 peer NAK unsupported is tolerated only for the default records format.',
       'Send DECODER_CFG and then LIVE_START; the on_started callback fires at the LIVE_START ACK.',
-      'Collect EVT_DECODED or EVT_BLOCK batches, decode each record and stamp an arrival time.',
+      'Collect EVT_DECODED or EVT_BLOCK batches, decode each record and stamp an arrival time; the optional on_event sink receives the frame before the count trim.',
       'Stop on count, deadline, EVT_OVERRUN (the default) or an EVT_TRIGGERED match when stop_on_match is set.',
       'Send LIVE_STOP and keep draining for up to 5 s so final batches and overrun reports are not lost; trim any count overshoot.',
     ],
@@ -420,6 +422,7 @@ export const hostToolsComponents: ComponentDoc[] = [
       'event_format 0 keeps v1 EVT_DECODED records, 1 requests compact EVT_BLOCK (P9.2).',
       'read_stall_s is the P8.4 fault-injection hook; on_started supports the P7.6 isolated-byte measurement.',
       'The CLI supplies rate 100M, the patgen mode mapping and live_flush_cycles 200000 (2 ms at 100 MHz).',
+      'The host live bridge attaches through on_event and applies the --count limit exactly, then serves the la_web_core-compatible JSON over SSE (docs/live-web.md).',
       'The firmware requires transition encoding when a decoder slot is enabled; LIVE_START is NAKed otherwise.',
     ],
     failures: [
@@ -506,7 +509,7 @@ export const hostToolsComponents: ComponentDoc[] = [
       {
         status: 'host-tested',
         summary: 'Every socket-backed case in test_client_mock.py, test_cli.py, test_live.py and test_trace.py runs against this peer; test_export.py exercises the writers directly.',
-        scope: 'Part of the 83/83 host suite at the P7.7 close. It proves host-side behavior; it is not target or bench evidence.',
+        scope: 'Part of the 107/107 host suite after the V02/V03 live-web bridge. It proves host-side behavior; it is not target or bench evidence.',
         date: '13 Sep 2026',
         sources: [
           { label: 'Mock analyzer', path: 'host/tests/mock_analyzer.py', kind: 'test' },

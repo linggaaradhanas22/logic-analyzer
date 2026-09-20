@@ -61,16 +61,27 @@ def verify_wheel(wheel: Path) -> list[str]:
         return [f"wheel missing: {wheel}"]
     with zipfile.ZipFile(wheel) as archive:
         names = archive.namelist()
+        entry_point_names = [
+            name for name in names if name.endswith(".dist-info/entry_points.txt")
+        ]
+        entry_points = (
+            archive.read(entry_point_names[0]).decode("utf-8", errors="replace")
+            if entry_point_names
+            else ""
+        )
     required = [
         "host/la_cli/__init__.py",
+        "host/la_live_web/__init__.py",
+        "host/la_live_web/static/index.html",
         "host/la_sigrok_bridge/__init__.py",
         "tools/run.py",
     ]
     for entry in required:
         if not any(name == entry for name in names):
             problems.append(f"wheel missing {entry}")
-    if not any(name.endswith(".dist-info/entry_points.txt") for name in names):
-        problems.append("wheel missing the la-cli console-script entry point")
+    for script in ("la-cli", "la-web"):
+        if script not in entry_points:
+            problems.append(f"wheel missing the {script} console-script entry point")
     return problems
 
 

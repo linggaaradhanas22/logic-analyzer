@@ -1,12 +1,12 @@
 import type { Snapshot } from './types';
 
 export const SNAPSHOT: Snapshot = {
-  reviewedOn: '14 Sep 2026',
-  benchOn: '14 Sep 2026',
-  sourceSha: '10660e9',
+  reviewedOn: '20 Sep 2026',
+  benchOn: '20 Sep 2026',
+  sourceSha: 'e829ead',
   repository: 'https://github.com/linggaaradhanas22/logic-analyzer',
-  sourceBase: 'https://github.com/linggaaradhanas22/logic-analyzer/blob/10660e9',
-  sourceTree: 'https://github.com/linggaaradhanas22/logic-analyzer/tree/10660e9',
+  sourceBase: 'https://github.com/linggaaradhanas22/logic-analyzer/blob/e829ead',
+  sourceTree: 'https://github.com/linggaaradhanas22/logic-analyzer/tree/e829ead',
 };
 
 export function sourceUrl(path: string): string {

@@ -104,9 +104,12 @@ python tools/run.py hil -- --port COM12
 For the normal Zybo development loop, set JP5 to JTAG and power-cycle once
 after moving the jumper. `jtag-zynq` uses the board's PROG/UART USB cable to
 reset the PS through JTAG SRST, program `logic_analyzer.bit`, run the generated
-FSBL through its JTAG handoff, download `la_app.elf` and start Cortex-A9 #0.
-UART1 console output remains available on the FTDI COM port; the microSD card
-is only required for the final release boot gate.
+FSBL through its JTAG handoff, download the application ELF and start
+Cortex-A9 #0. Since the V00 pivot (2026-09-20) the default profile is the
+direct-USB application `la_app_usb`; pass `--profile gateway` to build/load
+`la_app` for the ESP32 gateway. UART1 console output remains available on the
+FTDI COM port; the microSD card is only required for the final release boot
+gate.
 
 `bit`, `fw-zynq`, `jtag-zynq`, `fw-esp32`, `program`, `flash-esp` and `hil` stop with an
 explicit prerequisite message when the required installation, XSA, board or
@@ -180,14 +183,21 @@ once and retry (the known stale-client state); if it still fails, check the
 monitor log and `ping la-esp32.local`. The burst E2E gate then runs as
 `python tools\run.py test-e2e -- --target tcp://la-esp32.local:5555`.
 
-### Live web view (P10.1)
+### Live web view
 
-The gateway also serves a browser UI on port 80. Open
+Since the V00 pivot the default live view is hosted by the PC bridge: start
+`la-cli live -t serial://COMx --decoder uart:rx=0,baud=115200 --serve` (or
+`la-web`) and open `http://127.0.0.1:8080/`. The bridge consumes the same live
+events, keeps a bounded replay ring and serves SSE; see `docs/live-web.md` and
+`docs/using-the-analyzer.md` section 7. The [HUMAN] browser smoke is opening
+the page during a patgen session and reloading it.
+
+The gateway profile also keeps its ESP32-hosted page (P10.1). Open
 `http://la-esp32.local/` (or the IP from the boot log) while a live session
-runs (`la-cli live --decoder uart:rx=0,baud=115200`); decoded bytes appear in
-per-decoder tabs with a stats bar. The page is embedded in the firmware, so no
-external assets or internet access are needed. Bench gate:
-`python tools\run.py test-e2e -- --target tcp://la-esp32.local:5555 --live -k test_p10`.
+runs (`la-cli live -t tcp://la-esp32.local:5555 --decoder uart:rx=0,baud=115200`);
+decoded bytes appear in per-decoder tabs with a stats bar. The page is embedded
+in the firmware, so no external assets or internet access are needed. Bench
+gate: `python tools\run.py test-e2e -- --target tcp://la-esp32.local:5555 --live -k test_p10`.
 
 ## Troubleshooting
 
