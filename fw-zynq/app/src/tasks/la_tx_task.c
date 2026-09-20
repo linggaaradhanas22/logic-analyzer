@@ -14,6 +14,11 @@
  * received) is abandoned so a vanished host cannot wedge AcqTask waiting for
  * the capture buffer forever (observed when the ESP32 relay stalled). */
 #define LA_TX_ACK_TIMEOUT_MS 2000u
+/* Best-effort live event frames: a short USB slot wait and a bounded drain so
+ * a sustained decoder flood cannot block the TxTask for hundreds of
+ * milliseconds per event and starve the command path (bench 2026-09-19). */
+#define LA_TX_EVENT_WAIT_MS 10u
+#define LA_TX_EVENT_DRAIN_MAX 4u
 
 typedef struct la_tx_slot_map {
     uint8_t sequence;
@@ -101,10 +106,21 @@ static int tx_write(la_tx_ctx_t *ctx, uint8_t type, uint8_t sequence,
     }
 #if LA_TRANSPORT_USB
     /* Direct-USB profile: every frame class goes through the USB frame pool
-     * (UsbTask submits it); the gateway UART/SPI routing below is unused. */
-    if (la_usb_enqueue(&ctx->app->usb, wire, encoded) == 0) {
-        la_trace_mark(LA_TRACE_EVENT_MARK_TX_FRAME, type);
-        return 0;
+     * (UsbTask submits it); the gateway UART/SPI routing below is unused.
+     * Live event frames are best-effort: they use a short slot wait so a full
+     * pool drops them instead of blocking the TxTask (and the command path)
+     * for the 500 ms control-frame bound. */
+    {
+        uint32_t wait_ms = LA_USB_TX_WAIT_MS;
+
+        if (type == LA_PROTO_EVT_DECODED || type == LA_PROTO_EVT_BLOCK ||
+            type == LA_PROTO_EVT_OVERRUN) {
+            wait_ms = LA_TX_EVENT_WAIT_MS;
+        }
+        if (la_usb_enqueue_wait(&ctx->app->usb, wire, encoded, wait_ms) == 0) {
+            la_trace_mark(LA_TRACE_EVENT_MARK_TX_FRAME, type);
+            return 0;
+        }
     }
     ctx->app->tx_drops++;
     return -1;
@@ -379,12 +395,34 @@ static void tx_track_latency(la_tx_ctx_t *ctx, const la_event_batch_t *block)
 static void tx_drain_events(la_tx_ctx_t *ctx)
 {
     la_event_batch_t *block;
+#if LA_TRANSPORT_USB
+    uint32_t drained = 0u;
+#endif
 
     /* Report drops before draining the backlog: under overload the ev_q is
      * never empty, so a report placed after the drain would only be sent once
      * the stream ends - too late for the host to see it live. */
     tx_report_decoder_overruns(ctx);
     while (xQueueReceive(ctx->app->ev_q, &block, 0) == pdTRUE) {
+#if LA_TRANSPORT_USB
+        /* Bound the drain by the USB pool and by a fixed block count: under
+         * overload the producers keep the ev_q non-empty, so an unbounded
+         * drain would starve the control path (jobs, ACKs, STATUS). The pool
+         * is the real flow control - the UART stream buffer is unused here
+         * and its check let tx_write block 500 ms per event (bench
+         * 2026-09-19). */
+        if (la_usb_tx_space(&ctx->app->usb) == 0u ||
+            drained >= LA_TX_EVENT_DRAIN_MAX) {
+            if (xQueueSendToFront(ctx->app->ev_q, &block, 0) != pdTRUE) {
+                ctx->app->tx_drops++;
+                if (xQueueSend(ctx->app->block_q, &block, 0) != pdTRUE) {
+                    ctx->app->tx_drops++;
+                }
+            }
+            return;
+        }
+        drained++;
+#else
         if (block != NULL && block->length != 0u) {
             size_t needed = (size_t)block->length + LA_PROTO_FRAME_OVERHEAD;
 
@@ -401,6 +439,9 @@ static void tx_drain_events(la_tx_ctx_t *ctx)
                 }
                 return;
             }
+        }
+#endif
+        if (block != NULL && block->length != 0u) {
             tx_track_latency(ctx, block);
             (void)tx_write(ctx, block->type, la_app_next_sequence(ctx->app),
                            block->data, block->length);

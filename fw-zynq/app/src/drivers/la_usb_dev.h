@@ -127,6 +127,18 @@ int la_usb_reconfigure(la_usb_dev_t *dev);
  * notifies UsbTask. Bounded wait for a free slot; returns 0 or -1. */
 int la_usb_enqueue(la_usb_dev_t *dev, const uint8_t *frame, size_t length);
 
+/* Enqueue with an explicit slot-wait bound. Best-effort event frames use a
+ * short wait so a full pool cannot block the TxTask for hundreds of
+ * milliseconds per event and starve the command path (bench 2026-09-19:
+ * the sustained live flood stalled the device). */
+int la_usb_enqueue_wait(la_usb_dev_t *dev, const uint8_t *frame, size_t length,
+                        uint32_t wait_ms);
+
+/* Free TX slot count (semaphore count). The event drain uses it as the flow
+ * control instead of the UART stream buffer, which the USB profile never
+ * fills. */
+uint32_t la_usb_tx_space(const la_usb_dev_t *dev);
+
 /* TX service (UsbTask): submits the next ready frame when the endpoint is
  * idle. */
 void la_usb_tx_pump(la_usb_dev_t *dev);

@@ -695,6 +695,13 @@ The amendment (`docs/protocol.md`, section 15.2): `DATA_CHUNK` data raised
 bytes, UART TX stream 4096 -> 8192, TxTask stack 4 KiB -> 12 KiB (the enlarged
 buffers overflowed it), the client reads 64 KiB with a 20 ms cap (0 for the
 drain) and ACKs every 4 chunks there, and the parser CRC is table-driven.
+**Live-path fault tolerance:** the TxTask's event drain is now bounded by the
+USB pool (`la_usb_tx_space`) and by a fixed block count, and live event frames
+use a 10 ms slot wait instead of the 500 ms control-frame bound. Before this,
+a sustained 1 MHz SPI flood kept the pool full and the drain blocked the
+TxTask for 500 ms per event, starving the command path and stalling the
+device for minutes. The 5 s flood now drains and returns to IDLE at the
+stream end (479,514 events, IDLE at 5.1 s; the live suite requires <= 3 s).
 Measured limits: 1.62 MB/s over 64 MiB; recovery: close-during-capture returns
 to IDLE within 3 s, reset cycles and stale-reply handling pass. Power/cable:
 J10 to the PC, J12 power, JP6=USB; high speed.

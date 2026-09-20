@@ -578,6 +578,23 @@ stayed responsive and IDLE but a true bus reset was not proven. Physical
 unplug/replug and suspend/resume remain [HUMAN]. Evidence:
 `build/reports/usb-u05-regression.md`.
 
+### USB migration execution - U05 live-path fault tolerance (2026-09-19, fixed)
+
+**The direct-USB live-path stall is fixed.** Root cause: the TxTask's event
+drain checked the UART stream buffer (unused by the USB profile) instead of
+the USB pool, so under a sustained decoder flood it called `tx_write` once
+per event and blocked up to 500 ms per frame waiting for a pool slot,
+starving the command path for minutes. Fix: `la_usb_enqueue_wait()` with a
+10 ms bound for live event frames (`EVT_DECODED`/`EVT_BLOCK`/`EVT_OVERRUN`),
+`la_usb_tx_space()` as the real drain flow control, and a four-block cap per
+TxTask pass so the control path is always serviced. Bench: the 5 s 1 MHz SPI
+flood now collects 479,514 events and the device is IDLE at the stream end
+(5.1 s); the live suite requires <= 3 s and passes 9 passed/2 skipped (the
+relay-ring and TCP-kill injections remain gateway-only). Re-ran: `test-native`
+18/18, `release` 22/22, `test-host` 87, USB bulk+transport+zynq burst 16
+passed/1 skipped, P6.2 18/18, external matrix 18/18, P9.2 18 passed/1
+skipped, U06 drain 1.59-1.63 MB/s, gateway and USB profiles build.
+
 ### USB migration execution - U08 and U09 (2026-09-19)
 
 **U08 documentation reconciled; U09 packaging passes, SD boot and tag remain

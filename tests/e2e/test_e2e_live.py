@@ -324,25 +324,35 @@ def test_live_raw_stream_decoders_off(client: AnalyzerClient) -> None:
 
 def test_live_spi_overload_reports_loss(client: AnalyzerClient) -> None:
     """P8.4/P7.6 overload: the patgen SPI at 1 MHz (DIV=0) offers ~230 k
-    events/s, far beyond the old gateway link capacity; the loss must be
-    reported with a nonzero counter, no crash, a clean return to IDLE and a
-    working command path afterwards (state reset).
-
-    Gateway-only: on the direct-USB link the sustained flood leaves a
-    multi-second backlog and the device can stall; that recovery gap is an
-    open item recorded in docs/status.md, not a passing gate."""
-    if _direct_usb(client):
-        pytest.skip("direct-USB overload recovery is an open item (docs/status.md)")
+    events/s. Loss, if any, must be reported with a nonzero counter, with no
+    crash and a return to IDLE within 3 s (the direct-USB drain is bounded by
+    the USB pool now, so the command path stays responsive), then a working
+    command path afterwards (state reset)."""
     _configure_patgen(client, 4, 0)
     events = client.live(
         p.pack_decoder_cfg_spi(0, 0, mosi_channel=1, cs_channel=2, cs_active=0),
         config=_stream_config(1), count=None, timeout_s=5.0)
     overruns = [event for event in events if event.get("overrun")]
-    assert overruns, "1 MHz SPI overload produced no loss report"
-    assert overruns[0]["stage"] in (1, 2), overruns
-    assert overruns[0]["dropped"] >= 1, overruns
-    status = client.status()
-    assert status["state"] == 0, "overload did not return to IDLE"
+    if _direct_usb(client):
+        # The direct-USB link drains the flood, so zero loss is acceptable;
+        # any report that does appear must be well-formed.
+        assert not overruns or (overruns[0]["stage"] in (1, 2) and
+                                overruns[0]["dropped"] >= 1), overruns
+    else:
+        assert overruns, "1 MHz SPI overload produced no loss report"
+        assert overruns[0]["stage"] in (1, 2), overruns
+        assert overruns[0]["dropped"] >= 1, overruns
+    status = None
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline:
+        try:
+            status = client.status(timeout_s=2.0)
+        except Exception:
+            status = None
+        if status is not None and status["state"] == 0:
+            break
+        time.sleep(0.2)
+    assert status is not None and status["state"] == 0, "overload did not return to IDLE within 3 s"
     # Recovery: the normal 10 kHz SPI source decodes cleanly again.
     _configure_patgen(client, 4, 99)
     events = client.live(

@@ -474,6 +474,20 @@ int la_usb_reconfigure(la_usb_dev_t *dev)
 
 int la_usb_enqueue(la_usb_dev_t *dev, const uint8_t *frame, size_t length)
 {
+    return la_usb_enqueue_wait(dev, frame, length, LA_USB_TX_WAIT_MS);
+}
+
+uint32_t la_usb_tx_space(const la_usb_dev_t *dev)
+{
+    if (dev == NULL || dev->tx_free_sem == NULL) {
+        return 0u;
+    }
+    return (uint32_t)uxSemaphoreGetCount(dev->tx_free_sem);
+}
+
+int la_usb_enqueue_wait(la_usb_dev_t *dev, const uint8_t *frame, size_t length,
+                        uint32_t wait_ms)
+{
     int slot;
 
     if (dev == NULL || frame == NULL || length == 0u ||
@@ -483,8 +497,7 @@ int la_usb_enqueue(la_usb_dev_t *dev, const uint8_t *frame, size_t length)
         }
         return -1;
     }
-    if (xSemaphoreTake(dev->tx_free_sem, pdMS_TO_TICKS(LA_USB_TX_WAIT_MS)) !=
-        pdTRUE) {
+    if (xSemaphoreTake(dev->tx_free_sem, pdMS_TO_TICKS(wait_ms)) != pdTRUE) {
         dev->tx_drops++;
         return -1;
     }
