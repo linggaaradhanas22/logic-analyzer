@@ -588,6 +588,70 @@ def web_main() -> int:
         return int(exc.code) if exc.code is not None else 0
 
 
+@cli.command(name="ui", help="Unified analyzer UI (W03): workspace, waveform viewer and live decode.")
+@click.option("--target", "-t", default=None,
+              help="analyzer link to open at start (optional; the page can connect)")
+@click.option("--decoder", "decoder_specs", multiple=True,
+              help="initial decoder specs (up to three, one per slot): "
+                   "uart:rx=CH,baud=BAUD | spi:sck=CH,mosi=CH,... | i2c:scl=CH,sda=CH")
+@click.option("--rate", default="100M", show_default=True,
+              help="sample rate used to derive live decoder timing")
+@click.option("--patgen", "patgen_mode", type=click.Choice(PATGEN_CHOICES),
+              default="off", show_default=True,
+              help="pattern generator armed before each live session")
+@click.option("--bind", default="127.0.0.1", show_default=True,
+              help="workspace bind address")
+@click.option("--port", default=8080, show_default=True, type=int,
+              help="workspace port")
+def ui(target: str | None, decoder_specs: tuple[str, ...], rate: str,
+       patgen_mode: str, bind: str, port: int) -> None:
+    """Serves the unified UI; `la-ui` is the standalone entry point.
+
+    The workspace starts idle: connect from the page (or pass --target), then
+    capture with the waveform viewer or run live decoders per slot. The
+    legacy three-pane page stays available at /legacy on the same server.
+    """
+    from ..la_ui.server import UiServer, UiState
+
+    try:
+        state = UiState(decoder_specs=decoder_specs, rate=rate,
+                        patgen=patgen_mode)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc)) from exc
+    if target:
+        try:
+            state.connect(target)
+        except Exception as exc:  # noqa: BLE001 - click reports it
+            raise click.ClickException(str(exc)) from exc
+    server = UiServer(state, host=bind, port=port)
+    try:
+        url = server.start()
+    except OSError as exc:
+        raise click.ClickException(
+            f"cannot bind the unified UI on {bind}:{port}: {exc}") from exc
+    click.echo(f"unified UI: {url}")
+    if target:
+        click.echo(f"connected to {target}")
+    else:
+        click.echo("open the page, pick a port and Connect")
+    try:
+        while True:
+            time.sleep(0.2)
+    except KeyboardInterrupt:
+        click.echo("UI stopped")
+    finally:
+        state.shutdown()
+        server.stop()
+
+
+def ui_main() -> int:
+    """Console-script entry point for `la-ui` (same command as `la-cli ui`)."""
+    try:
+        return ui.main(prog_name="la-ui", standalone_mode=True)
+    except SystemExit as exc:  # pragma: no cover - click exits through SystemExit
+        return int(exc.code) if exc.code is not None else 0
+
+
 @cli.command(name="trace", help="P8.3 task/queue trace: --start, --stop or --dump (default).")
 @click.option("--target", "-t", required=True, help="analyzer link target URI")
 @click.option("--start", "do_start", is_flag=True, help="clear the ring and start recording")

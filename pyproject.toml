@@ -26,12 +26,14 @@ usb-bench = [
 [project.scripts]
 la-cli = "host.la_cli:main"
 la-web = "host.la_cli.commands:web_main"
+la-ui = "host.la_cli.commands:ui_main"
 
 [tool.setuptools]
-packages = ["host", "host.la_cli", "host.la_live_web", "host.la_sigrok_bridge", "tools", "tools.models"]
+packages = ["host", "host.la_cli", "host.la_live_web", "host.la_ui", "host.la_sigrok_bridge", "tools", "tools.models"]
 
 [tool.setuptools.package-data]
 "host.la_live_web" = ["static/index.html"]
+"host.la_ui" = ["static/*.html", "static/*.js", "static/*.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["host/tests", "tests"]

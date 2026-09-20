@@ -184,6 +184,72 @@ def summarize(dump: TraceDump) -> dict:
     }
 
 
+def timeline_model(dump: TraceDump) -> dict:
+    """Serializable timeline model for the host UI canvas (W06).
+
+    Times are milliseconds relative to the first record; lanes are tasks,
+    spans are busy intervals, and markers carry queue/stream/mark/ISR events
+    with the lane they belong to (or ``None`` for ISRs).
+    """
+    lanes = _task_lanes(dump)
+    lane_index = {object_id: index for index, (object_id, _name) in
+                  enumerate(lanes)}
+    intervals = _run_intervals(dump)
+    running_timeline = _current_task_at(dump)
+    t0 = dump.records[0].time if dump.records else 0
+    cps = dump.counts_per_second or 1
+
+    def rel_ms(count: int) -> float:
+        return (count - t0) * 1000.0 / cps
+
+    def running_task_at(when_ms: float):
+        current = None
+        for sample_ms, task_id in running_timeline:
+            if sample_ms > when_ms:
+                break
+            current = task_id
+        return current
+
+    markers = []
+    for record in dump.records:
+        when = rel_ms(record.time)
+        if record.token in ISR_TOKENS:
+            markers.append({"t_ms": when, "token": record.token,
+                            "lane": None, "value": record.value,
+                            "object": record.id})
+            continue
+        task_id = running_task_at(when)
+        lane = lane_index.get(task_id)
+        if lane is None:
+            continue
+        if record.token in QUEUE_TOKENS:
+            group = "queue"
+        elif record.token in STREAM_TOKENS:
+            group = "stream"
+        elif record.token in MARK_TOKENS:
+            group = "mark"
+        else:
+            continue
+        markers.append({"t_ms": when, "token": record.token, "lane": lane,
+                        "value": record.value, "object": record.id,
+                        "group": group})
+    duration_ms = rel_ms(dump.records[-1].time) if dump.records else 0.0
+    return {
+        "counts_per_second": dump.counts_per_second,
+        "duration_ms": duration_ms,
+        "lanes": [{"id": object_id, "name": name,
+                   "kind": dump.objects[object_id].kind
+                   if object_id in dump.objects else "task"}
+                  for object_id, name in lanes],
+        "spans": {str(object_id): spans
+                  for object_id, spans in intervals.items()},
+        "markers": markers,
+        "summary": summarize(dump),
+        "objects": {str(object_id): {"kind": obj.kind, "name": obj.name}
+                    for object_id, obj in dump.objects.items()},
+    }
+
+
 def _task_lanes(dump: TraceDump) -> list[tuple[int, str]]:
     lanes: dict[int, str] = {}
     for object_id, obj in dump.objects.items():

@@ -1021,6 +1021,32 @@ with `tools/models/decoders.py`, multi-slot decoding, spec errors and the
 missing-library path). No device, bench or UI result is claimed. Next: W02
 job runner, HTTP API and exports.
 
+### Unified UI - W02 job runner, HTTP API and entry point (2026-09-20)
+
+**W02 complete locally.** New `host/la_ui/jobs.py` (single-slot background
+`JobRunner` with progress, result and cooperative cancel), `export.py`
+(`.sr`/`.vcd` through the unchanged CLI writers, event and sample CSV with a
+`# la-ui` metadata line), `open.py` (`.sr`/`.vcd`/`.csv` offline openers,
+wired now and tested fully in W07), `server.py` (`UiState` connection/store/
+jobs/live controller, the `/api/*` routes, `/legacy`, and the unchanged SSE,
+`/status` and `/control/*` contract with an exclusive bind) and a temporary
+`host/la_ui/static/index.html` shell. `la-cli ui` and the `la-ui` console
+script share one implementation; `pyproject.toml` packages `host.la_ui` with
+its static data. `host/la_cli/trace.py` gained `timeline_model()` for the UI
+canvas. Files: `host/la_ui/{jobs,export,open,server}.py`,
+`host/la_ui/static/index.html`, `host/la_cli/{commands,trace}.py`,
+`pyproject.toml`, `host/tests/test_ui_api.py`, this ledger.
+
+Verification: `.venv\Scripts\python.exe -m pytest host/tests -q` PASS 144
+passed (15 new: page and `/legacy` routes, legacy `/status` fields,
+connect/ping/status/disconnect, capture job plus meta/envelope/samples/export/
+delete, capture validation, decode job and annotations, `.sr` export to open
+round trip, live config and per-slot control with a real SSE reader, bad-spec
+rejection, patgen route, trace job and model, job-runner single-slot and
+cancel); `la-cli ui --help` PASS. The legacy V09 suite still passes unchanged.
+No device or bench result is claimed and the workspace page is a W03
+deliverable. Next: W03 workspace shell.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |
