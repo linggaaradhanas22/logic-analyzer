@@ -101,7 +101,10 @@ static int test_protocol(void)
           "maximum frame parser");
 
     {
-        static const uint8_t malformed_length[] = {LA_PROTO_SOF, 0x10u, 0x01u, 0x01u, 0x04u};
+        static const uint8_t malformed_length[] = {
+            LA_PROTO_SOF, 0x10u, 0x01u,
+            (uint8_t)((LA_PROTO_MAX_PAYLOAD + 1u) & 0xFFu),
+            (uint8_t)(((LA_PROTO_MAX_PAYLOAD + 1u) >> 8) & 0xFFu)};
 
         la_proto_parser_init(&parser);
         memset(&observer, 0, sizeof(observer));
@@ -214,6 +217,7 @@ static int test_typed_protocol_payloads(void)
         0x88u, 0x77u, 0x66u, 0x55u, 0x44u, 0x33u, 0x22u, 0x11u,
         0x01u, 0x00u, 0x00u, 0x00u, 0x00u, 0xE1u, 0xF5u, 0x05u};
     static const uint8_t chunk_data[] = {0xAAu, 0xBBu, 0xCCu};
+    static uint8_t max_chunk_data[LA_PROTO_DATA_CHUNK_MAX];
     uint8_t payload[LA_PROTO_MAX_PAYLOAD];
     la_proto_pong_t pong;
     la_proto_pong_t unpacked_pong;
@@ -323,7 +327,7 @@ static int test_typed_protocol_payloads(void)
               payload[0] == 0x78u && payload[1] == 0x56u && payload[2] == 0x34u &&
               payload[3] == 0x12u && memcmp(&payload[4], chunk_data, sizeof(chunk_data)) == 0,
           "DATA_CHUNK payload offset header and data");
-    CHECK(la_proto_pack_data_chunk(0u, chunk_data, LA_PROTO_DATA_CHUNK_MAX, payload,
+    CHECK(la_proto_pack_data_chunk(0u, max_chunk_data, LA_PROTO_DATA_CHUNK_MAX, payload,
                                    sizeof(payload)) ==
               LA_PROTO_DATA_CHUNK_MAX + LA_PROTO_DATA_CHUNK_FIELD_SIZE,
           "DATA_CHUNK maximum data length");

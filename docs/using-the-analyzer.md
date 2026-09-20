@@ -97,13 +97,11 @@ retry once: the first TCP session can need a listener refresh.
 `la-cli ports` lists USB-UART candidates (CP210x/CH340/FTDI) when you use a
 direct `serial://COMx` link instead of the gateway.
 
-The Zynq also has an **experimental direct-USB profile** (`fw-zynq -- --profile
-usb`, `jtag-zynq -- --profile usb`): the Zynq enumerates as a CDC-ACM device
-and the same `la-cli` commands work over `serial://COMx`. It passes the
-enumeration, burst, trace and recovery gates but **not** the 1.5 MB/s drain
-gate, so it is deferred and the gateway remains the primary transport
-(`docs/usb-link.md` section 16). The gateway build stays the default; use the
-USB profile only for bench experiments.
+The Zynq also has an **adopted direct-USB profile** (`fw-zynq -- --profile usb`,
+`jtag-zynq -- --profile usb`): the Zynq enumerates as a CDC-ACM device and the
+same `la-cli` commands work over `serial://COMx`. It passes the enumeration,
+burst, trace, recovery and 64 MiB drain gates (1.62 MB/s); the gateway remains
+supported and is still the default build (`docs/usb-link.md` section 16).
 
 ## Two independent modes
 

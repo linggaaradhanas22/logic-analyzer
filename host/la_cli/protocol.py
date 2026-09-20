@@ -11,7 +11,7 @@ from __future__ import annotations
 import struct
 
 SOF = 0xA5
-MAX_PAYLOAD = 1024
+MAX_PAYLOAD = 4096
 FRAME_OVERHEAD = 7
 
 # Message types (la_proto_message_type_t).
@@ -45,7 +45,7 @@ PONG_SIZE = 16
 CONFIG_SIZE = 37
 STATUS_SIZE = 52
 DATA_BEGIN_SIZE = 16
-DATA_CHUNK_MAX = 1016
+DATA_CHUNK_MAX = 4092
 DATA_END_SIZE = 4
 ACK_SIZE = 2
 NAK_SIZE = 3

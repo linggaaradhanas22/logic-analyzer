@@ -76,6 +76,9 @@ def test_usb_drain_rate(client: AnalyzerClient, request) -> None:
     if mb <= 0:
         pytest.skip("drain disabled with --usb-drain-mb 0")
     _enable_counter(client)
+    # The drain gate profiles the host pacing: ACK every 4 chunks and poll
+    # without a timeout tail, which keeps the device's 16-chunk window full.
+    client.ack_batch = 4
     total_target = mb * 1024 * 1024
     rates: list[float] = []
     for trial in range(3):
@@ -83,7 +86,7 @@ def test_usb_drain_rate(client: AnalyzerClient, request) -> None:
         start = time.monotonic()
         while total < total_target:
             result = client.capture(_selftest_config(DRAIN_CAPTURE_SAMPLES),
-                                    timeout_s=120.0)
+                                    timeout_s=120.0, recv_cap=0.0)
             assert len(result.data) == DRAIN_CAPTURE_SAMPLES, len(result.data)
             assert result.parser_stats["crc_errors"] == 0, result.parser_stats
             assert result.parser_stats["format_errors"] == 0, result.parser_stats

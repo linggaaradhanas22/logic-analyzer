@@ -6,7 +6,7 @@
  *
  * Turns one finished burst capture (an AcqTask JOB: total 32-bit words plus
  * the encoding and sample rate recorded at arm) into the ordered
- * protocol.md burst frames: DATA_BEGIN, DATA_CHUNK* (up to 1016 data bytes
+ * protocol.md burst frames: DATA_BEGIN, DATA_CHUNK* (up to LA_PROTO_DATA_CHUNK_MAX data bytes
  * each, payload offset headers in bytes), DATA_END. Chunk bytes are copied
  * from the capture buffer through a caller read callback, so the packer
  * owns no buffer memory. The DATA_END CRC32/IEEE is streamed over freshly
@@ -24,7 +24,7 @@
  * outstanding chunk has been resolved (window drained or burst abandoned);
  * calling la_tx_pack_next() after completion returns -1.
  *
- * Chunk boundaries always start at multiples of 1016 bytes. 1016 is
+ * Chunk boundaries always start at multiples of LA_PROTO_DATA_CHUNK_MAX bytes (4092, which is
  * divisible by 4, so with whole words (raw packed or transition words are 4
  * bytes each) a 32-bit word is never split across chunks and every offset
  * stays word-aligned. Empty jobs (zero words) emit DATA_BEGIN followed by

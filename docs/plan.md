@@ -26,13 +26,14 @@ P9.2 remains required, P9.3 stays separate stretch work, and P9.4/P10.1 need an
 explicit optional-profile or deferral decision. The P10.4 release hold remains
 until the chosen transport, final image and SD-boot gates are resolved.
 
-**U07 decision (2026-09-19): DEFER.** U03-U05 correctness gates pass over USB,
-but the U06 64 MiB drain gate fails (0.03-0.85 MB/s measured against the
-1.5 MB/s requirement; transfers are byte-exact). The gateway therefore remains
-the primary and supported transport, direct USB stays a WIP/experimental
-profile with its findings preserved, and P9.1/P9.4/P10.1 keep their current
-status. Details and the revisit conditions are in
-[usb-link.md](usb-link.md) section 16 and `build/reports/usb-u06-performance.md`.
+**U07 decision (2026-09-19, revised): ADOPT.** U03-U05 correctness gates pass
+and the U06 64 MiB drain gate passes at 1.62 MB/s in three consecutive trials
+after the documented DATA_CHUNK amendment (1016 -> 4092 bytes plus the client
+read/ACK pacing). Direct USB is adopted as a supported transport; the gateway
+remains supported and stays the default build, and no wireless or browser
+feature is removed. P9.1/P9.4/P10.1 keep their current status. Details are in
+[usb-link.md](usb-link.md) section 16 and
+`build/reports/usb-u06-performance.md`.
 
 The local preset/BSP exposes USB0 and the `usbps` / `XUsbPs` driver, but device
 enumeration, physical configuration and throughput are unverified. The new

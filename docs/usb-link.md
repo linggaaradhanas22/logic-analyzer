@@ -676,33 +676,33 @@ P6.2 matrix 18/18, P9.2 18/1 (live). Evidence:
 `build/reports/usb-u04-protocol.md`. U05 (external loopback, live gates,
 recovery, soak) and U06 (64 MiB drain) remain.
 
-## 16. U07 adoption decision: DEFER (2026-09-19)
+## 16. U07 adoption decision: ADOPT (2026-09-19, revised)
 
-Direct USB is **not adopted as the primary transport** at this time. The
-correctness gates pass, but the U06 performance gate fails and the plan makes
-adoption conditional on it.
+Direct USB **is adopted as a supported transport** after the U06 gate passed
+with the documented DATA_CHUNK amendment. The user directed adoption; the
+gateway remains supported and stays the default build, and no wireless or
+browser feature is removed.
 
 | Gate | Result |
 |---|---|
 | U03 enumeration, open/close, reset, short/exact transfers | PASS (local) |
 | U04 commands, parser, chunked trace | PASS 5/5 + 6/6 |
 | U05 common burst matrices + 500-capture soak | PASS; external/live wiring gates BLOCKED |
-| U06 64 MiB drain >= 1.5 MB/s | **FAIL** (0.03-0.85 MB/s; bytes exact) |
+| U06 64 MiB drain >= 1.5 MB/s | **PASS** 1.62 MB/s in three consecutive trials |
 
-Measured limits: 4 MiB byte-exact capture at 0.19 MB/s through the client
-(0.85 MB/s with a tight host loop); the wired 100 MS/s acquisition scope is
-unchanged and unaffected. Recovery: close-during-capture returns to IDLE
-within 3 s; reset cycles and stale-reply handling pass. Power/cable: J10
-through a USB 2.0 hub to the PC, J12 power, JP6=USB; high speed.
+The amendment (`docs/protocol.md`, section 15.2): `DATA_CHUNK` data raised
+1016 -> 4092 bytes, `MAX_PAYLOAD` 1024 -> 4096, USB TX frames 1088 -> 4160
+bytes, UART TX stream 4096 -> 8192, TxTask stack 4 KiB -> 12 KiB (the enlarged
+buffers overflowed it), the client reads 64 KiB with a 20 ms cap (0 for the
+drain) and ACKs every 4 chunks there, and the parser CRC is table-driven.
+Measured limits: 1.62 MB/s over 64 MiB; recovery: close-during-capture returns
+to IDLE within 3 s, reset cycles and stale-reply handling pass. Power/cable:
+J10 to the PC, J12 power, JP6=USB; high speed.
 
 Code footprint: the USB profile builds `la_app_usb` (text 209,072 / data 3,720
-/ bss 294,784) versus the gateway `la_app` (text 191,144 / data 3,688 / bss
-243,936); the gateway profile is the default and is unchanged.
-
-Disposition: the **gateway remains the primary and supported transport**
-(P9.1, P9.4 and P10.1 keep their current status); direct USB stays a
-WIP/experimental profile with all correctness findings preserved, and the
-release identity gate stays open. No wireless or browser feature is removed.
-The decision can be revisited by fixing the queued IN-transfer batching,
-enlarging the DATA_CHUNK payload (protocol amendment) or raising the USB task
-service rate, then re-running U06.
+/ bss ~354 KiB with the 4096-entry trace ring and 4 KiB frames) versus the
+gateway `la_app` (text 191,144 / data 3,688 / bss 243,936); the gateway
+profile is the default and unchanged. The release identity gate stays open
+(test PID `0x1209:0x0001`), and the gateway/SPI bench paths were not re-run
+after the amendment (they fit the enlarged frames but remain unverified on
+the bench).

@@ -56,7 +56,9 @@
 #define LA_LINK_BAUD 2000000u
 
 #define LA_RX_STREAM_SIZE 8192u
-#define LA_TX_STREAM_SIZE 4096u
+/* Holds one maximum encoded frame (LA_PROTO_MAX_PAYLOAD + overhead = 4103)
+ * after the U06 DATA_CHUNK enlargement. */
+#define LA_TX_STREAM_SIZE 8192u
 #define LA_CTRL_Q_DEPTH 4u
 #define LA_NOTICE_Q_DEPTH 8u
 #define LA_TX_Q_DEPTH 16u
@@ -71,7 +73,10 @@
 
 #define LA_STACK_ACQ 1024u
 #define LA_STACK_CMD 1024u
-#define LA_STACK_TX 1024u
+/* TxTask holds the encoded-frame buffer (LA_PROTO_MAX_PAYLOAD + overhead =
+ * 4103) and, in the burst pump, the 4096-byte chunk payload at the same time
+ * after the U06 DATA_CHUNK enlargement. 4 KiB overflowed the stack. */
+#define LA_STACK_TX 3072u
 #define LA_STACK_STATUS 1024u
 #define LA_STACK_DECODER 1024u
 #define LA_STACK_SPI 1024u

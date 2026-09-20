@@ -101,6 +101,9 @@ class AnalyzerClient:
         self._sequence = 0
         self._parser = p.FrameParser()
         self._log_lines: list[str] = []
+        # ACK window pacing for burst captures; the U06 drain gate lowers it
+        # to keep the device window flowing (see the U06 report).
+        self.ack_batch = ACK_BATCH
 
     @property
     def description(self) -> str:
@@ -145,11 +148,13 @@ class AnalyzerClient:
             "dropped_bytes": self._parser.dropped_bytes,
         }
 
-    def _pump(self, deadline: float, handler, deadline_ok: bool = False) -> None:
+    def _pump(self, deadline: float, handler, deadline_ok: bool = False,
+              recv_cap: float = 0.02) -> None:
         """Feeds the parser until handler() returns True, the deadline passes
         or the transport fails. handler receives (type, sequence, payload).
         With deadline_ok the deadline is a normal stop (live streaming);
-        otherwise it raises TransportError."""
+        otherwise it raises TransportError. recv_cap bounds each read; the
+        drain gate passes 0 to poll without the timeout tail."""
         stopped = False
 
         def on_frame(message_type, sequence, payload) -> None:
@@ -163,10 +168,10 @@ class AnalyzerClient:
                 if deadline_ok:
                     return
                 raise TransportError(f"timeout waiting for the analyzer on {self.description}")
-            # Keep the recv window short: a 0.5 s cap made every partial read
-            # wait out the timeout and throttled the 4 MiB USB drain to
-            # ~0.03 MB/s (U06).
-            data = self._transport.recv(4096, min(remaining, 0.02))
+            # Keep the recv window short and large enough for a maximum frame
+            # (4103 bytes): a 0.5 s cap made every partial read wait out the
+            # timeout and throttled the 4 MiB USB drain (U06).
+            data = self._transport.recv(65536, min(remaining, recv_cap))
             if not data:
                 if self._transport.eof:
                     raise TransportError(
@@ -393,9 +398,13 @@ class AnalyzerClient:
             lines.append(final_end)
         return lines
 
-    def capture(self, config: bytes, timeout_s: float = 30.0) -> CaptureData:
+    def capture(self, config: bytes, timeout_s: float = 30.0,
+                recv_cap: float = 0.02) -> CaptureData:
         """Arms a burst capture with a wire CONFIG payload and collects the
-        DATA_BEGIN/CHUNK*/END transfer, ACKing in batches of 16."""
+        DATA_BEGIN/CHUNK*/END transfer, ACKing every self.ack_batch chunks.
+
+        recv_cap bounds each read during the transfer; the U06 drain gate
+        passes 0 to poll without the timeout tail."""
         deadline = time.monotonic() + timeout_s
         if len(config) != p.CONFIG_SIZE:
             raise ValueError(f"CONFIG payload must be {p.CONFIG_SIZE} bytes")
@@ -438,7 +447,7 @@ class AnalyzerClient:
                 chunks += 1
                 expected_offset += len(data)
                 pending_acks.append(sequence)
-                if len(pending_acks) >= ACK_BATCH:
+                if len(pending_acks) >= self.ack_batch:
                     send_ack_batch()
                 return False
             if message_type == p.DATA_END:
@@ -459,7 +468,7 @@ class AnalyzerClient:
                 self._log_lines.append(payload.decode("utf-8", errors="replace"))
             return False
 
-        self._pump(deadline, on_data)
+        self._pump(deadline, on_data, recv_cap=recv_cap)
         return CaptureData(meta, bytes(collected), chunks, self._parser_stats())
 
     def live(self, decoder_config: bytes, config: bytes | None = None,

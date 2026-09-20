@@ -14,13 +14,13 @@ Every frame is encoded as:
 | 1 | `SOF` | `0xA5` |
 | 1 | `TYPE` | Message type below |
 | 1 | `SEQ` | Sender-local sequence number, modulo 256 |
-| 2 | `LEN` | Payload length, unsigned little-endian, 0 through 1024 |
+| 2 | `LEN` | Payload length, unsigned little-endian, 0 through 4096 |
 | `LEN` | `PAYLOAD` | Type-specific bytes |
 | 2 | `CRC16` | Unsigned little-endian CRC-16/CCITT-FALSE |
 
 The CRC input is `TYPE`, `SEQ`, both `LEN` bytes and all payload bytes. CRC16
 uses initial value `0xFFFF`, polynomial `0x1021`, no reflection and final XOR
-`0x0000`. The maximum encoded frame is 1031 bytes (`LEN + 7`). A byte equal to
+`0x0000`. The maximum encoded frame is 4103 bytes (`LEN + 7`). A byte equal to
 `SOF` in a header, payload or CRC has no special meaning.
 
 The parser is incremental and may be fed one byte at a time. Before a frame is
@@ -58,7 +58,7 @@ where the receiver documents forward-compatible handling.
 | `0x23` | `EVT_OVERRUN` | Zynq -> host | `dropped:u32`, `stage:u8`, reserved[3] |
 | `0x24` | `EVT_BLOCK` | Zynq -> host | versioned compact event block (v1) |
 | `0x30` | `DATA_BEGIN` | Zynq -> host | burst metadata |
-| `0x31` | `DATA_CHUNK` | Zynq -> host | `offset:u32` + up to 1016 bytes |
+| `0x31` | `DATA_CHUNK` | Zynq -> host | `offset:u32` + up to 4092 bytes |
 | `0x32` | `DATA_END` | Zynq -> host | reconstructed-data `crc32:u32` |
 | `0x40` | `ACK` | both | acknowledged `TYPE:u8`, `SEQ:u8` |
 | `0x41` | `NAK` | both | `TYPE:u8`, `SEQ:u8`, `error:u8` |
@@ -259,7 +259,7 @@ not be interpreted as contiguous samples.
 
 `DATA_BEGIN` is 16 bytes: `total_words:u64`, `encoding:u8`, reserved[3] and
 `sample_rate_hz:u32`. `encoding` is 0 for raw packed words and 1 for
-transition words. `DATA_CHUNK` contains a byte offset followed by at most 1016
+transition words. `DATA_CHUNK` contains a byte offset followed by at most 4092
 data bytes, so its payload is at most 1020 bytes. `DATA_END` contains the
 CRC32/IEEE of the concatenated data bytes, using initial `0xFFFFFFFF`, reflected
 polynomial `0xEDB88320` and final XOR `0xFFFFFFFF`.

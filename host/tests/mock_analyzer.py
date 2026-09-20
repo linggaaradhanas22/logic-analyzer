@@ -158,10 +158,10 @@ class MockAnalyzer:
                     capture_state["ack_wanted"] = capture_state["chunk_count"]
                 elif self.scenario == "chunk_gap":
                     capture_state["chunk_count"] = self._stream_capture(
-                        connection, omit_chunk=2)
+                        connection, omit_chunk=1)
                     capture_state["ack_wanted"] = 0  # client aborts; no drain
                 elif self.scenario == "chunk_bad_crc":
-                    self._stream_capture(connection, corrupt_chunk=2)
+                    self._stream_capture(connection, corrupt_chunk=1)
                     capture_state["ack_wanted"] = 0
             elif message_type == p.PATGEN_CFG:
                 self.last_patgen = payload
@@ -232,7 +232,10 @@ class MockAnalyzer:
                         omit_chunk: int | None = None,
                         corrupt_chunk: int | None = None) -> int:
         if self.scenario in ("capture_raw", "chunk_gap", "chunk_bad_crc"):
-            self.capture_payload = counter_samples(3056)
+            if self.scenario in ("chunk_gap", "chunk_bad_crc"):
+                self.capture_payload = counter_samples(3 * p.DATA_CHUNK_MAX)
+            else:
+                self.capture_payload = counter_samples(3056)
             encoding = 0
         else:
             runs = [(900, 0x00), (7, 0x55), (300, 0xFF), (43, 0xAA), (60, 0x01)]

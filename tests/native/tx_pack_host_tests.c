@@ -45,7 +45,7 @@ typedef struct emission {
 
 /* Drives a whole job over the capture buffer and verifies the frame
  * structure: BEGIN first, CHUNKs covering 0..bytes_total once in ascending
- * contiguous order with word-aligned 1016-byte chunks, END with the
+ * contiguous order with word-aligned LA_PROTO_DATA_CHUNK_MAX chunks, END with the
  * one-shot CRC. Emissions are recorded for retransmission checks. */
 static int run_job(uint64_t total_words,
                    uint8_t encoding,
@@ -86,9 +86,8 @@ static int run_job(uint64_t total_words,
             emissions[emission_count].payload_length = LA_PROTO_DATA_BEGIN_WIRE_SIZE;
             break;
         case LA_TX_PACK_CHUNK:
-            CHECK(out.byte_offset == chunks * 1016u, "chunk offsets are contiguous");
-            CHECK(out.data_length == (bytes_total - out.byte_offset > 1016u
-                                          ? 1016u
+            CHECK(out.byte_offset == chunks * LA_PROTO_DATA_CHUNK_MAX, "chunk offsets are contiguous");
+            CHECK(out.data_length == (bytes_total - out.byte_offset > LA_PROTO_DATA_CHUNK_MAX ? LA_PROTO_DATA_CHUNK_MAX
                                           : (size_t)(bytes_total - out.byte_offset)),
                   "chunk data length");
             CHECK(out.data_length != 0u, "never an empty chunk");
@@ -143,7 +142,7 @@ static int test_multi_chunk_job(void)
     capture_len = total_words * 4u;
     CHECK(run_job(total_words, 1u, 100000000u, emissions, &chunk_count) == 0,
           "multi-chunk job");
-    CHECK(chunk_count == 31u, "7777 words make 30 full chunks plus a 628-byte tail");
+    CHECK(chunk_count == 8u, "7777 words make 7 full chunks plus a 2476-byte tail");
     for (index = 0u; index < chunk_count; ++index) {
         la_tx_pack_t pack;
         la_tx_pack_out_t out;
@@ -188,20 +187,20 @@ static int test_boundary_jobs(void)
               emissions[1].byte_offset == 0u,
           "single word fits one chunk");
 
-    capture_len = 1016u;
-    CHECK(run_job(254u, 0u, 1000000u, emissions, &chunk_count) == 0, "exact chunk job");
-    CHECK(chunk_count == 1u && emissions[1].data_length == 1016u,
-          "254 words fill exactly one chunk");
+    capture_len = LA_PROTO_DATA_CHUNK_MAX;
+    CHECK(run_job(LA_PROTO_DATA_CHUNK_MAX / 4u, 0u, 1000000u, emissions, &chunk_count) == 0, "exact chunk job");
+    CHECK(chunk_count == 1u && emissions[1].data_length == LA_PROTO_DATA_CHUNK_MAX,
+          "1023 words fill exactly one chunk");
 
-    capture_len = 1020u;
-    CHECK(run_job(255u, 0u, 1000000u, emissions, &chunk_count) == 0, "chunk-tail job");
-    CHECK(chunk_count == 2u && emissions[1].data_length == 1016u &&
-              emissions[2].data_length == 4u && emissions[2].byte_offset == 1016u,
-          "255 words split across two chunks");
+    capture_len = LA_PROTO_DATA_CHUNK_MAX + 4u;
+    CHECK(run_job((LA_PROTO_DATA_CHUNK_MAX + 4u) / 4u, 0u, 1000000u, emissions, &chunk_count) == 0, "chunk-tail job");
+    CHECK(chunk_count == 2u && emissions[1].data_length == LA_PROTO_DATA_CHUNK_MAX &&
+              emissions[2].data_length == 4u && emissions[2].byte_offset == LA_PROTO_DATA_CHUNK_MAX,
+          "1024 words split across two chunks");
 
-    capture_len = 2032u;
-    CHECK(run_job(508u, 0u, 1000000u, emissions, &chunk_count) == 0, "two full chunks job");
-    CHECK(chunk_count == 2u && emissions[2].byte_offset == 1016u,
+    capture_len = 2u * LA_PROTO_DATA_CHUNK_MAX;
+    CHECK(run_job(2u * LA_PROTO_DATA_CHUNK_MAX / 4u, 0u, 1000000u, emissions, &chunk_count) == 0, "two full chunks job");
+    CHECK(chunk_count == 2u && emissions[2].byte_offset == LA_PROTO_DATA_CHUNK_MAX,
           "two full chunks at word-aligned boundaries");
     return 0;
 }

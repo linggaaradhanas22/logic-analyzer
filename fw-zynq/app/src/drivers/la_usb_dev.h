@@ -40,7 +40,7 @@
 #define LA_USB_NOTIFY_BUF_COUNT 2u
 #define LA_USB_NOTIFY_BUF_SIZE 16u
 #define LA_USB_DMA_POOL_BYTES (64u * 1024u)
-#define LA_USB_TX_FRAME_BYTES 1088u
+#define LA_USB_TX_FRAME_BYTES 4160u
 /* 16 slots: one full OUT dTD ring worth of ACKs can be in flight while the
  * host is still writing (2026-09-19 200-record burst). */
 #define LA_USB_TX_FRAME_COUNT 16u

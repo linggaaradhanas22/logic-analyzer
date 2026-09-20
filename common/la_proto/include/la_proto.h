@@ -11,9 +11,13 @@
 #endif
 
 #define LA_PROTO_SOF ((uint8_t)0xA5u)
-#define LA_PROTO_MAX_PAYLOAD ((uint16_t)1024u)
+/* U06 design amendment (2026-09-19): the maximum frame payload and DATA_CHUNK
+ * data size were raised from 1024/1016 to cut the per-frame overhead on the
+ * direct-USB drain path. Chunk data still starts at 4-byte offsets and the
+ * frame layout is unchanged; only the bounds grew. */
+#define LA_PROTO_MAX_PAYLOAD ((uint16_t)4096u)
 #define LA_PROTO_FRAME_OVERHEAD ((size_t)7u)
-#define LA_PROTO_DATA_CHUNK_MAX ((uint16_t)1016u)
+#define LA_PROTO_DATA_CHUNK_MAX ((uint16_t)4092u)
 #define LA_PROTO_CONFIG_WIRE_SIZE ((uint16_t)37u)
 #define LA_PROTO_DECODER_CONFIG_WIRE_SIZE ((uint16_t)20u)
 #define LA_PROTO_PATGEN_CFG_WIRE_SIZE ((uint16_t)4u)

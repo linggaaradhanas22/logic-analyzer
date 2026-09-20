@@ -518,7 +518,7 @@ raise the USB task service rate. Evidence:
 `build/reports/usb-u06-performance.{md,json}`. Next: U07 records the adoption
 decision (performance-blocked), then U08/U09.
 
-### USB migration execution - U07 decision: DEFER (2026-09-19)
+### USB migration execution - U07 decision: DEFER (2026-09-19, superseded by the revised entry below)
 
 **Direct USB is not adopted as the primary transport.** Gate table: U03
 enumeration/open-close/reset/short+exact transfers PASS; U04 commands, parser
@@ -537,14 +537,36 @@ IN-transfer batching, enlarging the DATA_CHUNK payload (protocol amendment) or
 raising the USB task service rate, then re-running U06. Files updated:
 `docs/usb-link.md`, `docs/plan.md`, `docs/limits.md`, this ledger.
 
+### USB migration execution - U06 amendment and U07 adoption (2026-09-19, revised)
+
+**U06 now PASSES and U07 is revised to ADOPT per the user's direction.** The
+documented DATA_CHUNK amendment: `DATA_CHUNK` data 1016 -> 4092 bytes,
+`MAX_PAYLOAD` 1024 -> 4096, USB TX frames 1088 -> 4160, UART TX stream buffer
+4096 -> 8192, TxTask stack 4 KiB -> 12 KiB (the enlarged 4103-byte wire and
+4096-byte chunk buffers overflowed the old stack and crashed the PS), the
+client reads 64 KiB with a 20 ms cap (0 for the drain) and ACKs every 4
+chunks, and the parser CRC is table-driven. Drain result: three consecutive
+64 MiB trials at **1.62 MB/s** each (41.4-41.5 s per trial), byte-exact
+(counter sequence, frame CRC and DATA_END CRC verified). Regressions after
+the amendment: `test-native` 18/18, `release` 22/22, `test-host` 87, USB
+bulk+transport 9/9, `test_zynq_burst` 7 passed/1 skipped, P6.2 matrix 18/18,
+P9.2 18 passed/1 skipped, both firmware profiles build; the gateway/SPI bench
+paths were not re-run (not wired) and stay unverified. Adoption: direct USB is
+a supported transport, the gateway remains supported and the default build,
+no wireless/browser feature removed, the release identity gate stays open.
+Evidence: `build/reports/usb-u06-performance.{md,json}`; docs updated:
+`docs/protocol.md`, `docs/usb-link.md` section 16, `docs/plan.md`,
+`docs/limits.md`, `docs/using-the-analyzer.md`.
+
 ### USB migration execution - U08 and U09 (2026-09-19)
 
 **U08 documentation reconciled; U09 packaging passes, SD boot and tag remain
-blocked.** U08: `docs/plan.md` carries the U07 defer decision,
-`docs/protocol.md` documents the chunked `TRACE_CTRL` payload and
-`END next total dropped`, `docs/limits.md` records the direct-USB performance
-limit, and `docs/using-the-analyzer.md` marks the direct-USB profile as
-experimental/deferred. README, architecture, RTOS design, wiring, SPI link and
+blocked.** U08: `docs/plan.md` carries the U07 adopt decision,
+`docs/protocol.md` documents the chunked `TRACE_CTRL` payload, the enlarged
+frame/chunk bounds and `END next total dropped`, `docs/limits.md` records the
+direct-USB drain, and `docs/using-the-analyzer.md` marks the direct-USB
+profile adopted. README, architecture, RTOS design, wiring, SPI link and
+test plan describe the unchanged gateway/S3 transport and needed no edit; the
 test plan describe the unchanged gateway/S3 transport and needed no edit; the
 portal/manuscript contain no direct-USB adoption claim, so no rebuild was
 required. Evidence: `build/reports/usb-u08-doc-review.md`. U09 (gateway

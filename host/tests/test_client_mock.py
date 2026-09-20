@@ -113,12 +113,12 @@ def test_capture_raw_transfer(analyzer) -> None:
     assert result.data == counter_samples(3056)
     assert result.encoding == 0
     assert result.meta["total_words"] == 3056 // 4
-    assert result.chunks == 4  # 3 x 1016 + 8 tail bytes
+    assert result.chunks == 1  # one chunk holds all 3056 bytes
     assert result.parser_stats["crc_errors"] == 0
     # Every chunk must be acknowledged (batches of 16 plus the end drain);
     # the mock thread needs a moment to drain its socket.
-    _wait_until(lambda: len(mock.received_acks) == 4)
-    assert [t for t, _ in mock.received_acks] == [p.DATA_CHUNK] * 4
+    _wait_until(lambda: len(mock.received_acks) == 1)
+    assert [t for t, _ in mock.received_acks] == [p.DATA_CHUNK]
 
 
 def test_capture_txn_transfer(analyzer) -> None:
