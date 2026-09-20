@@ -132,8 +132,27 @@ the whole path before connecting anything:
 ```
 
 `--patgen` enables `CTRL.SELFTEST_EN` (the internal mux) and latches the pattern
-generator. **Omit it for real signals**, or the JC inputs are ignored. Modes:
-`counter`, `walking`, `prbs`, `uart`, `spi`, `i2c`.
+generator. **Omit it for real signals**, or the JC inputs are ignored.
+
+| Mode | Pins | Traffic |
+|---|---|---|
+| `counter` / `walking` / `prbs` | all 8 | raw 8-bit patterns (capture self-test) |
+| `uart` | CH0 | repeated `LA-TEST\n` at 115200 8N1 |
+| `uart_text` | CH0 | repeated `Hello, LA!\r\n` |
+| `uart_bin` | CH0 | repeated 0x00..0x0F ramp (non-printable bytes) |
+| `uart_ferr` | CH0 | `L`, `A` with a low stop bit, `0x55` — a FRAME_ERR case |
+| `spi` | CH0 SCK, CH1 MOSI, CH2 CS_N | one CS frame `4C 41` |
+| `spi_multi` | CH0 SCK, CH1 MOSI, CH2 CS_N | one CS frame `DE AD BE EF` |
+| `spi16` | CH0 SCK, CH1 MOSI, CH2 CS_N | one CS frame, two 16-bit words `1234 ABCD` |
+| `i2c` | CH3 SCL, CH4 SDA | write to 0xA0: `4C 41`, ACKs |
+| `i2c_read` | CH3 SCL, CH4 SDA | read from 0xA1: data `4C`, master NACK |
+| `i2c_nack` | CH3 SCL, CH4 SDA | write to 0xA0: data `4C`, slave NACK |
+| `i2c_alt` | CH3 SCL, CH4 SDA | write to address 0x3C: `4F 4B` |
+
+The generator drives **one protocol at a time**; a second decoder on other
+channels needs an external signal. Decoder settings must match the mode:
+`spi16` needs `word=16`, `i2c_read`/`i2c_nack` exercise the NACK event, and
+`uart_ferr` exercises FRAME_ERR.
 
 Open `selftest.sr` in PulseView. The counter mode steps on channel 0.
 

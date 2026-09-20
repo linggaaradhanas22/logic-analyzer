@@ -116,26 +116,21 @@ module tb_la_patgen;
   endtask
 
   // Decode one UART frame starting at the first start edge; compares the
-  // eight decoded bytes against "LA-TEST\n".
-  task automatic decode_uart(string tag);
+  // decoded bytes against `expected[0..nbytes-1]` and checks every stop bit
+  // (bad_stop = index whose stop bit is deliberately low, or -1). With
+  // `repeats` a second start edge must follow the frame.
+  task automatic decode_uart(string tag, input logic [7:0] expected [0:15],
+                             input int nbytes, input int bad_stop,
+                             input int repeats);
     int s0;
     int b;
     int k;
-    logic [7:0] bytes [0:7];
-    logic [7:0] expected [0:7];
+    logic [7:0] bytes [0:15];
     logic ok;
-    expected[0] = "L";
-    expected[1] = "A";
-    expected[2] = "-";
-    expected[3] = "T";
-    expected[4] = "E";
-    expected[5] = "S";
-    expected[6] = "T";
-    expected[7] = 8'h0A;
     find_fall(0, 0, s0);
     fail_check({tag, " start edge found"}, s0 >= 0);
     if (s0 < 0) return;
-    for (k = 0; k < 8; k++) begin
+    for (k = 0; k < nbytes; k++) begin
       bytes[k] = 8'h00;
       for (b = 0; b < 8; b++) begin
         // Data bit b of byte k: absolute bit 10*k+b+1.
@@ -143,23 +138,31 @@ module tb_la_patgen;
           bytes[k][b] = 1'b1;
         end
       end
+      if (k == bad_stop) begin
+        fail_check({tag, " bad stop bit low"},
+                   !hist[s0 + UART_BIT*(10*k + 9) + UART_BIT/2][0]);
+      end else begin
+        fail_check({tag, " stop bit high"},
+                   hist[s0 + UART_BIT*(10*k + 9) + UART_BIT/2][0]);
+      end
     end
     ok = 1'b1;
-    for (k = 0; k < 8; k++) begin
+    for (k = 0; k < nbytes; k++) begin
       if (bytes[k] != expected[k]) ok = 1'b0;
     end
     if (!ok) begin
-      $display("FAIL [%s] UART decode: %02h %02h %02h %02h %02h %02h %02h %02h",
-               tag, bytes[0], bytes[1], bytes[2], bytes[3], bytes[4],
-               bytes[5], bytes[6], bytes[7]);
+      $display("FAIL [%s] UART decode mismatch", tag);
+      for (k = 0; k < nbytes; k++) begin
+        $display("  byte %0d got %02h expected %02h", k, bytes[k],
+                 expected[k]);
+      end
       errors = errors + 1;
     end
-    // Stop bit of byte 7 must be high (absolute bit 79).
-    fail_check({tag, " stop bit high"},
-               hist[s0 + UART_BIT*79 + UART_BIT/2][0]);
-    // The frame repeats: a new start edge must exist after the frame.
-    find_fall(s0 + UART_BIT*90, 0, s0);
-    fail_check({tag, " frame repeats"}, s0 >= 0);
+    if (repeats != 0) begin
+      // The frame repeats: a new start edge must exist after the frame.
+      find_fall(s0 + UART_BIT*(10*nbytes + 10), 0, s0);
+      fail_check({tag, " frame repeats"}, s0 >= 0);
+    end
   endtask
 
   // Decode one UART frame (mode 6) and require the line to stay idle high:
@@ -213,25 +216,26 @@ module tb_la_patgen;
     end
   endtask
 
-  // Decode two SPI frames: MOSI on SCK rise while CS_N low.
-  task automatic decode_spi(string tag, input int frames);
+  // Decode `frames` SPI frames: MOSI on SCK rise while CS_N low; compares
+  // `nbits` bits against `expected` (MSB first).
+  task automatic decode_spi(string tag, input int frames, input int nbits,
+                            input logic [31:0] expected);
     int s0;
     int f;
     int k;
     int idx;
-    int sample;
     int chk;
     for (f = 0; f < frames; f++) begin
       if (f == 0) find_fall(0, 2, s0);       // first CS_N assertion
       else begin
-        // next CS_N fall after the previous frame (~1800 cycles)
-        find_fall(s0 + 1900, 2, s0);
+        // next CS_N fall after the previous frame
+        find_fall(s0 + (2*nbits + 4)*SPI_HALF, 2, s0);
       end
       fail_check({tag, " CS fall found"}, s0 >= 0);
       if (s0 < 0) return;
-      // SCK rises at s0 + 50 + 100*k (k = 0..15). Sample MOSI on each rise.
+      // SCK rises at s0 + 50 + 100*k (k = 0..nbits-1).
       chk = 0;
-      for (k = 0; k < 16; k++) begin
+      for (k = 0; k < nbits; k++) begin
         idx = s0 + SPI_HALF + 2*SPI_HALF*k;
         if (idx >= hist_n || idx < 0) begin
           $display("FAIL [%s] sample out of range", tag);
@@ -240,18 +244,20 @@ module tb_la_patgen;
         end
         chk = (chk << 1) | hist[idx][1];
       end
-      fail_check_x({tag, " frame data"}, chk == 16'h4C41,
-                   $sformatf(" got %04h", chk));
+      fail_check_x({tag, " frame data"}, chk == expected,
+                   $sformatf(" got %08h expected %08h", chk, expected));
     end
   endtask
 
-  // Decode one I2C write: START, addr 0xA0, ACK, 0x4C, ACK, 0x41, ACK.
-  task automatic decode_i2c(string tag);
+  // Decode one I2C frame: START then `nslots` bits (SDA sampled on SCL
+  // rises) compared against the left-aligned `expected` stream, then STOP
+  // and a repeat.
+  task automatic decode_i2c(string tag, input logic [63:0] expected,
+                            input int nslots);
     int s0;
     int slot;
     int idx;
-    logic [26:0] got;
-    logic [26:0] expected;
+    logic [63:0] got;
     logic ok;
     // START: SDA falls while SCL high. Scan for a fall whose SCL is high.
     s0 = -1;
@@ -266,8 +272,8 @@ module tb_la_patgen;
     end
     fail_check({tag, " START found"}, s0 >= 0);
     if (s0 < 0) return;
-    got = 27'b0;
-    for (slot = 0; slot < 27; slot++) begin
+    got = 64'b0;
+    for (slot = 0; slot < nslots; slot++) begin
       // Slot b: SCL rises at step 2b+2 -> s0 + (2b+2)*125; sample mid-low.
       idx = s0 + (2*slot + 2)*I2C_HALF - 60;
       if (idx >= hist_n || idx < 0) begin
@@ -275,12 +281,11 @@ module tb_la_patgen;
         errors = errors + 1;
         return;
       end
-      got[26 - slot] = hist[idx][4];
+      got[63 - slot] = hist[idx][4];
     end
-    expected = {8'b10100000, 1'b0, 8'b01001100, 1'b0, 8'b01000001, 1'b0};
     ok = (got == expected);
     if (!ok) begin
-      $display("FAIL [%s] I2C slot stream %027b expected %027b", tag, got,
+      $display("FAIL [%s] I2C slot stream %064b expected %064b", tag, got,
                expected);
       errors = errors + 1;
     end
@@ -289,7 +294,7 @@ module tb_la_patgen;
       int i;
       logic stop_found;
       stop_found = 1'b0;
-      for (i = s0 + 55*I2C_HALF; i + 1 < hist_n; i++) begin
+      for (i = s0 + (2*nslots + 1)*I2C_HALF; i + 1 < hist_n; i++) begin
         if (!hist[i][4] && hist[i+1][4] && hist[i][3]) begin
           stop_found = 1'b1;
           break;
@@ -302,7 +307,7 @@ module tb_la_patgen;
       int i;
       logic restart_found;
       restart_found = 1'b0;
-      for (i = s0 + 60*I2C_HALF; i + 1 < hist_n; i++) begin
+      for (i = s0 + (2*nslots + 3)*I2C_HALF; i + 1 < hist_n; i++) begin
         if (hist[i][4] && !hist[i+1][4] && hist[i][3]) begin
           restart_found = 1'b1;
           break;
@@ -390,8 +395,8 @@ module tb_la_patgen;
     // ----------------------------------------------------------------
     scenario_start(4'd3, 0);
     begin
-      // 90 bits per frame at 868 cycles: two frames + margin.
-      for (i = 0; i < 200000; i++) begin
+      // 90 bits per frame at 868 cycles: one frame + the repeat start.
+      for (i = 0; i < 110000; i++) begin
         @(posedge clk);
         if (i % 100000 == 99999) begin
           // keep sim deterministic; nothing to do
@@ -399,19 +404,93 @@ module tb_la_patgen;
       end
     end
     scenario_stop();
-    decode_uart("uart");
+    begin
+      logic [7:0] expected [0:15];
+      expected[0] = "L";
+      expected[1] = "A";
+      expected[2] = "-";
+      expected[3] = "T";
+      expected[4] = "E";
+      expected[5] = "S";
+      expected[6] = "T";
+      expected[7] = 8'h0A;
+      decode_uart("uart", expected, 8, -1, 1);
+    end
 
     // ----------------------------------------------------------------
     // Mode 6: UART single frame, then idle high (P7.6 isolated byte).
     // ----------------------------------------------------------------
     scenario_start(4'd6, 0);
     begin
-      for (i = 0; i < 200000; i++) begin
+      for (i = 0; i < 95000; i++) begin
         @(posedge clk);
       end
     end
     scenario_stop();
     decode_uart_single("uart-single");
+
+    // ----------------------------------------------------------------
+    // Mode 7: UART text "Hello, LA!\r\n".
+    // ----------------------------------------------------------------
+    scenario_start(4'd7, 0);
+    begin
+      for (i = 0; i < 125000; i++) begin
+        @(posedge clk);
+      end
+    end
+    scenario_stop();
+    begin
+      logic [7:0] expected [0:15];
+      expected[0] = "H";
+      expected[1] = "e";
+      expected[2] = "l";
+      expected[3] = "l";
+      expected[4] = "o";
+      expected[5] = ",";
+      expected[6] = " ";
+      expected[7] = "L";
+      expected[8] = "A";
+      expected[9] = "!";
+      expected[10] = 8'h0D;
+      expected[11] = 8'h0A;
+      decode_uart("uart-text", expected, 12, -1, 1);
+    end
+
+    // ----------------------------------------------------------------
+    // Mode 8: UART binary 0x00..0x0F ramp.
+    // ----------------------------------------------------------------
+    scenario_start(4'd8, 0);
+    begin
+      for (i = 0; i < 155000; i++) begin
+        @(posedge clk);
+      end
+    end
+    scenario_stop();
+    begin
+      logic [7:0] expected [0:15];
+      for (i = 0; i < 16; i++) begin
+        expected[i] = i[7:0];
+      end
+      decode_uart("uart-bin", expected, 16, -1, 1);
+    end
+
+    // ----------------------------------------------------------------
+    // Mode 9: UART framing error (byte 1 stop bit low).
+    // ----------------------------------------------------------------
+    scenario_start(4'd9, 0);
+    begin
+      for (i = 0; i < 45000; i++) begin
+        @(posedge clk);
+      end
+    end
+    scenario_stop();
+    begin
+      logic [7:0] expected [0:15];
+      expected[0] = "L";
+      expected[1] = "A";
+      expected[2] = 8'h55;
+      decode_uart("uart-ferr", expected, 3, 1, 1);
+    end
 
     // ----------------------------------------------------------------
     // Mode 4: SPI frames.
@@ -423,7 +502,31 @@ module tb_la_patgen;
       end
     end
     scenario_stop();
-    decode_spi("spi", 3);
+    decode_spi("spi", 3, 16, 32'h4C41);
+
+    // ----------------------------------------------------------------
+    // Mode 10: SPI multi-byte frame 0xDE 0xAD 0xBE 0xEF.
+    // ----------------------------------------------------------------
+    scenario_start(4'd10, 0);
+    begin
+      for (i = 0; i < 12000; i++) begin
+        @(posedge clk);
+      end
+    end
+    scenario_stop();
+    decode_spi("spi-multi", 2, 32, 32'hDEADBEEF);
+
+    // ----------------------------------------------------------------
+    // Mode 11: SPI two 16-bit words 0x1234 0xABCD.
+    // ----------------------------------------------------------------
+    scenario_start(4'd11, 0);
+    begin
+      for (i = 0; i < 12000; i++) begin
+        @(posedge clk);
+      end
+    end
+    scenario_stop();
+    decode_spi("spi-16bit", 2, 32, 32'h1234ABCD);
 
     // ----------------------------------------------------------------
     // Mode 5: I2C write.
@@ -435,7 +538,45 @@ module tb_la_patgen;
       end
     end
     scenario_stop();
-    decode_i2c("i2c");
+    decode_i2c("i2c", {8'b10100000, 1'b0, 8'b01001100, 1'b0, 8'b01000001,
+                       1'b0, 37'b0}, 27);
+
+    // ----------------------------------------------------------------
+    // Mode 12: I2C read 0xA1, ACK, 0x4C, NACK, STOP.
+    // ----------------------------------------------------------------
+    scenario_start(4'd12, 0);
+    begin
+      for (i = 0; i < 20000; i++) begin
+        @(posedge clk);
+      end
+    end
+    scenario_stop();
+    decode_i2c("i2c-read", {8'b10100001, 1'b0, 8'b01001100, 1'b1, 46'b0}, 26);
+
+    // ----------------------------------------------------------------
+    // Mode 13: I2C write with a data NACK.
+    // ----------------------------------------------------------------
+    scenario_start(4'd13, 0);
+    begin
+      for (i = 0; i < 20000; i++) begin
+        @(posedge clk);
+      end
+    end
+    scenario_stop();
+    decode_i2c("i2c-nack", {8'b10100000, 1'b0, 8'b01001100, 1'b1, 46'b0}, 26);
+
+    // ----------------------------------------------------------------
+    // Mode 14: I2C alternate address 0x3C with 0x4F 0x4B.
+    // ----------------------------------------------------------------
+    scenario_start(4'd14, 0);
+    begin
+      for (i = 0; i < 27000; i++) begin
+        @(posedge clk);
+      end
+    end
+    scenario_stop();
+    decode_i2c("i2c-alt", {8'b01111000, 1'b0, 8'b01001111, 1'b0,
+                           8'b01001011, 1'b0, 37'b0}, 35);
 
     if (errors != 0) begin
       $fdisplay(result_fd, "FAIL: tb_la_patgen errors=%0d", errors);
@@ -449,7 +590,7 @@ module tb_la_patgen;
   end
 
   initial begin
-    #8_000_000;
+    #10_000_000;
     $fatal(1, "tb_la_patgen timeout");
   end
 

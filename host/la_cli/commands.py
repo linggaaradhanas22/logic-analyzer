@@ -17,7 +17,13 @@ from .transport import TransportError, list_candidates, open_uri
 
 FS_HZ = 100_000_000  # la_top FCLK
 CHANNELS = 8
-PATGEN_MODES = {"counter": 0, "walking": 1, "prbs": 2, "uart": 3, "spi": 4, "i2c": 5}
+PATGEN_MODES = {
+    "counter": 0, "walking": 1, "prbs": 2, "uart": 3, "spi": 4, "i2c": 5,
+    "uart_text": 7, "uart_bin": 8, "uart_ferr": 9,
+    "spi_multi": 10, "spi16": 11,
+    "i2c_read": 12, "i2c_nack": 13, "i2c_alt": 14,
+}
+PATGEN_CHOICES = ["off", *PATGEN_MODES]
 
 
 def _parse_size(text: str) -> int:
@@ -126,7 +132,7 @@ def status(target: str, timeout_s: float) -> None:
 @click.option("--pre", "pre_samples", default=0, show_default=True,
               help="pre-trigger samples")
 @click.option("--patgen", "patgen_mode",
-              type=click.Choice(["off", "counter", "walking", "prbs", "uart", "spi", "i2c"]),
+              type=click.Choice(PATGEN_CHOICES),
               default="off", show_default=True,
               help="drive the on-board pattern generator into the capture (internal self-test mux)")
 @click.option("--trig-rise", "trig_rise", default=None, type=int,
@@ -337,8 +343,16 @@ def _configure_patgen(client: AnalyzerClient, patgen_mode: str) -> None:
     client.configure_patgen(p.PATGEN_EN_MASK | (PATGEN_MODES[patgen_mode] << 4))
 
 
-PATGEN_PINS = {"uart": "CH0", "spi": "sck=CH0, mosi=CH1, cs=CH2",
-               "i2c": "scl=CH3, sda=CH4"}
+PATGEN_PINS = {
+    "uart": "CH0", "uart_text": "CH0", "uart_bin": "CH0", "uart_ferr": "CH0",
+    "spi": "sck=CH0, mosi=CH1, cs=CH2",
+    "spi_multi": "sck=CH0, mosi=CH1, cs=CH2",
+    "spi16": "sck=CH0, mosi=CH1, cs=CH2",
+    "i2c": "scl=CH3, sda=CH4",
+    "i2c_read": "scl=CH3, sda=CH4",
+    "i2c_nack": "scl=CH3, sda=CH4",
+    "i2c_alt": "scl=CH3, sda=CH4",
+}
 
 
 def _patgen_note(patgen_mode: str, slot_configs: dict[int, bytes]) -> None:
@@ -347,7 +361,7 @@ def _patgen_note(patgen_mode: str, slot_configs: dict[int, bytes]) -> None:
     The internal patgen drives one protocol's pins at a time (and not the
     generic counter/walking/prbs modes), so extra decoders need external
     signals on their own channels (docs/using-the-analyzer.md)."""
-    if patgen_mode in ("off", "counter", "walking", "prbs"):
+    if patgen_mode not in PATGEN_PINS:
         return
     if len(slot_configs) <= 1:
         return
@@ -441,7 +455,7 @@ def _serve_live(client: AnalyzerClient, target: str,
 @click.option("--rate", default="100M", show_default=True,
               help="sample rate used to derive samples/bit for the decoder")
 @click.option("--patgen", "patgen_mode",
-              type=click.Choice(["off", "counter", "walking", "prbs", "uart", "spi", "i2c"]),
+              type=click.Choice(PATGEN_CHOICES),
               default="off", show_default=True,
               help="configure the on-board pattern generator before starting")
 @click.option("--count", default=None, type=int, help="stop after N events")
@@ -531,7 +545,7 @@ def live(target: str, decoder_specs: tuple[str, ...], rate: str, patgen_mode: st
 @click.option("--rate", default="100M", show_default=True,
               help="sample rate used to derive samples/bit for the decoder")
 @click.option("--patgen", "patgen_mode",
-              type=click.Choice(["off", "counter", "walking", "prbs", "uart", "spi", "i2c"]),
+              type=click.Choice(PATGEN_CHOICES),
               default="off", show_default=True,
               help="configure the on-board pattern generator before starting")
 @click.option("--count", default=None, type=int, help="stop after N events")

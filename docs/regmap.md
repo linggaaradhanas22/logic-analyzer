@@ -64,6 +64,14 @@ ID value: `0x4C410002`
 | | `PATGEN_CTRL.MODE=4` | enum | SPI_1MHZ | |
 | | `PATGEN_CTRL.MODE=5` | enum | I2C_400KHZ | |
 | | `PATGEN_CTRL.MODE=6` | enum | UART_SINGLE | |
+| | `PATGEN_CTRL.MODE=7` | enum | UART_TEXT | |
+| | `PATGEN_CTRL.MODE=8` | enum | UART_BIN | |
+| | `PATGEN_CTRL.MODE=9` | enum | UART_FERR | |
+| | `PATGEN_CTRL.MODE=10` | enum | SPI_MULTI | |
+| | `PATGEN_CTRL.MODE=11` | enum | SPI_16BIT | |
+| | `PATGEN_CTRL.MODE=12` | enum | I2C_READ | |
+| | `PATGEN_CTRL.MODE=13` | enum | I2C_NACK | |
+| | `PATGEN_CTRL.MODE=14` | enum | I2C_ALT | |
 | | `PATGEN_CTRL.DIV` | field | bits 16:31 | mask `0xFFFF0000` |
 | | `PATGEN_CTRL` | constraint | | allowed_mask `0xFFFF00F1` |
 | `0x00000048` | `TIMEOUT` | RW | `0x00000000` | Trigger timeout in sample clocks. |

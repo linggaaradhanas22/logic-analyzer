@@ -196,6 +196,14 @@ registers:
           4: SPI_1MHZ
           5: I2C_400KHZ
           6: UART_SINGLE
+          7: UART_TEXT
+          8: UART_BIN
+          9: UART_FERR
+          10: SPI_MULTI
+          11: SPI_16BIT
+          12: I2C_READ
+          13: I2C_NACK
+          14: I2C_ALT
       - name: DIV
         lsb: 16
         width: 16

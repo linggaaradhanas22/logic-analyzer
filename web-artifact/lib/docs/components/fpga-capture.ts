@@ -624,7 +624,7 @@ export const fpgaCaptureComponents: ComponentDoc[] = [
     slug: 'la-patgen',
     name: 'Pattern generator (la_patgen)',
     subsystem: 'fpga-capture',
-    summary: 'la_patgen generates counter, walking-one, PRBS8, UART, SPI, I2C and single-UART-frame waveforms with an enable-latched divider and drives the JE outputs or the internal self-test mux.',
+    summary: 'la_patgen generates counter, walking-one, PRBS8, UART, SPI and I2C waveforms — including realistic traffic variants (text/binary/framing-error UART, multi-byte and 16-bit SPI, I2C read/NACK/alternate-address) — with an enable-latched divider, driving the JE outputs or the internal self-test mux.',
     why: 'Every capture and decoder gate needs a known stimulus; an on-chip generator makes the bench repeatable without external instruments and drives the real JE-to-JC loopback.',
     upstream: ['la-regs (PATGEN_CTRL)'],
     downstream: ['je-pattern-output', 'la-top (SELFTEST mux)'],
@@ -646,6 +646,7 @@ export const fpgaCaptureComponents: ComponentDoc[] = [
     configuration: [
       'PATGEN_CTRL (0x44): EN bit 0, MODE bits [7:4], DIV [31:16]; DIV=0 gives the nominal rate and rates scale by DIV+1.',
       'Mode 0 counter, 1 walking-one, 2 PRBS8 (x^8+x^6+x^5+x^4+1, seed 0x01), 3 UART 115200 LA-TEST 8N1, 4 SPI 1 MHz 0x4C41, 5 I2C 400 kHz write, 6 single UART frame.',
+      'Traffic variants: 7 UART text "Hello, LA!\\r\\n", 8 UART 0x00..0x0F ramp, 9 UART framing error (low stop bit), 10 SPI 0xDEADBEEF under one CS, 11 SPI two 16-bit words 0x1234 0xABCD, 12 I2C read 0xA1 + master NACK, 13 I2C data NACK, 14 I2C address 0x3C with 0x4F 0x4B.',
       'Mode 6 sends one LA-TEST frame per enable edge and then holds idle high; it is the isolated-final-byte latency source.',
     ],
     failures: [
@@ -658,16 +659,16 @@ export const fpgaCaptureComponents: ComponentDoc[] = [
     evidence: [
       {
         status: 'simulation-tested',
-        summary: 'tb_la_patgen checks the counter, walking-one and PRBS8 models with DIV scaling and decodes the recorded UART LA-TEST, SPI 0x4C41 and I2C write waveforms.',
+        summary: 'tb_la_patgen checks the counter, walking-one and PRBS8 models with DIV scaling and decodes the recorded UART LA-TEST, SPI 0x4C41 and I2C write waveforms plus the 2026-09-20 variants (UART text/binary/framing-error, SPI multi/16-bit, I2C read/NACK/alt).',
         scope: 'One of the 12/12 self-checking Questa testcases.',
-        date: '10 Sep 2026',
+        date: '20 Sep 2026',
         sources: [{ label: 'Pattern generator testbench', path: 'fpga/tb/tb_la_patgen.sv', kind: 'test' }],
       },
       {
         status: 'bench-verified',
-        summary: 'The pattern generator drove every bit-exact burst matrix and the live decoder gates, including the mode-6 single frame used for the 428 us isolated-byte measurement.',
-        scope: 'P6.2/P6.3 18/18 and the P7.6 SPI/I2C live gates on 2026-09-11; the JE-to-JC jumper carries the pattern back to the inputs.',
-        date: '11 Sep 2026',
+        summary: 'The pattern generator drove every bit-exact burst matrix and the live decoder gates, and all eight new traffic variants decode correctly over USB (UART text/ramp/frame error, SPI 0xDEADBEEF and 16-bit words, I2C read/NACK/address 0x3C).',
+        scope: 'P6.2/P6.3 18/18 and the P7.6 SPI/I2C live gates on 2026-09-11; variant evidence on 2026-09-20 (build/reports/v10-patgen-evidence.txt).',
+        date: '20 Sep 2026',
         sources: [{ label: 'P6/P7 bench evidence', path: 'docs/status.md', kind: 'doc' }],
       },
     ],

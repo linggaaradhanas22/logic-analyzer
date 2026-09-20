@@ -366,8 +366,16 @@ static int test_typed_protocol_payloads(void)
                   LA_PROTO_PATGEN_CFG_WIRE_SIZE,
               "PATGEN_CFG mode 6 (UART single) accepted");
         CHECK(la_proto_pack_patgen_cfg(UINT32_C(0x00000071), payload,
+                                       sizeof(payload)) ==
+                  LA_PROTO_PATGEN_CFG_WIRE_SIZE,
+              "PATGEN_CFG mode 7 (UART text) accepted");
+        CHECK(la_proto_pack_patgen_cfg(UINT32_C(0x000000E1), payload,
+                                       sizeof(payload)) ==
+                  LA_PROTO_PATGEN_CFG_WIRE_SIZE,
+              "PATGEN_CFG mode 14 (I2C alt) accepted");
+        CHECK(la_proto_pack_patgen_cfg(UINT32_C(0x000000F1), payload,
                                        sizeof(payload)) == 0u,
-              "PATGEN_CFG undefined mode rejected");
+              "PATGEN_CFG undefined mode 15 rejected");
         CHECK(la_proto_pack_patgen_cfg(patgen_ctrl, payload,
                                        LA_PROTO_PATGEN_CFG_WIRE_SIZE - 1u) == 0u &&
                   la_proto_pack_patgen_cfg(patgen_ctrl, NULL, sizeof(payload)) == 0u,

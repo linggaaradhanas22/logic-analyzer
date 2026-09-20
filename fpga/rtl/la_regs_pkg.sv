@@ -97,6 +97,14 @@ package la_regs_pkg;
   localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_SPI_1MHZ = 32'd4;
   localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_I2C_400KHZ = 32'd5;
   localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_UART_SINGLE = 32'd6;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_UART_TEXT = 32'd7;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_UART_BIN = 32'd8;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_UART_FERR = 32'd9;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_SPI_MULTI = 32'd10;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_SPI_16BIT = 32'd11;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_I2C_READ = 32'd12;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_I2C_NACK = 32'd13;
+  localparam logic [31:0] LA_REG_PATGEN_CTRL_MODE_VALUE_I2C_ALT = 32'd14;
   localparam logic [31:0] LA_REG_PATGEN_CTRL_DIV_MASK = 32'hFFFF0000;
   localparam logic [31:0] LA_REG_PATGEN_CTRL_ALLOWED_MASK = 32'hFFFF00F1;
 

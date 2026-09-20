@@ -81,6 +81,15 @@ PATGEN_MODE_UART_115200 = 3
 PATGEN_MODE_SPI_1MHZ = 4
 PATGEN_MODE_I2C_400KHZ = 5
 PATGEN_MODE_UART_SINGLE = 6  # one "LA-TEST\n" frame per enable, then idle
+PATGEN_MODE_UART_TEXT = 7    # repeated "Hello, LA!\r\n"
+PATGEN_MODE_UART_BIN = 8     # repeated 0x00..0x0F ramp
+PATGEN_MODE_UART_FERR = 9    # "L", "A" with a low stop bit (FRAME_ERR)
+PATGEN_MODE_SPI_MULTI = 10   # one CS frame 0xDE 0xAD 0xBE 0xEF
+PATGEN_MODE_SPI_16BIT = 11   # one CS frame with two 16-bit words
+PATGEN_MODE_I2C_READ = 12    # 0xA1, ACK, data, NACK, STOP
+PATGEN_MODE_I2C_NACK = 13    # 0xA0, ACK, data, NACK, STOP
+PATGEN_MODE_I2C_ALT = 14     # address 0x3C, bytes 0x4F 0x4B
+PATGEN_MODE_MAX = PATGEN_MODE_I2C_ALT
 
 _CRC16_TABLE = None
 _CRC32_TABLE = None
@@ -218,7 +227,7 @@ def pack_patgen_cfg(patgen_ctrl: int) -> bytes:
     """PATGEN_CFG payload: raw PATGEN_CTRL value (additive v1 extension)."""
     if patgen_ctrl & ~PATGEN_ALLOWED_MASK:
         raise ValueError(f"PATGEN_CTRL reserved bits set: 0x{patgen_ctrl:08X}")
-    if (patgen_ctrl & PATGEN_MODE_MASK) >> PATGEN_MODE_SHIFT > PATGEN_MODE_UART_SINGLE:
+    if (patgen_ctrl & PATGEN_MODE_MASK) >> PATGEN_MODE_SHIFT > PATGEN_MODE_MAX:
         raise ValueError(f"undefined patgen mode: 0x{patgen_ctrl:08X}")
     return struct.pack("<I", patgen_ctrl)
 

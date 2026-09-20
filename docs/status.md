@@ -941,6 +941,34 @@ Files: `host/la_live_web/static/index.html`, `host/tests/test_live_web.py`,
 this ledger. The user's running bridge must be restarted and the tab
 hard-refreshed to pick up the fix.
 
+### Full-USB live pivot - V10 pattern-generator traffic variants (2026-09-20)
+
+**User-directed: eight new `la_patgen` modes for realistic traffic and error
+cases.** PATGEN_CTRL.MODE 7-14: `uart_text` (`Hello, LA!\r\n`), `uart_bin`
+(0x00..0x0F ramp), `uart_ferr` (low stop bit → FRAME_ERR), `spi_multi`
+(0xDEADBEEF under one CS), `spi16` (two 16-bit words 0x1234 0xABCD),
+`i2c_read` (0xA1 + master NACK), `i2c_nack` (data NACK), `i2c_alt`
+(address 0x3C, bytes 0x4F 0x4B). Modes 0-6 are unchanged; the generator still
+drives one protocol at a time. Files: `docs/regmap.yaml` (+`gen`),
+`fpga/rtl/la_patgen.sv`, `fpga/tb/tb_la_patgen.sv`,
+`common/la_proto/src/la_proto.c` (mode max now `I2C_ALT`),
+`tests/native/native_tests.c` (mode 7/14 accepted, 15 rejected),
+`host/la_cli/{protocol.py,commands.py}`, `docs/using-the-analyzer.md`, the
+portal `fpga-capture.ts` (`la-patgen`), this ledger.
+
+Verification: `lint` 12/12 zero warnings; `sim` 12/12 with the extended
+patgen testbench (generalized UART/SPI/I2C decode tasks and eight new
+scenarios); `test-native` 18/18; `test-host` 115; `bit` PASS (timing met, DRC
+clean); `fw-zynq`/`jtag-zynq` PASS with the new XSA and protocol validation;
+bench over `serial://COM13`: all eight modes decode (text found, ramp found,
+133 FRAME_ERRs, 4C41, DEADBEEF, 16-bit words, address 0x50/0x3C, 57 NACKs);
+`release` 22/22; `boot` USB BOOT.BIN and `package` wheel 87,338 B rebuilt.
+Evidence: `build/reports/v10-patgen-variants.md`,
+`build/reports/v10-patgen-evidence.txt`. Notes: the spi16 evidence script read
+the 2-byte payload big-endian (decoder emits little-endian bytes; values are
+0x1234/0xABCD), and a session's first events may include a partial-frame
+FRAME_ERR by design. The [HUMAN] SD boot remains separate.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |
