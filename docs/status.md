@@ -774,6 +774,38 @@ clean. Evidence: `build/reports/usb-v05-docs.md`. The full USB-profile
 `boot`/`package` run is V06. Next: V06 release (build/load/package the USB
 profile, [HUMAN] SD boot and tag authorization remain separate gates).
 
+### Full-USB live pivot - V06 release build (2026-09-20, bench/tooling)
+
+**V06 build and packaging pass; the [HUMAN] SD boot and the tag remain
+blocked/unauthorized.** `python tools/run.py fw-zynq` (default profile) built
+`la_app_usb.elf` (text 210,864 / data 3,720 / bss 453,504, SHA-256
+`14A002EA...B4B567`); `boot` produced **BOOT.BIN 2,412,784 bytes** with
+`BOOT profile: usb (application la_app_usb)` and staged `la_fw.elf`
+1,196,464 bytes whose SHA-256 matches the built ELF; the staged `fsbl.elf`
+matches the workspace FSBL (`9CF0104E...`); `package` wrote the manifest with
+`"profile": "usb"`, the optional gateway ESP32 set (bootloader 21,056 B,
+partition table 3,072 B, `la_gateway.bin` 950,768 B) and the 80,340-byte wheel
+(`6CA23B6C...`) that now contains `host/la_live_web/*` plus the `la-cli` and
+`la-web` console scripts; `release` PASS 22/22. `jtag-zynq` (default profile)
+loaded the freshly built USB ELF and `ping serial://COM13` answered
+`fw 0x00090000 pl 0x4C410002`; the V04 bridge suite re-ran **8/8** against that
+image. Blocked, not claimed: the **[HUMAN] SD boot** (JP5=JTAG on the bench)
+and the **`v1.0` tag/publication** (no release authorization). Evidence:
+`build/reports/usb-v06-release.md`; per-target JSON under `build/reports/`.
+The gateway profile build path is unchanged and its last build/bench evidence
+(U05) stands; the V00 flip only changed the default selection.
+
+### Full-USB live pivot - V00-V06 closed (2026-09-20)
+
+**The pivot is implemented end to end.** V00 scope freeze and USB default,
+V01 bridge contract, V02 portable bridge with host tests, V03 CLI/browser
+integration, V04 USB live gates 8/8, V05 docs and profile-aware packaging,
+V06 USB-profile build/package/release. Open items, all explicit: the [HUMAN]
+visual browser smoke, the [HUMAN] SD boot of the USB-profile BOOT.BIN, tag
+authorization, and the optional gateway-profile work (P9.4 Wi-Fi tuning, the
+ESP32-S3 port) retained as deferred features. No wireless or browser feature
+was removed and the U00-U09 evidence is untouched.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |
