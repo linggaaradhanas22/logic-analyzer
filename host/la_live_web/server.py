@@ -90,7 +90,9 @@ class _LiveWebHandler(BaseHTTPRequestHandler):
 
 class _LiveWebServer(ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = True
+    # Windows SO_REUSEADDR lets a second process steal a bound port; the
+    # single-owner contract needs a real bind failure instead.
+    allow_reuse_address = False
     block_on_close = False
 
     def __init__(self, address, handler, hub: LiveEventHub, page: bytes,

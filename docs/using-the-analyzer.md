@@ -266,12 +266,32 @@ internal pattern generator (no jumpers):
 
 ## 7. Browser live view
 
-The gateway serves an embedded page on port 80 while a live session runs:
+Since the 2026-09-20 V00 pivot the live view is hosted on the PC (V03). The
+bridge consumes the same decoded events as `la-cli live`, keeps a bounded
+replay ring and serves the page over SSE; see `docs/live-web.md` for the
+frozen contract.
 
-1. Start a live session (step 6) or `la-cli live -t ... --decoder ...`.
-2. Open `http://la-esp32.local/` (or the IP from the ESP32 boot log).
-3. The page shows per-decoder tabs with decoded bytes, sample deltas and a
-   stats bar; it reconnects automatically if the session restarts.
+```powershell
+# Serve http://127.0.0.1:8080 while decoding the UART patgen source
+.\.venv\Scripts\la-cli.exe live -t serial://COM13 --decoder uart:rx=0,baud=115200 `
+    --patgen uart --serve
+
+# Equivalent standalone entry point
+.\.venv\Scripts\la-web.exe -t serial://COM13 --decoder uart:rx=0,baud=115200
+```
+
+1. Start the command; it prints `live web view: http://127.0.0.1:8080/`.
+2. Open that URL: per-decoder tabs with decoded bytes, sample deltas and a
+   stats bar (target, state, events, ring, drops).
+3. The page reconnects automatically after a reload; a second feed gets HTTP
+   `409` (single-client policy) and the bridge releases the analyzer port on
+   Ctrl+C or when `--count`/`--timeout` ends the session.
+
+The bridge owns the analyzer target while it runs, so stop it before starting
+another `la-cli` session on the same port. A slow browser drops messages
+(counted in the stats bar) instead of blocking the link. The host bridge works
+over any target (`serial://` or `tcp://`); the gateway profile also keeps its
+ESP32-hosted page on port 80 (P10.1) while a gateway live session runs.
 
 No external assets or internet access are needed.
 
@@ -314,6 +334,8 @@ of the Wi-Fi TCP leg; see `docs/limits.md`.
 | `la-cli abort -t URI` | Abort a running capture. |
 | `la-cli capture -t URI [options]` | Arm a burst capture and export `.sr`/`.vcd`/`.png`. |
 | `la-cli live -t URI [options]` | Stream decoded UART/SPI/I²C events. |
+| `la-cli live -t URI ... --serve [--bind HOST] [--port N]` | Stream the same events to the host browser page (V03). |
+| `la-cli web -t URI [options]` / `la-web` | Standalone host live web view (same implementation as `live --serve`). |
 | `la-cli trace -t URI [--start\|--stop\|--dump]` | Task/queue trace ring. |
 | `la-cli link -t URI --spi\|--uart [--clock MHz]` | Select the burst transport. |
 

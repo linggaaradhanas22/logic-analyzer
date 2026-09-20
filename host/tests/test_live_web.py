@@ -12,9 +12,11 @@ import json
 import time
 
 import pytest
+from click.testing import CliRunner
 
 from host.la_cli import protocol as p
 from host.la_cli.client import AnalyzerClient
+from host.la_cli.commands import cli, web
 from host.la_cli.transport import open_uri
 from host.la_live_web import (
     HubFull,
@@ -295,3 +297,43 @@ def test_bridge_publishes_mock_live_frames(analyzer) -> None:
         assert text == "LA-TEST\n" * 3
     finally:
         hub.detach(feed)
+
+
+# -- CLI integration (V03) --------------------------------------------------
+
+
+def test_live_serve_command_with_mock(analyzer) -> None:
+    mock = analyzer("live")
+    result = CliRunner().invoke(cli, ["live", "-t", mock.uri, "--serve",
+                                      "--port", "0"])
+    assert result.exit_code == 0, result.output
+    assert "live web view: http://127.0.0.1:" in result.output
+    assert "24 events in 3 messages" in result.output
+
+
+def test_web_command_count_limits_the_feed(analyzer) -> None:
+    mock = analyzer("live")
+    result = CliRunner().invoke(web, ["-t", mock.uri, "--port", "0",
+                                      "--count", "5"])
+    assert result.exit_code == 0, result.output
+    assert "5 events in 1 message" in result.output
+
+
+def test_live_serve_rejects_csv(analyzer) -> None:
+    mock = analyzer("live")
+    result = CliRunner().invoke(cli, ["live", "-t", mock.uri, "--serve", "--csv"])
+    assert result.exit_code != 0
+    assert "cannot be combined" in result.output
+
+
+def test_web_bind_failure_is_reported(analyzer) -> None:
+    mock = analyzer("live")
+    blocker = LiveWebServer(LiveEventHub(), port=0)
+    blocker.start()
+    try:
+        result = CliRunner().invoke(web, ["-t", mock.uri, "--port",
+                                          str(blocker.port)])
+        assert result.exit_code != 0
+        assert "cannot bind the live web view" in result.output
+    finally:
+        blocker.stop()

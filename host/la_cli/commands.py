@@ -289,26 +289,10 @@ def _parse_decoder_spec(spec: str, sample_rate_hz: int,
     raise click.BadParameter("decoder must be uart:..., spi:... or i2c:...")
 
 
-@cli.command(help="Decoded live events: --decoder uart:rx=0,baud=115200 (P7.5).")
-@click.option("--target", "-t", required=True, help="analyzer link target URI")
-@click.option("--decoder", "decoder_spec", default="uart:rx=0,baud=115200", show_default=True,
-              help="uart:rx=CH,baud=BAUD | spi:sck=CH,mosi=CH,cs=CH,... | i2c:scl=CH,sda=CH")
-@click.option("--rate", default="100M", show_default=True,
-              help="sample rate used to derive samples/bit for the decoder")
-@click.option("--patgen", "patgen_mode",
-              type=click.Choice(["off", "counter", "walking", "prbs", "uart", "spi", "i2c"]),
-              default="off", show_default=True,
-              help="configure the on-board pattern generator before starting")
-@click.option("--count", default=None, type=int, help="stop after N events")
-@click.option("--compact", is_flag=True,
-              help="request the compact EVT_BLOCK event encoding (P9.2)")
-@click.option("--stop-on", "stop_on", default=None,
-              help="stop when the decoder matches these hex bytes (P7.7), e.g. 4c41")
-@click.option("--csv", is_flag=True, help="emit CSV rows instead of text")
-@click.option("--timeout", "timeout_s", default=None, type=float,
-              help="overall deadline in seconds (default: until --count or Ctrl+C)")
-def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int | None,
-         compact: bool, stop_on: str | None, csv: bool, timeout_s: float | None) -> None:
+def _prepare_live(decoder_spec: str, rate: str, stop_on: str | None):
+    """Shared live-option parsing for `la-cli live` and `la-cli web` (V03).
+
+    Returns (decoder_config, stream_config, stop_bytes, actual_rate_hz)."""
     rate_hz = _parse_size(rate)
     sample_div = _sample_div(rate_hz)
     actual_rate = FS_HZ // (sample_div + 1)
@@ -325,15 +309,114 @@ def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int
         txn_max_run=0x00FFFFFF,
         live_flush_cycles=200_000,
     )
+    return decoder_cfg, stream_config, stop_bytes, actual_rate
+
+
+def _configure_patgen(client: AnalyzerClient, patgen_mode: str) -> None:
+    if patgen_mode == "off":
+        return
+    # la_patgen latches mode/DIV on the EN rising edge; clear EN first so a
+    # repeated --patgen session relatches instead of keeping the previous mode.
+    client.configure_patgen(0)
+    client.configure_patgen(p.PATGEN_EN_MASK | (PATGEN_MODES[patgen_mode] << 4))
+
+
+def _serve_live(client: AnalyzerClient, target: str, decoder_cfg: bytes,
+                stream_config: bytes, count: int | None, compact: bool,
+                stop_bytes: bytes | None, timeout_s: float | None,
+                bind: str, port: int) -> dict:
+    """V03: runs a live session with the host web bridge attached.
+
+    The bridge owns the target for the session (the caller already opened it);
+    on teardown the live pump sends LIVE_STOP and the server stops. Events are
+    counted, not retained, so a long session stays bounded; `count` caps the
+    browser feed exactly even when the final device batch overshoots."""
+    from ..la_live_web import LiveEventHub, LiveWebServer
+
+    hub = LiveEventHub()
+    hub.target = target
+    server = LiveWebServer(hub, host=bind, port=port)
+    try:
+        url = server.start()
+    except OSError as exc:
+        raise click.ClickException(
+            f"cannot bind the live web view on {bind}:{port}: {exc}"
+        ) from exc
+    click.echo(f"live web view: {url} (target {target}; Ctrl+C to stop)")
+    hub.state = "streaming"
+
+    def publish(frame_events) -> None:
+        limit = None if count is None else max(0, count - hub.events)
+        hub.publish_frame(frame_events, limit=limit)
+
+    try:
+        try:
+            client.live(
+                decoder_cfg, config=stream_config, count=count,
+                timeout_s=timeout_s,
+                event_format=p.EVT_FORMAT_BLOCK if compact else p.EVT_FORMAT_RECORDS,
+                stop_on_match=stop_bytes is not None,
+                collect_events=False,
+                on_event=publish,
+            )
+        except KeyboardInterrupt:
+            client.stop_live()
+            click.echo("live stopped")
+    finally:
+        hub.state = "idle"
+        server.stop()
+    stats = hub.stats()
+    message_word = "message" if stats["messages"] == 1 else "messages"
+    click.echo(
+        f"live web: {stats['events']} events in {stats['messages']} {message_word} "
+        f"({stats['dropped']} dropped: {stats['ring_dropped']} ring, "
+        f"{stats['client_dropped']} client)"
+    )
+    if client.live_match_index is not None:
+        click.echo(f"stop-on match at sample {client.live_match_index}")
+    return stats
+
+
+@cli.command(help="Decoded live events: --decoder uart:rx=0,baud=115200 (P7.5).")
+@click.option("--target", "-t", required=True, help="analyzer link target URI")
+@click.option("--decoder", "decoder_spec", default="uart:rx=0,baud=115200", show_default=True,
+              help="uart:rx=CH,baud=BAUD | spi:sck=CH,mosi=CH,cs=CH,... | i2c:scl=CH,sda=CH")
+@click.option("--rate", default="100M", show_default=True,
+              help="sample rate used to derive samples/bit for the decoder")
+@click.option("--patgen", "patgen_mode",
+              type=click.Choice(["off", "counter", "walking", "prbs", "uart", "spi", "i2c"]),
+              default="off", show_default=True,
+              help="configure the on-board pattern generator before starting")
+@click.option("--count", default=None, type=int, help="stop after N events")
+@click.option("--compact", is_flag=True,
+              help="request the compact EVT_BLOCK event encoding (P9.2)")
+@click.option("--stop-on", "stop_on", default=None,
+              help="stop when the decoder matches these hex bytes (P7.7), e.g. 4c41")
+@click.option("--csv", is_flag=True, help="emit CSV rows instead of text")
+@click.option("--serve", is_flag=True,
+              help="serve the host live web view instead of printing events (V03)")
+@click.option("--bind", default="127.0.0.1", show_default=True,
+              help="live web view bind address (--serve)")
+@click.option("--port", default=8080, show_default=True, type=int,
+              help="live web view port (--serve)")
+@click.option("--timeout", "timeout_s", default=None, type=float,
+              help="overall deadline in seconds (default: until --count or Ctrl+C)")
+def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int | None,
+         compact: bool, stop_on: str | None, csv: bool, serve: bool, bind: str,
+         port: int, timeout_s: float | None) -> None:
+    if serve and csv:
+        raise click.BadParameter("--csv cannot be combined with --serve")
+    decoder_cfg, stream_config, stop_bytes, _actual_rate = _prepare_live(
+        decoder_spec, rate, stop_on
+    )
 
     client = _make_client(target)
     try:
-        if patgen_mode != "off":
-            # la_patgen latches mode/DIV on the EN rising edge; clear EN first
-            # so a repeated --patgen session relatches instead of keeping the
-            # previous mode.
-            client.configure_patgen(0)
-            client.configure_patgen(p.PATGEN_EN_MASK | (PATGEN_MODES[patgen_mode] << 4))
+        _configure_patgen(client, patgen_mode)
+        if serve:
+            _serve_live(client, target, decoder_cfg, stream_config, count, compact,
+                        stop_bytes, timeout_s, bind, port)
+            return
         try:
             events = client.live(
                 decoder_cfg, config=stream_config, count=count,
@@ -374,6 +457,53 @@ def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int
         f"({client.live_stats['wire_bytes']} wire bytes, "
         f"{'compact' if compact else 'v1'})"
     )
+
+
+@cli.command(name="web", help="Host live web view (V03): serve decoded events at http://HOST:PORT/.")
+@click.option("--target", "-t", required=True, help="analyzer link target URI")
+@click.option("--decoder", "decoder_spec", default="uart:rx=0,baud=115200", show_default=True,
+              help="uart:rx=CH,baud=BAUD | spi:sck=CH,mosi=CH,cs=CH,... | i2c:scl=CH,sda=CH")
+@click.option("--rate", default="100M", show_default=True,
+              help="sample rate used to derive samples/bit for the decoder")
+@click.option("--patgen", "patgen_mode",
+              type=click.Choice(["off", "counter", "walking", "prbs", "uart", "spi", "i2c"]),
+              default="off", show_default=True,
+              help="configure the on-board pattern generator before starting")
+@click.option("--count", default=None, type=int, help="stop after N events")
+@click.option("--compact", is_flag=True,
+              help="request the compact EVT_BLOCK event encoding (P9.2)")
+@click.option("--stop-on", "stop_on", default=None,
+              help="stop when the decoder matches these hex bytes (P7.7), e.g. 4c41")
+@click.option("--bind", default="127.0.0.1", show_default=True,
+              help="live web view bind address")
+@click.option("--port", default=8080, show_default=True, type=int,
+              help="live web view port")
+@click.option("--timeout", "timeout_s", default=None, type=float,
+              help="overall deadline in seconds (default: until --count or Ctrl+C)")
+def web(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int | None,
+        compact: bool, stop_on: str | None, bind: str, port: int,
+        timeout_s: float | None) -> None:
+    """`la-web` / `la-cli web`: the same implementation as `live --serve`."""
+    decoder_cfg, stream_config, stop_bytes, _actual_rate = _prepare_live(
+        decoder_spec, rate, stop_on
+    )
+    client = _make_client(target)
+    try:
+        _configure_patgen(client, patgen_mode)
+        _serve_live(client, target, decoder_cfg, stream_config, count, compact,
+                    stop_bytes, timeout_s, bind, port)
+    except (AnalyzerError, TransportError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    finally:
+        client.close()
+
+
+def web_main() -> int:
+    """Console-script entry point for `la-web` (same command as `la-cli web`)."""
+    try:
+        return web.main(prog_name="la-web", standalone_mode=True)
+    except SystemExit as exc:  # pragma: no cover - click exits through SystemExit
+        return int(exc.code) if exc.code is not None else 0
 
 
 @cli.command(name="trace", help="P8.3 task/queue trace: --start, --stop or --dump (default).")

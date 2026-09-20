@@ -25,6 +25,7 @@ usb-bench = [
 
 [project.scripts]
 la-cli = "host.la_cli:main"
+la-web = "host.la_cli.commands:web_main"
 
 [tool.setuptools]
 packages = ["host", "host.la_cli", "host.la_live_web", "host.la_sigrok_bridge", "tools", "tools.models"]

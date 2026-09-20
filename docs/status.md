@@ -703,6 +703,29 @@ green. No hardware result claimed; V03 wires the CLI and the [HUMAN] browser
 smoke. Next: V03 (`la-cli live --serve` / `la-web`,
 `docs/using-the-analyzer.md`).
 
+### Full-USB live pivot - V03 CLI integration (2026-09-20)
+
+**V03 implementation complete; the browser smoke is [HUMAN].**
+`la-cli live ... --serve [--bind HOST] [--port N]` now starts the bridge
+instead of printing events, and the new `la-cli web` command plus the `la-web`
+console script are the standalone entry points; both share one implementation
+(`_serve_live`, `_prepare_live`, `_configure_patgen`) and print the bound URL.
+The serve path opens the target first (one owner), counts events without
+retaining them, caps the feed exactly at `--count` even when the device's final
+batch overshoots, prints the session summary, sends LIVE_STOP and releases the
+port. The Windows bind is exclusive (`allow_reuse_address = False`) so a second
+server reports `cannot bind the live web view` instead of silently sharing the
+port. Files: `host/la_cli/commands.py`, `host/la_live_web/server.py`,
+`host/tests/test_live_web.py`, `pyproject.toml` (`la-web` script),
+`docs/using-the-analyzer.md` section 7 + command reference.
+
+Verification: `python tools/run.py test-host` PASS 107 passed (20 in
+`test_live_web.py`, including `live --serve` and `la-web` against the mock
+analyzer, the `--count` feed limit and the bind-failure path). The [HUMAN]
+browser smoke (open `http://127.0.0.1:8080`, render patgen UART events, reload
+reconnect) has not been performed in a browser; it is scheduled with the V04
+bench run. Next: V04 USB live E2E gates over `serial://COM13`.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |
