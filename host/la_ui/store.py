@@ -42,6 +42,7 @@ class Capture:
         self.trigger_index = trigger_index
         self.name = name or self.id
         self.source = source
+        self.has_signal = len(self.data) > 0
         self.created = time.time()
         self.annotations: dict[int, list[dict]] = annotations or {}
         self.warnings = list(warnings or [])
@@ -76,6 +77,7 @@ class Capture:
             "total_samples": int(self.total_samples),
             "trigger_index": self.trigger_index,
             "created": self.created,
+            "has_signal": self.has_signal,
             "warnings": list(self.warnings),
             "annotations": {str(slot): len(events)
                             for slot, events in self.annotations.items()},
