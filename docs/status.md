@@ -969,6 +969,37 @@ the 2-byte payload big-endian (decoder emits little-endian bytes; values are
 0x1234/0xABCD), and a session's first events may include a partial-frame
 FRAME_ERR by design. The [HUMAN] SD boot remains separate.
 
+### Unified analyzer UI - planning (2026-09-20)
+
+**Planning complete; implementation not started.** User-directed scope: one
+host-served browser workspace (`la-ui`) covering connection, burst capture
+with a Saleae-style waveform viewer, live decoded events on a time-aligned
+timeline, host-side capture decoding, exports, trace and the pattern
+generator. Wrote `docs/unified-ui-plan.md` (packets W00-W09 with entry/exit
+gates) and added the pointer in `docs/plan.md`. Frozen decisions were settled
+with the user before writing (section 2 of the package): local browser page
+via a stdlib-only server; vanilla JS + Canvas with no build step; full
+waveform feature set (zoom/pan, ruler, cursors A/B, channel layout, capture
+decode overlays, trigger/pre-post markers, edge search, screenshots, view
+persistence); live stays decoded-events-only; host-side capture decode via
+the existing `la_native` C ABI DLL; 1M-sample viewer target with a warning
+above; direct-USB only (`serial://COMx`) with the ESP32/gateway path rejected
+and no `LINK_CFG` control; single workspace; `la-cli` kept; existing PL
+trigger only; browser downloads; offline `.sr`/`.vcd`/`.csv` open; one
+capture at a time; legacy page kept at `/legacy`; host tests + [HUMAN]
+browser smoke + bench E2E; `la-ui` entry point; timeline trace; Chrome/Edge;
+dark theme; 100,000-event live bound; session-memory capture store; client
+canvas PNG; auto-stop on mode switch; both CSV kinds; explicit Decode button.
+The package is explicitly host-only: no firmware, PL, register-map or
+protocol change, and any device-side need is a stop-and-ask condition. Files:
+`docs/unified-ui-plan.md` (new), `docs/plan.md`, this ledger. Verification:
+documentation-only change; `git diff --check` clean; the packet list, gates
+and frozen-decision table were reviewed against the current host code
+(`host/la_cli`, `host/la_live_web`, `common/la_decode`, `CMakeLists.txt`,
+`tools/run.py`) and the recorded V04/V09 evidence. No firmware build, bench
+run or UI result is claimed. Next: await the user's execution instruction;
+begin W00/W01 only when authorized.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

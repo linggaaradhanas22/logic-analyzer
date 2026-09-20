@@ -67,6 +67,17 @@ executable, not only planned:
   features, retained and optional/deferred for the USB-first default. P9.1's
   SPI findings and the U00-U09 evidence stay valid and are not rewritten.
 
+**Unified UI planning (2026-09-20, user-directed).** The interactive surface
+consolidates into one host-served browser workspace (`la-ui`): connection,
+burst capture with a Saleae-style waveform viewer, live decoded events on a
+time-aligned timeline, host-side capture decoding, exports, trace and the
+pattern generator. The package is
+[unified-ui-plan.md](unified-ui-plan.md) with packets W00-W09. It is a
+host-only change: no firmware, PL, register-map or protocol change; the
+transport is direct USB only and the ESP32/gateway path is rejected as a UI
+connection; the legacy three-pane page stays at `/legacy`; `la-cli` remains
+the scripted interface. Planning only until an execution instruction.
+
 The local preset/BSP exposes USB0 and the `usbps` / `XUsbPs` driver, but device
 enumeration, physical configuration and throughput are unverified. The new
 contract corrects the initial driver and power assumptions and retains the
