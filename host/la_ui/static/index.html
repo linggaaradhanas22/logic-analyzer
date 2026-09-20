@@ -2,9 +2,169 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Logic Analyzer UI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Logic Analyzer — unified UI</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <p>The unified workspace page is built in packet W03.</p>
+<header id="topbar">
+  <div class="brand">LA<span class="dim"> unified</span></div>
+  <label class="field"><span>Ports</span>
+    <select id="port-select"><option value="">scan ports…</option></select>
+  </label>
+  <button id="btn-refresh-ports" class="ghost" title="Rescan serial ports">Rescan</button>
+  <label class="field grow"><span>Target</span>
+    <input id="target-input" type="text" placeholder="serial://COM13" spellcheck="false">
+  </label>
+  <button id="btn-connect" class="primary" disabled>Connect</button>
+  <button id="btn-disconnect" class="ghost" disabled>Disconnect</button>
+  <span id="link-pill" class="pill">offline</span>
+  <span id="fw-info" class="dim"></span>
+  <button id="btn-ping" class="ghost" disabled>Ping</button>
+</header>
+
+<main id="workspace">
+  <aside id="sidebar">
+    <section class="panel">
+      <h2>Capture</h2>
+      <div class="grid2">
+        <label><span>Rate</span>
+          <select id="cap-rate">
+            <option value="1M">1 MS/s</option>
+            <option value="10M" selected>10 MS/s</option>
+            <option value="100M">100 MS/s</option>
+          </select>
+        </label>
+        <label><span>Words</span><input id="cap-words" value="64k" spellcheck="false"></label>
+        <label><span>Mode</span>
+          <select id="cap-mode">
+            <option value="raw" selected>raw (4 samples/word)</option>
+            <option value="txn">txn (transitions)</option>
+          </select>
+        </label>
+        <label><span>Pre</span><input id="cap-pre" type="number" value="0" min="0" max="32768"></label>
+        <label><span>Trig rise</span><input id="cap-trig-rise" type="number" min="0" max="7" placeholder="—"></label>
+        <label><span>Trig fall</span><input id="cap-trig-fall" type="number" min="0" max="7" placeholder="—"></label>
+        <label><span>Patgen</span><select id="cap-patgen"></select></label>
+        <label><span>Timeout s</span><input id="cap-timeout" type="number" value="30" min="1" max="600"></label>
+      </div>
+      <div class="row">
+        <button id="btn-capture" class="primary" disabled>Capture</button>
+        <button id="btn-abort" class="ghost" disabled>Abort</button>
+      </div>
+      <div id="cap-status" class="status dim">idle</div>
+    </section>
+
+    <section class="panel">
+      <h2>Decoders</h2>
+      <label><span>Slot 0</span><input id="dec-slot-0" spellcheck="false" placeholder="uart:rx=0,baud=115200"></label>
+      <label><span>Slot 1</span><input id="dec-slot-1" spellcheck="false" placeholder="spi:sck=1,mosi=2,cs=3"></label>
+      <label><span>Slot 2</span><input id="dec-slot-2" spellcheck="false" placeholder="i2c:scl=4,sda=5"></label>
+      <div class="row wrap">
+        <button id="btn-live-config" class="ghost" disabled>Apply live config</button>
+        <button id="btn-decode" class="primary" disabled>Decode capture</button>
+      </div>
+      <div id="decode-status" class="status dim">no capture</div>
+    </section>
+
+    <section class="panel">
+      <h2>Channels</h2>
+      <div id="chan-list"></div>
+      <div class="row wrap">
+        <button id="btn-fit" class="ghost">Fit</button>
+        <button id="btn-zoom-in" class="ghost">+</button>
+        <button id="btn-zoom-out" class="ghost">−</button>
+        <button id="btn-zoom-cursors" class="ghost">Zoom A/B</button>
+        <button id="btn-cursor-a" class="ghost">Cursor A</button>
+        <button id="btn-cursor-b" class="ghost">Cursor B</button>
+        <button id="btn-prev-edge" class="ghost">◀ edge</button>
+        <button id="btn-next-edge" class="ghost">edge ▶</button>
+        <button id="btn-screenshot" class="ghost">PNG</button>
+      </div>
+      <label><span>Search 0/1/x</span><input id="search-pattern" placeholder="1011" spellcheck="false"></label>
+      <div class="row">
+        <button id="btn-search-next" class="ghost">Find next</button>
+        <button id="btn-search-prev" class="ghost">Find prev</button>
+      </div>
+      <div id="measure-text" class="status dim">no capture</div>
+      <div id="view-status" class="status dim"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Export</h2>
+      <div class="row wrap">
+        <button id="btn-export-sr" class="ghost" disabled>.sr</button>
+        <button id="btn-export-vcd" class="ghost" disabled>.vcd</button>
+        <button id="btn-export-png" class="ghost" disabled>.png</button>
+        <button id="btn-export-csv-events" class="ghost" disabled>events .csv</button>
+        <button id="btn-export-csv-samples" class="ghost" disabled>samples .csv</button>
+      </div>
+      <label class="file"><span>Open .sr / .vcd / .csv</span>
+        <input id="open-file" type="file" accept=".sr,.vcd,.csv">
+      </label>
+      <div id="export-status" class="status dim"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Trace</h2>
+      <div class="row wrap">
+        <button id="btn-trace-start" class="ghost" disabled>Start</button>
+        <button id="btn-trace-stop" class="ghost" disabled>Stop</button>
+        <button id="btn-trace-dump" class="primary" disabled>Dump</button>
+      </div>
+      <div id="trace-status" class="status dim">no dump</div>
+    </section>
+
+    <section class="panel">
+      <h2>Pattern generator</h2>
+      <label><span>Mode</span><select id="patgen-mode"></select></label>
+      <div class="row"><button id="btn-patgen" class="ghost" disabled>Arm</button></div>
+      <div id="patgen-status" class="status dim"></div>
+    </section>
+  </aside>
+
+  <section id="viewer">
+    <div class="viewer-head">
+      <span id="capture-title">no capture</span>
+      <span id="capture-sub" class="dim"></span>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="wave-canvas"></canvas>
+      <div id="wave-empty" class="empty">Capture or open a file to view signals</div>
+    </div>
+
+    <div class="viewer-head">
+      <span>Live</span>
+      <span id="live-summary" class="dim">idle</span>
+      <span class="spacer"></span>
+      <button id="btn-live-stop-all" class="ghost" disabled>Stop all</button>
+    </div>
+    <div id="live-panes"></div>
+
+    <div class="viewer-head">
+      <span>Trace timeline</span>
+      <span id="trace-summary" class="dim">no dump</span>
+    </div>
+    <div class="canvas-wrap trace-wrap">
+      <canvas id="trace-canvas" class="trace"></canvas>
+      <div id="trace-empty" class="empty">Dump the trace ring to see the task/queue timeline</div>
+    </div>
+  </section>
+</main>
+
+<footer id="statusbar">
+  <span id="sb-session">session idle</span>
+  <span id="sb-events">events 0</span>
+  <span id="sb-drops">drops 0</span>
+  <span id="sb-warning" class="warn"></span>
+  <span class="spacer"></span>
+  <span id="page-version" class="dim"></span>
+</footer>
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/waveform.js"></script>
+<script src="/static/timeline.js"></script>
+<script src="/static/app.js"></script>
 </body>
 </html>

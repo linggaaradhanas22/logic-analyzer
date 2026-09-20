@@ -1047,6 +1047,32 @@ cancel); `la-cli ui --help` PASS. The legacy V09 suite still passes unchanged.
 No device or bench result is claimed and the workspace page is a W03
 deliverable. Next: W03 workspace shell.
 
+### Unified UI - W03 workspace page, waveform renderer and live timeline (2026-09-20)
+
+**W03 complete locally (covers W03-W04 page scope).** New
+`host/la_ui/static/{index.html,style.css,app.js,waveform.js,timeline.js}`
+replace the temporary shell: dark single-workspace layout with the connection
+bar, capture/decoder/channel/export/trace/patgen panels, the waveform canvas,
+three live panes and the trace canvas. `waveform.js` renders the `LAEN`
+envelope with zoom/pan, ruler, cursors A/B and measurements, channel
+labels/colors/order/heights, trigger and pre/post markers, edge and 0/1/x
+pattern search, annotation rows and a PNG screenshot; `timeline.js` has the
+bounded (100k events/slot) live event timeline with auto-follow and the trace
+lane/spans/markers renderer; `app.js` owns connection, capture jobs, decode,
+exports, live per-slot control over SSE, trace, patgen, offline open,
+`localStorage` settings and the page/server version marker. New
+`host/tests/test_ui_page.py` and `host/tests/page_check.mjs` (a real DOM-stub
+run under Node: `node --check` for every script, an unknown-id audit against
+index.html, and a scripted exercise of the renderers).
+
+Verification: `.venv\Scripts\python.exe -m pytest host/tests -q` PASS 149
+passed (5 new page tests); `node host/tests/page_check.mjs` PAGE CHECK OK;
+real headless Chrome via the DevTools protocol served the page, injected a
+synthetic capture and reported 3 live panes, 8 channel rows, 30,198 lit
+canvas pixels, the `page w10 | server w10` marker and **zero console errors**
+(evidence `build/reports/ui-w03-browser-smoke.txt`). The [HUMAN] click-through
+remains scheduled with W09. Next: W05/W06/W07 wiring tests, docs and bench.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |
