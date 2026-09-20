@@ -27,11 +27,14 @@
                cursor: pointer; }
   nav button.active { background: #0f1720; color: #7ec8ff; border-bottom-color: #0f1720; }
   main { padding: 0 14px 10px; }
-  pre.pane { display: none; margin: 0; height: 62vh; overflow-y: auto;
+  .pane-wrap { display: none; }
+  .pane-wrap.active { display: block; }
+  .pane-bar { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+  .pane-bar .label { color: #5d7284; font-size: 12px; }
+  pre.pane { margin: 0; height: 58vh; overflow-y: auto;
              background: #0f1720; border: 1px solid #26323c; border-radius: 0 4px 4px 4px;
              padding: 8px 10px; white-space: pre-wrap; word-break: break-all;
              contain: content; }
-  pre.pane.active { display: block; }
   .line { white-space: pre-wrap; word-break: break-all; }
   .t { color: #5d7284; }
   .b { color: #e8f4ff; }
@@ -44,8 +47,7 @@
 <body>
 <header>
   <h1>RTOS Logic Analyzer &mdash; host live view</h1>
-  <button id="start" class="ctl">Start</button>
-  <button id="stop" class="ctl" disabled>Stop</button>
+  <button id="stopall" class="ctl">Stop all</button>
   <span id="session" class="pill">idle</span>
   <span id="conn" class="pill">connecting</span>
   <span id="msg"></span>
@@ -56,9 +58,33 @@
   <button data-slot="2">Decoder 2</button>
 </nav>
 <main>
-  <pre id="pane0" class="pane active"></pre>
-  <pre id="pane1" class="pane"></pre>
-  <pre id="pane2" class="pane"></pre>
+  <div class="pane-wrap active" data-slot="0">
+    <div class="pane-bar">
+      <button class="ctl start" data-slot="0">Start</button>
+      <button class="ctl stop" data-slot="0" disabled>Stop</button>
+      <span class="pill slot-state" data-slot="0">unconfigured</span>
+      <span class="label" data-slot="0"></span>
+    </div>
+    <pre id="pane0" class="pane"></pre>
+  </div>
+  <div class="pane-wrap" data-slot="1">
+    <div class="pane-bar">
+      <button class="ctl start" data-slot="1">Start</button>
+      <button class="ctl stop" data-slot="1" disabled>Stop</button>
+      <span class="pill slot-state" data-slot="1">unconfigured</span>
+      <span class="label" data-slot="1"></span>
+    </div>
+    <pre id="pane1" class="pane"></pre>
+  </div>
+  <div class="pane-wrap" data-slot="2">
+    <div class="pane-bar">
+      <button class="ctl start" data-slot="2">Start</button>
+      <button class="ctl stop" data-slot="2" disabled>Stop</button>
+      <span class="pill slot-state" data-slot="2">unconfigured</span>
+      <span class="label" data-slot="2"></span>
+    </div>
+    <pre id="pane2" class="pane"></pre>
+  </div>
 </main>
 <footer>
   <span id="stats">no stats yet</span>
@@ -69,7 +95,7 @@
 const KINDS = {1:"BYTE",2:"FRAME_ERR",3:"PARITY_ERR",4:"START",5:"STOP",
                6:"DISCONT",7:"ADDRESS",8:"ACK",9:"NACK",10:"CS_ASSERT",
                11:"CS_RELEASE"};
-// Rendering budget: incoming records are coalesced and drawn once per
+// Rendering budget (V08): incoming records are coalesced and drawn once per
 // animation frame. The DOM keeps at most MAX_LINES lines per pane; when a
 // frame arrives with more than RENDER_BUDGET records, the oldest are counted
 // as display-skipped instead of freezing the page.
@@ -79,9 +105,8 @@ const RENDER_BUDGET = 2000;
 const panes = [document.getElementById("pane0"),
                document.getElementById("pane1"),
                document.getElementById("pane2")];
-const paneState = [{firstT: null, lines: 0},
-                   {firstT: null, lines: 0},
-                   {firstT: null, lines: 0}];
+const paneState = [{firstT: null}, {firstT: null}, {firstT: null}];
+let slotStates = ["unconfigured", "unconfigured", "unconfigured"];
 let displayed = 0;
 let displaySkipped = 0;
 let dropped = 0;
@@ -94,8 +119,8 @@ document.querySelectorAll("nav button").forEach(function (button) {
     document.querySelectorAll("nav button").forEach(function (other) {
       other.classList.toggle("active", other === button);
     });
-    panes.forEach(function (pane, slot) {
-      pane.classList.toggle("active", slot === Number(button.dataset.slot));
+    document.querySelectorAll(".pane-wrap").forEach(function (wrap) {
+      wrap.classList.toggle("active", Number(wrap.dataset.slot) === Number(button.dataset.slot));
     });
   });
 });
@@ -106,8 +131,17 @@ function setSessionState(state) {
   pill.textContent = state;
   pill.className = "pill" + (state === "streaming" ? " on" :
                              (state === "stopping" ? " busy" : ""));
-  document.getElementById("start").disabled = state !== "idle";
-  document.getElementById("stop").disabled = state !== "streaming";
+}
+
+function updateSlotUI() {
+  for (let slot = 0; slot < 3; slot += 1) {
+    const state = slotStates[slot] || "unconfigured";
+    const pill = document.querySelector('.slot-state[data-slot="' + slot + '"]');
+    pill.textContent = state;
+    pill.className = "pill" + (state === "streaming" ? " on" : "");
+    document.querySelector('.start[data-slot="' + slot + '"]').disabled = state !== "idle";
+    document.querySelector('.stop[data-slot="' + slot + '"]').disabled = state !== "streaming";
+  }
 }
 
 function updateCounts() {
@@ -117,13 +151,18 @@ function updateCounts() {
     (dropped ? " | dropped " + dropped : "");
 }
 
-function clearPanes() {
-  panes.forEach(function (pane) { pane.innerHTML = ""; });
-  paneState.forEach(function (state) { state.firstT = null; state.lines = 0; });
+function clearPane(slot) {
+  panes[slot].innerHTML = "";
+  paneState[slot].firstT = null;
+  pending = pending.filter(function (record) { return record.slot !== slot; });
+  updateCounts();
+}
+
+function clearAllPanes() {
+  for (let slot = 0; slot < 3; slot += 1) { clearPane(slot); }
   displayed = 0;
   displaySkipped = 0;
   dropped = 0;
-  pending = [];
   updateCounts();
 }
 
@@ -138,22 +177,45 @@ function post(path) {
   });
 }
 
-document.getElementById("start").addEventListener("click", function () {
-  const msg = document.getElementById("msg");
-  msg.textContent = "";
-  post("/control/start").then(function (body) {
-    clearPanes();
-    setSessionState(body.state || "streaming");
-  }).catch(function (error) {
-    msg.textContent = error.message;
+function applySlots(slots) {
+  if (Array.isArray(slots) && slots.length === 3) {
+    slotStates = slots;
+    updateSlotUI();
+  }
+}
+
+document.querySelectorAll(".start").forEach(function (button) {
+  button.addEventListener("click", function () {
+    const slot = Number(button.dataset.slot);
+    const msg = document.getElementById("msg");
+    msg.textContent = "";
+    post("/control/start?slot=" + slot).then(function (body) {
+      clearPane(slot);
+      applySlots(body.slots);
+    }).catch(function (error) {
+      msg.textContent = error.message;
+    });
   });
 });
 
-document.getElementById("stop").addEventListener("click", function () {
+document.querySelectorAll(".stop").forEach(function (button) {
+  button.addEventListener("click", function () {
+    const slot = Number(button.dataset.slot);
+    const msg = document.getElementById("msg");
+    msg.textContent = "";
+    post("/control/stop?slot=" + slot).then(function (body) {
+      applySlots(body.slots);
+    }).catch(function (error) {
+      msg.textContent = error.message;
+    });
+  });
+});
+
+document.getElementById("stopall").addEventListener("click", function () {
   const msg = document.getElementById("msg");
   msg.textContent = "";
   post("/control/stop").then(function (body) {
-    setSessionState(body.state || "idle");
+    applySlots(body.slots);
   }).catch(function (error) {
     msg.textContent = error.message;
   });
@@ -225,7 +287,6 @@ function render() {
       fragments.set(record.slot, fragment);
     }
     fragment.appendChild(makeLine(record.slot, record.kind, record.t, record.data));
-    paneState[record.slot].lines += 1;
     displayed += 1;
   });
   fragments.forEach(function (fragment, slot) {
@@ -245,12 +306,19 @@ function render() {
 
 function showStats(s) {
   document.getElementById("stats").textContent =
-    "target " + (s.target || "-") + " | decoder " + (s.decoder || "-") +
+    "target " + (s.target || "-") +
     " | events " + s.events + " | messages " + s.messages +
     " | ring " + s.ring + "/" + s.ring_capacity +
     " | dropped " + s.dropped;
   dropped = s.dropped;
   if (s.state && s.state !== sessionState) { setSessionState(s.state); }
+  applySlots(s.slots);
+  if (Array.isArray(s.slot_labels)) {
+    for (let slot = 0; slot < 3; slot += 1) {
+      document.querySelector('.label[data-slot="' + slot + '"]').textContent =
+        s.slot_labels[slot] || "";
+    }
+  }
   if (s.error) { document.getElementById("msg").textContent = s.error; }
   updateCounts();
 }
@@ -278,6 +346,7 @@ function connect() {
 }
 
 connect();
+updateSlotUI();
 </script>
 </body>
 </html>

@@ -18,7 +18,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from queue import Empty
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from .core import HubFull, LiveEventHub
 
@@ -70,7 +70,8 @@ class _LiveWebHandler(BaseHTTPRequestHandler):
         self.do_GET()
 
     def do_POST(self) -> None:  # noqa: N802
-        path = urlsplit(self.path).path
+        parsed = urlsplit(self.path)
+        path = parsed.path
         controller = self.server.controller
         if path not in ("/control/start", "/control/stop"):
             self._send_bytes(HTTPStatus.NOT_FOUND, "text/plain; charset=utf-8",
@@ -80,19 +81,47 @@ class _LiveWebHandler(BaseHTTPRequestHandler):
             self._send_json(HTTPStatus.CONFLICT,
                             {"error": "this bridge has no session controller"})
             return
-        if path == "/control/start":
-            if not controller.start():
-                self._send_json(HTTPStatus.CONFLICT, {
-                    "error": "a live session is already running",
-                    "state": controller.state,
-                })
+        query = parse_qs(parsed.query)
+        slot_text = (query.get("slot") or [None])[0]
+        slot: int | None = None
+        if slot_text is not None:
+            try:
+                slot = int(slot_text)
+            except ValueError:
+                self._send_json(HTTPStatus.BAD_REQUEST,
+                                {"error": f"invalid slot {slot_text!r}"})
                 return
-            self._send_json(HTTPStatus.OK, {"state": controller.state})
+            if not 0 <= slot <= 2:
+                self._send_json(HTTPStatus.BAD_REQUEST,
+                                {"error": "slot must be 0..2"})
+                return
+        if path == "/control/start":
+            if slot is None:
+                controller.start_all()
+                ok, message = True, "streaming"
+            else:
+                ok, message = controller.start_slot(slot)
+            if not ok:
+                self._send_json(HTTPStatus.CONFLICT,
+                                {"error": message, "slot": slot,
+                                 "slots": controller.slot_states()})
+                return
+            self._send_json(HTTPStatus.OK, {
+                "slot": slot,
+                "state": controller.state,
+                "message": message,
+                "slots": controller.slot_states(),
+            })
             return
-        stopped = controller.stop()
+        if slot is None:
+            stopped = controller.stop_all()
+        else:
+            stopped = controller.stop_slot(slot)
         self._send_json(HTTPStatus.OK, {
+            "slot": slot,
             "state": controller.state,
             "stopped": stopped,
+            "slots": controller.slot_states(),
         })
 
     def _serve_events(self) -> None:

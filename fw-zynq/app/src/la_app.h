@@ -114,7 +114,9 @@ typedef enum la_ctrl_kind {
     LA_CTRL_ARM = 1,
     LA_CTRL_ABORT = 2,
     LA_CTRL_LIVE_START = 3,
-    LA_CTRL_LIVE_STOP = 4
+    LA_CTRL_LIVE_STOP = 4,
+    /* V09: one slot's DECODER_CFG applied mid-session (per-decoder control). */
+    LA_CTRL_DECODER_CFG = 5
 } la_ctrl_kind_t;
 
 typedef struct la_ctrl_msg {

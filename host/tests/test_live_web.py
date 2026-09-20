@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import http.client
 import json
+import queue
+import threading
 import time
 
 import pytest
@@ -282,7 +284,10 @@ def test_page_is_served_from_package_data() -> None:
     assert "EventSource" in page
     assert "WebSocket" not in page
     assert "/control/start" in page and "/control/stop" in page
-    assert 'id="start"' in page and 'id="stop"' in page
+    assert "/control/start?slot=" in page and "/control/stop?slot=" in page
+    assert 'id="start"' not in page  # V09: per-pane buttons replace the global ones
+    assert 'class="ctl start"' in page and 'class="ctl stop"' in page
+    assert "slot_labels" in page
     # V08: the renderer coalesces records per animation frame, keeps a bounded
     # DOM by removing child nodes and never rebuilds the pane with innerHTML.
     assert "requestAnimationFrame" in page
@@ -342,69 +347,166 @@ def _wait_events(hub: LiveEventHub, count: int, timeout: float = 3.0) -> None:
         time.sleep(0.01)
 
 
-def test_controller_start_stop_and_restart(analyzer) -> None:
+def _wait_history(mock, count: int, timeout: float = 3.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and len(mock.decoder_history) < count:
+        time.sleep(0.01)
+
+
+def test_pack_decoder_off_layout() -> None:
+    payload = p.pack_decoder_off(1)
+    assert len(payload) == p.DECODER_CFG_SIZE
+    assert payload[0] == 1 and payload[1] == p.DECODER_OFF and payload[2] == 0
+    assert payload[3:] == b"\x00" * 17
+    with pytest.raises(ValueError):
+        p.pack_decoder_off(3)
+
+
+def test_live_client_sends_multiple_decoder_configs(analyzer) -> None:
     mock = analyzer("live")
     hub = LiveEventHub()
     client = AnalyzerClient(open_uri(mock.uri))
-    controller = LiveSessionController(
-        client, hub, p.pack_decoder_cfg_uart(0, 0, 115200, FCLK_HZ),
-        _mock_stream_config())
+    slot0 = p.pack_decoder_cfg_uart(0, 0, 115200, FCLK_HZ)
+    slot1 = p.pack_decoder_cfg_i2c(1, 3, 4)
+    try:
+        client.live([slot0, slot1], count=None, timeout_s=5.0,
+                    collect_events=False, on_event=hub.publish_frame)
+    finally:
+        client.close()
+    assert mock.decoder_history == [slot0, slot1]
+    assert hub.events == 24
+
+
+def test_live_command_queue_sends_mid_session(analyzer) -> None:
+    mock = analyzer("live")
+    client = AnalyzerClient(open_uri(mock.uri))
+    commands: queue.Queue = queue.Queue()
+    stop_event = threading.Event()
+    outcome: dict = {}
+
+    def run() -> None:
+        try:
+            client.live(p.pack_decoder_cfg_uart(0, 0, 115200, FCLK_HZ),
+                        count=None, timeout_s=5.0, collect_events=False,
+                        stop_on_overrun=False, command_queue=commands,
+                        stop_event=stop_event)
+        except Exception as exc:  # noqa: BLE001 - reported below
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    _wait_history(mock, 1)
+    commands.put(p.pack_decoder_off(0))
+    _wait_history(mock, 2)
+    stop_event.set()
+    thread.join(timeout=5.0)
+    assert not thread.is_alive()
+    assert "error" not in outcome, outcome.get("error")
+    assert mock.decoder_history[1] == p.pack_decoder_off(0)
+
+
+def test_controller_slots_run_independently(analyzer) -> None:
+    mock = analyzer("live")
+    hub = LiveEventHub()
+    client = AnalyzerClient(open_uri(mock.uri))
+    slot0 = p.pack_decoder_cfg_uart(0, 0, 115200, FCLK_HZ)
+    slot1 = p.pack_decoder_cfg_uart(1, 0, 115200, FCLK_HZ)
+    controller = LiveSessionController(client, hub, {0: slot0, 1: slot1},
+                                       _mock_stream_config())
     try:
         assert controller.state == "idle"
-        assert controller.start()
+        assert controller.slot_states() == ["idle", "idle", "unconfigured"]
+        ok, _message = controller.start_slot(2)
+        assert not ok, "unconfigured slot must be refused"
+        assert controller.start_slot(0)[0]
         _wait_events(hub, 24)
-        assert hub.events == 24
+        # The session states its slot set explicitly: slot 0 config plus OFF
+        # for the slots it must not run (the device latches configs).
+        _wait_history(mock, 3)
+        assert mock.decoder_history[0] == slot0
+        assert mock.decoder_history[1] == p.pack_decoder_off(1)
+        assert mock.decoder_history[2] == p.pack_decoder_off(2)
+        assert controller.slot_states() == ["streaming", "idle", "unconfigured"]
+        # Enabling a second slot mid-session does not restart the session.
+        assert controller.start_slot(1)[0]
+        _wait_history(mock, 4)
+        assert mock.decoder_history[3] == slot1
         assert controller.state == "streaming"
-        assert not controller.start(), "a second start must be refused"
-        assert controller.stop()
+        assert controller.slot_states() == ["streaming", "streaming", "unconfigured"]
+        # Stopping slot 0 sends an OFF for slot 0 only; slot 1 keeps running.
+        assert controller.stop_slot(0)
+        _wait_history(mock, 5)
+        assert mock.decoder_history[4] == p.pack_decoder_off(0)
+        assert controller.state == "streaming"
+        assert controller.slot_states() == ["idle", "streaming", "unconfigured"]
+        # The last enabled slot ends the session.
+        assert controller.stop_slot(1)
         assert controller.state == "idle"
+        assert controller.sessions == 1
         assert hub.error is None
-        # The transport stays open and the same bridge can stream again.
-        assert controller.start()
+        # Restart on slot 1 only: the new session states the set again.
+        assert controller.start_slot(1)[0]
         _wait_events(hub, 48)
-        assert hub.events == 48
-        assert controller.stop()
+        _wait_history(mock, 8)
+        assert mock.decoder_history[5] == p.pack_decoder_off(0)
+        assert mock.decoder_history[6] == slot1
+        assert mock.decoder_history[7] == p.pack_decoder_off(2)
+        assert controller.slot_states() == ["idle", "streaming", "unconfigured"]
+        assert controller.stop_all()
         assert controller.sessions == 2
     finally:
-        controller.stop()
+        controller.stop_all()
         client.close()
 
 
-def test_control_endpoints_start_stop_with_mock(analyzer) -> None:
+def test_control_endpoints_per_slot(analyzer) -> None:
     mock = analyzer("live")
     hub = LiveEventHub()
     client = AnalyzerClient(open_uri(mock.uri))
     controller = LiveSessionController(
-        client, hub, p.pack_decoder_cfg_uart(0, 0, 115200, FCLK_HZ),
+        client, hub,
+        {0: p.pack_decoder_cfg_uart(0, 0, 115200, FCLK_HZ),
+         1: p.pack_decoder_cfg_i2c(1, 3, 4)},
         _mock_stream_config())
     server = LiveWebServer(hub, port=0, controller=controller)
     server.start()
     try:
-        status, _headers, body = _post(server.port, "/control/start")
+        status, _headers, body = _post(server.port, "/control/start?slot=0")
         assert status == 200
         assert json.loads(body)["state"] == "streaming"
         _wait_events(hub, 24)
-        assert hub.events == 24
 
-        status, _headers, body = _post(server.port, "/control/start")
+        status, _headers, body = _post(server.port, "/control/start?slot=2")
         assert status == 409
-        assert "already running" in json.loads(body)["error"]
+        assert "no decoder configured" in json.loads(body)["error"]
 
-        status, _headers, body = _post(server.port, "/control/stop")
+        status, _headers, body = _post(server.port, "/control/start?slot=1")
         assert status == 200
-        assert json.loads(body)["stopped"] is True
-        assert controller.state == "idle"
+        status, _headers, body = _post(server.port, "/control/start?slot=1")
+        assert status == 200
+        assert "already streaming" in json.loads(body)["message"]
 
-        # Stop is idempotent and /status reports the session counters.
-        status, _headers, _body = _post(server.port, "/control/stop")
+        status, _headers, body = _post(server.port, "/control/start?slot=9")
+        assert status == 400
+
+        status, _headers, body = _post(server.port, "/control/stop?slot=0")
+        assert status == 200
+        assert json.loads(body)["state"] == "streaming"
+        status, _headers, body = _post(server.port, "/control/stop?slot=1")
+        assert status == 200
+        assert json.loads(body)["state"] == "idle"
+
+        # Stop is idempotent and /status reports the per-slot states.
+        status, _headers, _body = _post(server.port, "/control/stop?slot=1")
         assert status == 200
         status, _headers, body = _get(server.port, "/status")
         snapshot = json.loads(body)
         assert snapshot["session"] == "idle"
         assert snapshot["sessions"] == 1
+        assert snapshot["slots"] == ["idle", "idle", "unconfigured"]
         assert snapshot["error"] is None
     finally:
-        controller.stop()
+        controller.stop_all()
         server.stop()
         client.close()
 
@@ -427,6 +529,35 @@ def test_web_command_count_limits_the_feed(analyzer) -> None:
                                       "--count", "5", "--autostart"])
     assert result.exit_code == 0, result.output
     assert "5 events in 1 message" in result.output
+
+
+def test_web_command_multiple_decoders(analyzer) -> None:
+    mock = analyzer("live")
+    result = CliRunner().invoke(web, [
+        "-t", mock.uri, "--port", "0", "--autostart",
+        "--decoder", "uart:rx=0,baud=115200",
+        "--decoder", "i2c:scl=3,sda=4",
+    ])
+    assert result.exit_code == 0, result.output
+    _wait_history(mock, 3)
+    assert len(mock.decoder_history) == 3
+    assert mock.decoder_history[0][0] == 0
+    assert mock.decoder_history[1][0] == 1
+    assert mock.decoder_history[1][1] == p.DECODER_I2C
+    assert mock.decoder_history[2] == p.pack_decoder_off(2)
+
+
+def test_web_command_rejects_four_decoders(analyzer) -> None:
+    mock = analyzer("live")
+    result = CliRunner().invoke(web, [
+        "-t", mock.uri, "--port", "0", "--autostart",
+        "--decoder", "uart:rx=0,baud=115200",
+        "--decoder", "uart:rx=1,baud=115200",
+        "--decoder", "uart:rx=2,baud=115200",
+        "--decoder", "uart:rx=3,baud=115200",
+    ])
+    assert result.exit_code != 0
+    assert "at most three" in result.output
 
 
 def test_live_serve_rejects_csv(analyzer) -> None:

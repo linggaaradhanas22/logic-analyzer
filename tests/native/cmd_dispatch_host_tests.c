@@ -398,6 +398,24 @@ static int test_decoder_cfg(void)
                                 (uint16_t)sizeof(payload), 0u, &result) == 0 &&
               result.outcome == LA_CMD_OUT_NAK && result.error == LA_PROTO_ERROR_BUSY,
           "DECODER_CFG while busy NAK");
+
+    /* V09: while a live session streams (view CAPT) a DECODER_CFG is accepted
+     * so one slot can be enabled or disabled without touching the others. */
+    la_cmd_dispatch_acq_notice(&dispatch, LA_CMD_ACQ_STREAMING);
+    make_uart_decoder(&config, 1u);
+    (void)la_proto_pack_decoder_config(&config, payload, sizeof(payload));
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_DECODER_CFG, 0x2Bu, payload,
+                                (uint16_t)sizeof(payload), 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_DECODER_CFG && result.slot == 1u,
+          "DECODER_CFG accepted while streaming");
+    config.type = LA_PROTO_DECODER_OFF;
+    (void)la_proto_pack_decoder_config(&config, payload, sizeof(payload));
+    CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_DECODER_CFG, 0x2Cu, payload,
+                                (uint16_t)sizeof(payload), 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_DECODER_CFG && result.slot == 1u,
+          "OFF config accepted while streaming");
+    CHECK(la_cmd_dispatch_decoder_count(&dispatch) == 1u,
+          "streaming OFF leaves the other slot enabled");
     return 0;
 }
 

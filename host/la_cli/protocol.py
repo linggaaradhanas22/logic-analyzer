@@ -332,6 +332,21 @@ def _stop_on_bytes(decoder_type: int, stop_on: bytes | None) -> bytes:
         raise ValueError(f"stop pattern too long for this decoder (max {limit} bytes)")
     return pattern
 
+
+def pack_decoder_off(slot: int) -> bytes:
+    """DECODER_CFG (0x14) with type OFF: disables one slot (V09).
+
+    Sent mid-session to stop a single decoder without touching the others;
+    the firmware forwards it to that slot's decoder task immediately.
+    """
+    if not 0 <= slot <= 2:
+        raise ValueError("decoder slot must be 0..2")
+    payload = bytearray(DECODER_CFG_SIZE)
+    payload[0] = slot
+    payload[1] = DECODER_OFF
+    payload[2] = 0  # no stop pattern
+    return bytes(payload)
+
 # EVT_DECODED event kinds (docs/decoders.md numbering).
 EVENT_NAMES = {
     1: "BYTE", 2: "FRAME_ERR", 3: "PARITY_ERR", 4: "START", 5: "STOP",

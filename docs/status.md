@@ -863,6 +863,45 @@ now guards `requestAnimationFrame`/budget/child-trim and rejects
 smoothness check remains [HUMAN]: restart the bridge (the page is read at
 server start) and confirm scrolling/clicking during a stream.
 
+### Full-USB live pivot - V09 multi-decoder and per-slot control (2026-09-20)
+
+**User-directed: up to three decoders (UART/SPI/I²C) with independent
+Start/Stop per pane.** Host: repeatable `--decoder` (≤3, slot order),
+`pack_decoder_off(slot)`, `AnalyzerClient.live()` accepts a list of configs
+plus a `command_queue` drained by the pump mid-session, a per-slot
+`LiveSessionController` (`start_slot`/`stop_slot`/`stop_all`/`start_all`),
+`POST /control/start|stop?slot=N` (no slot = all; 400 invalid; 409
+unconfigured/already streaming), and a page with per-pane Start/Stop, state
+pills and a header Stop all. Firmware: `DECODER_CFG` is accepted in view CAPT
+(streaming), a new `LA_CTRL_DECODER_CFG` carries one slot's config through
+CmdTask to AcqTask, and `acq_apply_decoder_cfg` updates the segment consumer
+count and hands the config to that slot's decoder task (AcqTask remains the
+only writer). **Bug found on the bench and fixed:** the device latches decoder
+configs across sessions, so a new session now states its slot set explicitly
+(enabled configs + OFF for the other two), preventing a stale slot from
+streaming. One honest incident: a helper script crashed before stopping its
+bridge, leaving a stale `la-web` owning COM13; a second bridge then produced
+USB write errors and a device re-enumeration. After killing the stale process
+the 6-cycle loop test and the final evidence run were clean with continuous
+uptime; no firmware defect in that incident.
+
+Verification: `test-native` 18/18 (streaming accept/OFF/other-slot cases);
+`test-host` 114 passed; `fw-zynq`/`jtag-zynq` PASS (USB default) and `ping`
+answered; bench `serial://COM13`: start slot 0 → `[17723,0,0]`, start slot 1
+mid-session → `[38264,19871,0]`, stop slot 0 → slot 0 flat at `44017` while
+slot 1 grew `30181→50114`, stop last → idle `error=None`, I²C in slot 2 →
+187,053 events with START/STOP/ADDRESS/ACK/BYTE kinds; V04 regression 8/8
+(60 s); `release` 22/22; `boot` USB BOOT.BIN 2,413,488 bytes; `package` wheel
+86,443 bytes. Evidence: `build/reports/usb-v09-multi-decoder.md`,
+`build/reports/v09-slots-evidence.txt`. The [HUMAN] browser click-through of
+the per-pane buttons remains open. Files: `fw-zynq/app/src/tasks/{la_cmd_task.c,
+la_acq_task.c,la_cmd_dispatch.c}`, `fw-zynq/app/src/la_app.h`,
+`tests/native/cmd_dispatch_host_tests.c`, `host/la_cli/{protocol.py,client.py,
+commands.py}`, `host/la_live_web/{session.py,server.py,core.py,static/index.html}`,
+`host/tests/{test_live_web.py,mock_analyzer.py}`, `docs/live-web.md`,
+`docs/using-the-analyzer.md`, `docs/test-plan.md`, `README.md`, the portal
+`components/host-tools.ts`/`subsystems.ts`/`verification.ts`, this ledger.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

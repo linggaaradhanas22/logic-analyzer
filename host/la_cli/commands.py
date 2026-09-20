@@ -246,12 +246,13 @@ def _parse_stop_on(value: str | None) -> bytes | None:
         raise click.BadParameter("--stop-on must be hex bytes") from exc
 
 
-def _parse_decoder_spec(spec: str, sample_rate_hz: int,
+def _parse_decoder_spec(spec: str, sample_rate_hz: int, slot: int = 0,
                         stop_on: bytes | None = None) -> bytes:
-    """Parses the live decoder spec (P7.6): `uart:rx=CH,baud=BAUD`,
+    """Parses one live decoder spec (P7.6/V09): `uart:rx=CH,baud=BAUD`,
     `spi:sck=CH[,mosi=CH][,miso=CH][,cs=CH][,cpol=0][,cpha=0][,word=8]`
-    `[,lsb=0][,cs_active=0]` or `i2c:scl=CH,sda=CH`. `stop_on` is the P7.7
-    decoded-pattern stop, limited by the decoder type's reserved bytes."""
+    `[,lsb=0][,cs_active=0]` or `i2c:scl=CH,sda=CH`. `slot` is the decoder
+    slot the payload targets (0..2); `stop_on` is the P7.7 decoded-pattern
+    stop, limited by the decoder type's reserved bytes."""
     name, sep, params_text = spec.strip().partition(":")
     if not sep:
         raise click.BadParameter("decoder must be uart:..., spi:... or i2c:...")
@@ -270,35 +271,49 @@ def _parse_decoder_spec(spec: str, sample_rate_hz: int,
                 raise ValueError("uart needs rx and baud")
             if params["baud"] <= 0:
                 raise ValueError("baud must be positive")
-            return p.pack_decoder_cfg_uart(0, params["rx"], params["baud"], sample_rate_hz,
-                                           stop_on=stop_on)
+            return p.pack_decoder_cfg_uart(slot, params["rx"], params["baud"],
+                                           sample_rate_hz, stop_on=stop_on)
         if name == "spi":
             known = {"sck", "mosi", "miso", "cs", "cpol", "cpha", "word", "lsb", "cs_active"}
             if "sck" not in params or set(params) - known:
                 raise ValueError("spi needs sck and only known keys")
             return p.pack_decoder_cfg_spi(
-                0, params["sck"], params.get("mosi", -1), params.get("miso", -1),
+                slot, params["sck"], params.get("mosi", -1), params.get("miso", -1),
                 params.get("cs", -1), params.get("cpol", 0), params.get("cpha", 0),
                 params.get("word", 8), params.get("lsb", 0), params.get("cs_active", 0),
                 stop_on=stop_on)
         if name == "i2c":
             if set(params) != {"scl", "sda"}:
                 raise ValueError("i2c needs scl and sda")
-            return p.pack_decoder_cfg_i2c(0, params["scl"], params["sda"], stop_on=stop_on)
+            return p.pack_decoder_cfg_i2c(slot, params["scl"], params["sda"],
+                                          stop_on=stop_on)
     except (KeyError, ValueError) as exc:
         raise click.BadParameter(str(exc)) from exc
     raise click.BadParameter("decoder must be uart:..., spi:... or i2c:...")
 
 
-def _prepare_live(decoder_spec: str, rate: str, stop_on: str | None):
-    """Shared live-option parsing for `la-cli live` and `la-cli web` (V03).
+def _prepare_live(decoder_specs, rate: str, stop_on: str | None):
+    """Shared live-option parsing for `la-cli live` and `la-cli web` (V03/V09).
 
-    Returns (decoder_config, stream_config, stop_bytes, actual_rate_hz)."""
+    `decoder_specs` is one spec string or a sequence of up to three; spec N
+    configures decoder slot N. Returns (slot_configs, stream_config,
+    stop_bytes, actual_rate_hz)."""
+    if isinstance(decoder_specs, str):
+        decoder_specs = (decoder_specs,)
+    decoder_specs = tuple(decoder_specs)
+    if not decoder_specs:
+        raise click.BadParameter("at least one --decoder is required")
+    if len(decoder_specs) > 3:
+        raise click.BadParameter("at most three --decoder options are supported")
     rate_hz = _parse_size(rate)
     sample_div = _sample_div(rate_hz)
     actual_rate = FS_HZ // (sample_div + 1)
     stop_bytes = _parse_stop_on(stop_on)
-    decoder_cfg = _parse_decoder_spec(decoder_spec, actual_rate, stop_bytes)
+    slot_configs = {
+        slot: _parse_decoder_spec(spec, actual_rate, slot=slot,
+                                  stop_on=stop_bytes)
+        for slot, spec in enumerate(decoder_specs)
+    }
     # Live decode consumes transition words; the 2 ms flush interval matches
     # the PL default (LIVE_FLUSH_CYCLES at 100 MHz).
     stream_config = p.pack_config(
@@ -310,7 +325,7 @@ def _prepare_live(decoder_spec: str, rate: str, stop_on: str | None):
         txn_max_run=0x00FFFFFF,
         live_flush_cycles=200_000,
     )
-    return decoder_cfg, stream_config, stop_bytes, actual_rate
+    return slot_configs, stream_config, stop_bytes, actual_rate
 
 
 def _configure_patgen(client: AnalyzerClient, patgen_mode: str) -> None:
@@ -322,27 +337,36 @@ def _configure_patgen(client: AnalyzerClient, patgen_mode: str) -> None:
     client.configure_patgen(p.PATGEN_EN_MASK | (PATGEN_MODES[patgen_mode] << 4))
 
 
-def _serve_live(client: AnalyzerClient, target: str, decoder_cfg: bytes,
-                stream_config: bytes, count: int | None, compact: bool,
-                stop_bytes: bytes | None, timeout_s: float | None,
-                bind: str, port: int, decoder_spec: str,
-                patgen_mode: str, autostart: bool) -> dict:
-    """V03/V07: serves the host web bridge and its interactive live session.
+def _serve_live(client: AnalyzerClient, target: str,
+                slot_configs: dict[int, bytes], stream_config: bytes,
+                count: int | None, compact: bool, stop_bytes: bytes | None,
+                timeout_s: float | None, bind: str, port: int,
+                decoder_specs: tuple[str, ...], patgen_mode: str,
+                autostart: bool) -> dict:
+    """V03/V07/V09: serves the host web bridge with per-decoder control.
 
     The bridge owns the target for its lifetime (the caller already opened
-    it) and starts idle. The page's Start button (POST /control/start) begins
-    a live session; Stop (POST /control/stop) ends it with LIVE_STOP and the
-    page returns to idle, ready to start again. `--autostart` starts one
-    session immediately and exits when it ends (scripted smoke/tests). Events
-    are counted, not retained; `count` caps the browser feed exactly even when
-    the final device batch overshoots."""
+    it) and starts idle. Each decoder pane's Start button
+    (POST /control/start?slot=N) enables that slot — starting the session
+    when it is the first one and sending a mid-session DECODER_CFG otherwise;
+    Stop (POST /control/stop?slot=N) disables only that slot and ends the
+    session when it was the last enabled one. `--autostart` enables every
+    configured slot immediately and exits when the session ends (scripted
+    smoke/tests). Events are counted, not retained; `count` caps the browser
+    feed exactly even when the final device batch overshoots."""
     from ..la_live_web import LiveEventHub, LiveSessionController, LiveWebServer
 
     hub = LiveEventHub()
     hub.target = target
-    hub.decoder = decoder_spec
+    hub.decoder = " | ".join(
+        f"slot {slot}: {spec}" for slot, spec in enumerate(decoder_specs)
+    )
+    hub.slot_labels = [
+        decoder_specs[slot] if slot < len(decoder_specs) else ""
+        for slot in range(3)
+    ]
     controller = LiveSessionController(
-        client, hub, decoder_cfg, stream_config,
+        client, hub, slot_configs, stream_config,
         count=count, timeout_s=timeout_s,
         event_format=p.EVT_FORMAT_BLOCK if compact else p.EVT_FORMAT_RECORDS,
         stop_bytes=stop_bytes,
@@ -362,16 +386,16 @@ def _serve_live(client: AnalyzerClient, target: str, decoder_cfg: bytes,
     click.echo(f"live web view: {url} (target {target})")
     try:
         if autostart:
-            controller.start()
+            controller.start_all()
             controller.wait()
         else:
-            click.echo("open the page and click Start (Ctrl+C to quit)")
+            click.echo("open the page and click a decoder's Start (Ctrl+C to quit)")
             while True:
                 time.sleep(0.2)
     except KeyboardInterrupt:
         click.echo("live web view stopped")
     finally:
-        controller.stop()
+        controller.stop_all()
         server.stop()
     stats = hub.stats()
     message_word = "message" if stats["messages"] == 1 else "messages"
@@ -389,8 +413,10 @@ def _serve_live(client: AnalyzerClient, target: str, decoder_cfg: bytes,
 
 @cli.command(help="Decoded live events: --decoder uart:rx=0,baud=115200 (P7.5).")
 @click.option("--target", "-t", required=True, help="analyzer link target URI")
-@click.option("--decoder", "decoder_spec", default="uart:rx=0,baud=115200", show_default=True,
-              help="uart:rx=CH,baud=BAUD | spi:sck=CH,mosi=CH,cs=CH,... | i2c:scl=CH,sda=CH")
+@click.option("--decoder", "decoder_specs", multiple=True,
+              default=("uart:rx=0,baud=115200",), show_default=True,
+              help="up to three specs, one per decoder slot: uart:rx=CH,baud=BAUD | "
+                   "spi:sck=CH,mosi=CH,cs=CH,... | i2c:scl=CH,sda=CH")
 @click.option("--rate", default="100M", show_default=True,
               help="sample rate used to derive samples/bit for the decoder")
 @click.option("--patgen", "patgen_mode",
@@ -401,7 +427,7 @@ def _serve_live(client: AnalyzerClient, target: str, decoder_cfg: bytes,
 @click.option("--compact", is_flag=True,
               help="request the compact EVT_BLOCK event encoding (P9.2)")
 @click.option("--stop-on", "stop_on", default=None,
-              help="stop when the decoder matches these hex bytes (P7.7), e.g. 4c41")
+              help="stop when any decoder matches these hex bytes (P7.7), e.g. 4c41")
 @click.option("--csv", is_flag=True, help="emit CSV rows instead of text")
 @click.option("--serve", is_flag=True,
               help="serve the host live web view instead of printing events (V03)")
@@ -410,30 +436,31 @@ def _serve_live(client: AnalyzerClient, target: str, decoder_cfg: bytes,
 @click.option("--port", default=8080, show_default=True, type=int,
               help="live web view port (--serve)")
 @click.option("--autostart", is_flag=True,
-              help="start one live session immediately and exit when it ends "
-                   "instead of waiting for the page's Start button (--serve)")
+              help="start every configured decoder immediately and exit when "
+                   "the session ends instead of waiting for the page's buttons (--serve)")
 @click.option("--timeout", "timeout_s", default=None, type=float,
               help="overall deadline in seconds (default: until --count or Ctrl+C)")
-def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int | None,
-         compact: bool, stop_on: str | None, csv: bool, serve: bool, bind: str,
-         port: int, autostart: bool, timeout_s: float | None) -> None:
+def live(target: str, decoder_specs: tuple[str, ...], rate: str, patgen_mode: str,
+         count: int | None, compact: bool, stop_on: str | None, csv: bool,
+         serve: bool, bind: str, port: int, autostart: bool,
+         timeout_s: float | None) -> None:
     if serve and csv:
         raise click.BadParameter("--csv cannot be combined with --serve")
-    decoder_cfg, stream_config, stop_bytes, _actual_rate = _prepare_live(
-        decoder_spec, rate, stop_on
+    slot_configs, stream_config, stop_bytes, _actual_rate = _prepare_live(
+        decoder_specs, rate, stop_on
     )
 
     client = _make_client(target)
     try:
         if serve:
-            _serve_live(client, target, decoder_cfg, stream_config, count, compact,
-                        stop_bytes, timeout_s, bind, port, decoder_spec,
+            _serve_live(client, target, slot_configs, stream_config, count, compact,
+                        stop_bytes, timeout_s, bind, port, decoder_specs,
                         patgen_mode, autostart)
             return
         _configure_patgen(client, patgen_mode)
         try:
             events = client.live(
-                decoder_cfg, config=stream_config, count=count,
+                list(slot_configs.values()), config=stream_config, count=count,
                 timeout_s=timeout_s,
                 event_format=p.EVT_FORMAT_BLOCK if compact else p.EVT_FORMAT_RECORDS,
                 stop_on_match=stop_bytes is not None,
@@ -475,8 +502,10 @@ def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int
 
 @cli.command(name="web", help="Host live web view (V03): serve decoded events at http://HOST:PORT/.")
 @click.option("--target", "-t", required=True, help="analyzer link target URI")
-@click.option("--decoder", "decoder_spec", default="uart:rx=0,baud=115200", show_default=True,
-              help="uart:rx=CH,baud=BAUD | spi:sck=CH,mosi=CH,cs=CH,... | i2c:scl=CH,sda=CH")
+@click.option("--decoder", "decoder_specs", multiple=True,
+              default=("uart:rx=0,baud=115200",), show_default=True,
+              help="up to three specs, one per decoder slot: uart:rx=CH,baud=BAUD | "
+                   "spi:sck=CH,mosi=CH,cs=CH,... | i2c:scl=CH,sda=CH")
 @click.option("--rate", default="100M", show_default=True,
               help="sample rate used to derive samples/bit for the decoder")
 @click.option("--patgen", "patgen_mode",
@@ -487,27 +516,27 @@ def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int
 @click.option("--compact", is_flag=True,
               help="request the compact EVT_BLOCK event encoding (P9.2)")
 @click.option("--stop-on", "stop_on", default=None,
-              help="stop when the decoder matches these hex bytes (P7.7), e.g. 4c41")
+              help="stop when any decoder matches these hex bytes (P7.7), e.g. 4c41")
 @click.option("--bind", default="127.0.0.1", show_default=True,
               help="live web view bind address")
 @click.option("--port", default=8080, show_default=True, type=int,
               help="live web view port")
 @click.option("--autostart", is_flag=True,
-              help="start one live session immediately and exit when it ends "
-                   "instead of waiting for the page's Start button")
+              help="start every configured decoder immediately and exit when "
+                   "the session ends instead of waiting for the page's buttons")
 @click.option("--timeout", "timeout_s", default=None, type=float,
               help="overall deadline in seconds (default: until --count or Ctrl+C)")
-def web(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int | None,
-        compact: bool, stop_on: str | None, bind: str, port: int,
-        autostart: bool, timeout_s: float | None) -> None:
+def web(target: str, decoder_specs: tuple[str, ...], rate: str, patgen_mode: str,
+        count: int | None, compact: bool, stop_on: str | None, bind: str,
+        port: int, autostart: bool, timeout_s: float | None) -> None:
     """`la-web` / `la-cli web`: the same implementation as `live --serve`."""
-    decoder_cfg, stream_config, stop_bytes, _actual_rate = _prepare_live(
-        decoder_spec, rate, stop_on
+    slot_configs, stream_config, stop_bytes, _actual_rate = _prepare_live(
+        decoder_specs, rate, stop_on
     )
     client = _make_client(target)
     try:
-        _serve_live(client, target, decoder_cfg, stream_config, count, compact,
-                    stop_bytes, timeout_s, bind, port, decoder_spec,
+        _serve_live(client, target, slot_configs, stream_config, count, compact,
+                    stop_bytes, timeout_s, bind, port, decoder_specs,
                     patgen_mode, autostart)
     except (AnalyzerError, TransportError) as exc:
         raise click.ClickException(str(exc)) from exc

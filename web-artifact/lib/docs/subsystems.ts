@@ -504,8 +504,8 @@ export const SUBSYSTEMS: SubsystemDoc[] = [
     status: [
       {
         status: 'host-tested',
-        summary: 'Protocol, client, export, live, trace and the V02 host live-web bridge have pytest coverage against a full mock analyzer.',
-        scope: '107/107 host tests after the V02/V03 bridge (2026-09-20); mocks do not prove target timing or Wi-Fi behavior.',
+        summary: 'Protocol, client, export, live, trace and the V02-V09 host live-web bridge have pytest coverage against a full mock analyzer.',
+        scope: '114/114 host tests after the V09 per-slot control (2026-09-20); mocks do not prove target timing or Wi-Fi behavior.',
         date: '20 Sep 2026',
         sources: [{ label: 'Host test runs', path: 'docs/status.md', kind: 'doc' }],
       },

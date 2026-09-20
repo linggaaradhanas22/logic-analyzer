@@ -46,8 +46,10 @@ messages).
 | GET | `/` (and `/index.html`) | `text/html` live page (host copy of the gateway page) |
 | GET | `/events` | `text/event-stream` feed (see section 4) |
 | GET | `/status` | `application/json` bridge snapshot (see section 5) |
-| POST | `/control/start` | starts a live session; `409` when one is running |
-| POST | `/control/stop` | stops the running session; idempotent, always `200` |
+| POST | `/control/start?slot=N` | starts/enables decoder slot N; `409` when it cannot |
+| POST | `/control/start` | enables every configured slot (scripted/autostart) |
+| POST | `/control/stop?slot=N` | disables slot N; ends the session when it was the last one |
+| POST | `/control/stop` | stops every slot and the session; idempotent |
 | other | | `404` |
 
 - Default bind: **`127.0.0.1`**, default port: **`8080`** (`--bind`/`--port`
@@ -58,26 +60,38 @@ messages).
   the wheel as package data. No CDN or external asset is referenced.
 - `HEAD` is not required; responses are UTF-8.
 
-## 3a. Interactive session control (V07)
+## 3a. Interactive session control (V07, per-slot in V09)
 
-- The bridge starts **idle**: opening the page does not start decoding. The
-  page's **Start** button posts `/control/start`; **Stop** posts
-  `/control/stop`. The CLI prints the URL and waits for the browser
-  (`--autostart` keeps the old scripted behavior: one session starts
-  immediately and the command exits when it ends).
-- One session at a time. `start` while streaming returns `409` with
-  `{"error": "a live session is already running"}`; `stop` while idle is a
-  no-op `200`. A session that ends by `--count`, `--timeout` or an error
-  returns to idle and Start is enabled again.
+- The bridge starts **idle**: opening the page does not start decoding. Each
+  decoder pane has its own **Start**/**Stop** buttons; the header has **Stop
+  all**. `--autostart` enables every configured slot immediately and exits when
+  the session ends (scripted path).
+- **One live session, independent slots.** The first Start starts the session
+  with only that slot enabled; another pane's Start sends that slot's
+  `DECODER_CFG` mid-session (the firmware forwards it through AcqTask to the
+  slot's decoder task). A pane's Stop sends an OFF config for that slot only;
+  the other panes keep streaming. Stopping the last enabled slot sends
+  LIVE_STOP and the session returns to idle.
+- **The session states its slot set explicitly:** because the device latches
+  decoder configs across sessions, every session start sends the enabled
+  slots' configs plus an OFF for each of the other two slots. This prevents a
+  stale slot from a previous session or bridge process from streaming.
+- Slots are configured on the command line, one spec per `--decoder` (up to
+  three, in slot order: `uart:...`, `spi:...` or `i2c:...`). A pane whose slot
+  has no spec shows `unconfigured` and its Start is refused with `409`.
 - The analyzer transport stays open between sessions (one owner), so Start →
-  Stop → Start works without re-opening the port. Each start re-arms the
-  pattern generator when `--patgen` was selected (the mode/DIV latch rule).
+  Stop → Start works without re-opening the port. Each session start re-arms
+  the pattern generator when `--patgen` was selected (the mode/DIV latch rule).
 - State machine: `idle -> streaming -> stopping -> idle`. `/status` reports
-  `session` (`idle`/`streaming`/`stopping`), `sessions` (started count) and the
-  last session `error` when one occurred.
+  `session`, `sessions` (started count), `slots` (per-slot
+  `idle`/`streaming`/`unconfigured`), `slot_labels` and the last session
+  `error`.
 - Interactive sessions keep draining after an `EVT_OVERRUN` and count it in
   the stats; the scripted `--autostart` path ends on it like the classic
   `la-cli live` command.
+- Firmware note: `DECODER_CFG` is accepted in view CAPT (streaming) as well as
+  idle; AcqTask is the only writer of the segment consumer count, so the
+  mid-session enable/disable goes through `LA_CTRL_DECODER_CFG`.
 
 ## 3b. Page rendering budget (V08)
 
@@ -121,12 +135,15 @@ counters (no relay/heap):
 {"stats":{"clients":1,"events":1234,"messages":42,"sent":42,"dropped":0,
           "ring":17,"ring_capacity":4096,"ring_dropped":0,"client_dropped":0,
           "refused":0,"state":"streaming","target":"serial://COM13",
-          "decoder":"uart:rx=0,baud=115200","error":null,"uptime_s":12.3}}
+          "decoder":"slot 0: uart:rx=0,baud=115200",
+          "slots":["streaming","idle","unconfigured"],
+          "slot_labels":["uart:rx=0,baud=115200","",""],
+          "error":null,"uptime_s":12.3}}
 ```
 
 `/status` returns the same fields plus `"connected": true|false` and, when a
-session controller is present, `"session"`, `"sessions"` and the last session
-`"error"`, so the E2E gates can assert counts without parsing SSE.
+session controller is present, `"session"` and `"sessions"`, so the E2E gates
+can assert counts without parsing SSE.
 
 ## 6. Formatting parity
 
@@ -144,15 +161,16 @@ session controller is present, `"session"`, `"sessions"` and the last session
   the CLI summary. The page shows the live byte stream; `EVT_OVERRUN` is a
   host-side condition.
 
-## 7. CLI surface (V03)
+## 7. CLI surface (V03/V09)
 
 - `la-cli live ... --serve [--bind HOST] [--port PORT] [--autostart]` serves
   the host live view; the text/CSV modes are unchanged when `--serve` is
-  absent. Without `--autostart` the session is controlled from the page.
-- `la-web` is the standalone equivalent (`--target`, `--decoder`, `--rate`,
-  `--patgen`, `--count`, `--compact`, `--stop-on`, `--timeout`, `--bind`,
-  `--port`, `--autostart`). Both entry points call the same implementation and
-  print the bound URL once.
+  absent. `--decoder` may be repeated up to three times; spec N configures
+  slot N.
+- `la-web` is the standalone equivalent (`--target`, repeated `--decoder`,
+  `--rate`, `--patgen`, `--count`, `--compact`, `--stop-on`, `--timeout`,
+  `--bind`, `--port`, `--autostart`). Both entry points call the same
+  implementation and print the bound URL once.
 - Exit codes: 0 on a clean session, non-zero with a Click error when the
   target cannot be opened or the server cannot bind.
 
@@ -162,12 +180,16 @@ session controller is present, `"session"`, `"sessions"` and the last session
   vectors, ring overflow/drop accounting, single-client `409`, slow-client
   drop without blocking, malformed frame rejection (no partial message) and
   clean detach.
-- V03/V07: `[HUMAN]` browser smoke — open `http://127.0.0.1:8080`, click
-  **Start**, run the patgen UART source, confirm events render line by line,
-  click **Stop**, confirm the state returns to idle, Start again, and reload
-  the page to confirm the feed reconnects. Host tests cover the same control
-  endpoints against the mock analyzer.
+- V03/V07/V09: `[HUMAN]` browser smoke — open `http://127.0.0.1:8080`, click a
+  pane's **Start**, run the patgen source, confirm events render line by line,
+  start a second pane and confirm both stream, stop one pane and confirm the
+  other keeps running, stop the last and confirm idle, then reload the page to
+  confirm the feed reconnects. Host tests cover the same control endpoints
+  against the mock analyzer.
 - V04: over `serial://COM13` the feed receives exactly the requested event
   count (`--count`), `/status` matches the SSE message total, the device
   returns to IDLE, and the 1 MHz SPI overload recovers within 3 s while the
   bridge serves.
+- V09: over `serial://COM13`, per-slot Start/Stop is independent (two UART
+  decoders on CH0, an I2C decoder in slot 2), a new session states its slot
+  set explicitly, and the device returns to IDLE.

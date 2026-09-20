@@ -199,7 +199,7 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
     requires:
       'Project Python environment with pyserial, numpy, pyvcd, click, pyyaml, pytest and matplotlib; no hardware.',
     report: 'build/reports/test-host.json (ignored local)',
-    evidence: 'PASS 107/107 on 2026-09-20 with the V02/V03 live-web bridge cases.',
+    evidence: 'PASS 114/114 on 2026-09-20 with the V02-V09 live-web bridge and per-slot control cases.',
     status: 'host-tested',
   },
   {

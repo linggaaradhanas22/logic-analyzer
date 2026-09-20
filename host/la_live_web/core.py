@@ -138,6 +138,8 @@ class LiveEventHub:
         self.target = ""
         self.decoder = ""
         self.error: str | None = None
+        self.slots: list[str] = ["unconfigured"] * SLOTS
+        self.slot_labels: list[str] = [""] * SLOTS
         self._lock = threading.Lock()
         self._ring: deque[str] = deque()
         self._feeds: list[ClientFeed] = []
@@ -235,6 +237,8 @@ class LiveEventHub:
                 "state": self.state,
                 "target": self.target,
                 "decoder": self.decoder,
+                "slots": list(self.slots),
+                "slot_labels": list(self.slot_labels),
                 "error": self.error,
                 "uptime_s": round(time.monotonic() - self._started, 3),
             }

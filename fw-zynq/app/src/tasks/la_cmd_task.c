@@ -170,8 +170,33 @@ static void cmd_forward_live(la_cmd_ctx_t *ctx, la_ctrl_kind_t kind)
     (void)xTaskNotify(app->acq_task, LA_NOTIFY_CTRL, eSetBits);
 }
 
-static void cmd_post_ack_msg(la_cmd_ctx_t *ctx, const la_cmd_result_t *result)
+/* V09: apply a DECODER_CFG to one slot immediately so a live session can
+ * enable or disable that decoder without touching the others. The request
+ * goes through AcqTask (the owner of the segment consumer count) and then to
+ * the slot's decoder task; AcqTask still re-sends every slot's config at
+ * LIVE_START, so this is idempotent. */
+static void cmd_forward_decoder_cfg(la_cmd_ctx_t *ctx, uint8_t slot)
 {
+    la_ctrl_msg_t message;
+    la_proto_decoder_config_t config;
+
+    if (slot >= LA_PROTO_DECODER_MAX_SLOTS ||
+        la_cmd_dispatch_decoder(&ctx->dispatch, slot, &config) != 0) {
+        return;
+    }
+    memset(&message, 0, sizeof(message));
+    message.kind = LA_CTRL_DECODER_CFG;
+    message.evt_format = la_cmd_dispatch_evt_format(&ctx->dispatch);
+    message.decoders[slot] = config;
+    message.decoder_valid[slot] = 1u;
+    if (xQueueSend(ctx->app->ctrl_q, &message, 0) != pdTRUE) {
+        cmd_post_log(ctx, "ctrl queue full");
+        return;
+    }
+    (void)xTaskNotify(ctx->app->acq_task, LA_NOTIFY_CTRL, eSetBits);
+}
+
+static void cmd_post_ack_msg(la_cmd_ctx_t *ctx, const la_cmd_result_t *result){
     la_app_t *app = ctx->app;
     la_ack_msg_t message;
 
@@ -232,6 +257,7 @@ static void cmd_handle_outcome(la_cmd_ctx_t *ctx, const la_cmd_result_t *result)
         break;
     case LA_CMD_OUT_DECODER_CFG:
         cmd_post_ack(ctx, result->type, result->sequence);
+        cmd_forward_decoder_cfg(ctx, result->slot);
         break;
     case LA_CMD_OUT_LIVE_START:
         cmd_post_ack(ctx, result->type, result->sequence);

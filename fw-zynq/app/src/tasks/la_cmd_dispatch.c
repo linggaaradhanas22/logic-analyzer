@@ -345,7 +345,11 @@ static int handle_decoder_cfg(la_cmd_dispatch_t *dispatch,
         result_nak(result, LA_PROTO_DECODER_CFG, sequence, LA_PROTO_ERROR_BAD_LENGTH);
         return 0;
     }
-    if (dispatch->view != LA_CMD_VIEW_IDLE) {
+    /* V09: a DECODER_CFG is also accepted while a live session is streaming
+     * (view CAPT) so one slot can be enabled or disabled without touching the
+     * others; CmdTask forwards it to that slot's decoder task. ARMED (a burst
+     * capture in flight) stays busy. */
+    if (dispatch->view != LA_CMD_VIEW_IDLE && dispatch->view != LA_CMD_VIEW_CAPT) {
         result_nak(result, LA_PROTO_DECODER_CFG, sequence, LA_PROTO_ERROR_BUSY);
         return 0;
     }

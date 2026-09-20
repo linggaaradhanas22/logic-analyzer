@@ -267,40 +267,46 @@ internal pattern generator (no jumpers):
 ## 7. Browser live view
 
 Since the 2026-09-20 pivot the live view is hosted on the PC; since V07 the
-page controls the session (Start/Stop). The bridge consumes the same decoded
-events as `la-cli live`, keeps a bounded replay ring and serves the page over
-SSE; see `docs/live-web.md` for the frozen contract.
+page controls the session, and since V09 each decoder runs independently. The
+bridge consumes the same decoded events as `la-cli live`, keeps a bounded
+replay ring and serves the page over SSE; see `docs/live-web.md` for the
+frozen contract.
 
 ```powershell
-# Serve http://127.0.0.1:8080; the page starts/stops decoding (UART patgen source)
+# One decoder (UART patgen on CH0): http://127.0.0.1:8080
 .\.venv\Scripts\la-web.exe -t serial://COM13 --patgen uart --decoder uart:rx=0,baud=115200
 
-# Equivalent: la-cli live ... --serve
-.\.venv\Scripts\la-cli.exe live -t serial://COM13 --patgen uart `
-    --decoder uart:rx=0,baud=115200 --serve
+# Three decoders in slots 0/1/2 (one --decoder per slot, in order)
+.\.venv\Scripts\la-web.exe -t serial://COM13 --patgen uart `
+    --decoder uart:rx=0,baud=115200 `
+    --decoder spi:sck=1,mosi=2,cs=3 `
+    --decoder i2c:scl=4,sda=5
 ```
 
 1. Start the command; it prints `live web view: http://127.0.0.1:8080/` and
    waits.
-2. Open that URL: the session pill shows **idle** and **Start** is enabled.
-3. Click **Start**: the pill turns **streaming** and Decoder 0 fills with
-   decoded bytes line by line (`+delta` timestamps). The footer shows the
-   target, decoder, event/message counts, ring use and drops.
-4. Click **Stop**: the session ends with LIVE_STOP, the pill returns to
-   **idle** and the device goes back to IDLE; Start can be clicked again for a
-   fresh session.
+2. Open that URL: each decoder tab has its own **Start**/**Stop** and a state
+   pill (`idle`/`streaming`/`unconfigured`); the header has **Stop all**.
+3. Click **Start** on Decoder 0: the pill turns **streaming** and that pane
+   fills with decoded bytes line by line (`+delta` timestamps). Click **Start**
+   on Decoder 1: it joins the same live session (no restart, no gap for
+   Decoder 0).
+4. Click **Stop** on Decoder 0: only that pane stops; Decoder 1 keeps
+   streaming. Stopping the last running decoder ends the session and the
+   device returns to IDLE.
 5. Reloading the page reconnects the feed (the pill shows reconnecting, then
    connected) and replays the bounded ring; a second feed gets HTTP `409`
    (single-client policy).
 
-`--autostart` starts one session immediately and exits when it ends (scripted
-smoke); `--count N` caps a session at N events and `--timeout S` bounds it.
-Ctrl+C stops any running session, closes the server and releases the analyzer
-port, so stop it before another `la-cli` session on the same port. A slow
-browser drops messages (counted in the stats bar) instead of blocking the link.
-The host bridge works over any target (`serial://` or `tcp://`); the gateway
-profile also keeps its ESP32-hosted page on port 80 (P10.1) while a gateway
-live session runs.
+A pane with no `--decoder` spec shows `unconfigured` and cannot be started.
+`--autostart` starts every configured decoder immediately and exits when the
+session ends (scripted smoke); `--count N` caps a session at N events and
+`--timeout S` bounds it. Ctrl+C stops all decoders, closes the server and
+releases the analyzer port, so stop it before another `la-cli` session on the
+same port. A slow browser drops messages (counted in the stats bar) instead of
+blocking the link. The host bridge works over any target (`serial://` or
+`tcp://`); the gateway profile also keeps its ESP32-hosted page on port 80
+(P10.1) while a gateway live session runs.
 
 No external assets or internet access are needed.
 
@@ -343,7 +349,7 @@ of the Wi-Fi TCP leg; see `docs/limits.md`.
 | `la-cli abort -t URI` | Abort a running capture. |
 | `la-cli capture -t URI [options]` | Arm a burst capture and export `.sr`/`.vcd`/`.png`. |
 | `la-cli live -t URI [options]` | Stream decoded UART/SPI/I²C events. |
-| `la-cli live -t URI ... --serve [--bind HOST] [--port N] [--autostart]` | Serve the host browser page; the page's Start/Stop control the session (V07). |
+| `la-cli live -t URI ... --serve [--bind HOST] [--port N] [--autostart]` | Serve the host browser page; each pane's Start/Stop controls its decoder (V09). Repeat `--decoder` for slots 0-2. |
 | `la-cli web -t URI [options]` / `la-web` | Standalone host live web view (same implementation as `live --serve`). |
 | `la-cli trace -t URI [--start\|--stop\|--dump]` | Task/queue trace ring. |
 | `la-cli link -t URI --spi\|--uart [--clock MHz]` | Select the burst transport. |

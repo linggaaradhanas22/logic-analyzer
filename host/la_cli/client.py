@@ -9,6 +9,7 @@ deadline; parser CRC/format counters are reported with every result.
 
 from __future__ import annotations
 
+import queue
 import time
 
 from . import protocol as p
@@ -149,14 +150,15 @@ class AnalyzerClient:
         }
 
     def _pump(self, deadline: float, handler, deadline_ok: bool = False,
-              recv_cap: float = 0.02, stop_check=None) -> None:
+              recv_cap: float = 0.02, stop_check=None, poll=None) -> None:
         """Feeds the parser until handler() returns True, the deadline passes
         or the transport fails. handler receives (type, sequence, payload).
         With deadline_ok the deadline is a normal stop (live streaming);
         otherwise it raises TransportError. recv_cap bounds each read; the
         drain gate passes 0 to poll without the timeout tail. stop_check is an
         optional predicate polled every iteration so another thread can end a
-        live session promptly."""
+        live session promptly; poll is an optional callback run every
+        iteration (the live command queue drain)."""
         stopped = False
 
         def on_frame(message_type, sequence, payload) -> None:
@@ -167,6 +169,8 @@ class AnalyzerClient:
         while not stopped:
             if stop_check is not None and stop_check():
                 return
+            if poll is not None:
+                poll()
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 if deadline_ok:
@@ -194,6 +198,21 @@ class AnalyzerClient:
             if not data:
                 return
             self._parser.feed(data, handler)
+
+    def _drain_commands(self, command_queue):
+        """Builds the live pump callback that sends queued DECODER_CFG frames.
+
+        The pump owns the transport during a live session, so the V09 per-slot
+        start/stop requests are queued by the bridge and sent here; the
+        firmware ACKs each one and the pump ignores non-LIVE_START ACKs."""
+        def poll() -> None:
+            while True:
+                try:
+                    payload = command_queue.get_nowait()
+                except queue.Empty:
+                    return
+                self._send(p.DECODER_CFG, payload)
+        return poll
 
     def ping(self, timeout_s: float = 5.0) -> dict:
         deadline = time.monotonic() + timeout_s
@@ -482,7 +501,7 @@ class AnalyzerClient:
              collect_events: bool = True,
              event_format: int = p.EVT_FORMAT_RECORDS,
              stop_on_match: bool = False,
-             on_event=None, stop_event=None) -> list[dict]:
+             on_event=None, stop_event=None, command_queue=None) -> list[dict]:
         """Configures the live stream and collects decoded events (P7.5).
 
         `config` is an optional 37-byte STREAM CONFIG payload sent before the
@@ -519,13 +538,24 @@ class AnalyzerClient:
 
         `stop_event` (V07) is an optional `threading.Event` polled by the
         pump; when set, the session stops promptly and still sends LIVE_STOP,
-        so a browser Stop button can end a live session from another thread."""
+        so a browser Stop button can end a live session from another thread.
+
+        `decoder_config` may be one 20-byte DECODER_CFG payload or a list of
+        them (V09); each is ACKed in order before LIVE_START. `command_queue`
+        is an optional `queue.Queue` of DECODER_CFG payloads sent from the
+        pump loop while the session runs, so a per-slot start/stop can enable
+        or disable a decoder without restarting the session; their ACKs are
+        ignored by the live pump (the firmware only NAKs a bad config)."""
         if timeout_s is None:
             deadline = float("inf")
         else:
             deadline = time.monotonic() + timeout_s
         self.live_stats = {"events": 0, "frames": 0, "wire_bytes": 0, "overruns": 0}
         self.live_match_index: int | None = None
+        if isinstance(decoder_config, (bytes, bytearray)):
+            decoder_configs = [bytes(decoder_config)]
+        else:
+            decoder_configs = [bytes(config) for config in decoder_config]
         if config is not None:
             self._send(p.CONFIG, config)
             self._expect_ack(p.CONFIG, "CONFIG", deadline)
@@ -539,8 +569,9 @@ class AnalyzerClient:
             if (event_format != p.EVT_FORMAT_RECORDS or
                     exc.error_code != p.ERROR_UNSUPPORTED):
                 raise
-        self._send(p.DECODER_CFG, decoder_config)
-        self._expect_ack(p.DECODER_CFG, "DECODER_CFG", deadline)
+        for config_payload in decoder_configs:
+            self._send(p.DECODER_CFG, config_payload)
+            self._expect_ack(p.DECODER_CFG, "DECODER_CFG", deadline)
         self._send(p.LIVE_START)
         collected: list[dict] = []
         stop_requested = False
@@ -628,7 +659,9 @@ class AnalyzerClient:
             return False
 
         self._pump(deadline, on_live, deadline_ok=True,
-                   stop_check=(stop_event.is_set if stop_event is not None else None))
+                   stop_check=(stop_event.is_set if stop_event is not None else None),
+                   poll=(self._drain_commands(command_queue)
+                         if command_queue is not None else None))
         self._send(p.LIVE_STOP)
         stop_deadline = time.monotonic() + 5.0
 

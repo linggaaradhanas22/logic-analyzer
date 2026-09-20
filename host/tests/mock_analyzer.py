@@ -68,6 +68,7 @@ class MockAnalyzer:
         self.last_patgen: bytes | None = None
         self.patgen_history: list[bytes] = []
         self.last_decoder: bytes | None = None
+        self.decoder_history: list[bytes] = []
         self.last_trace_action: int | None = None
         self.last_evt_format: int | None = None
         self.last_link_transport: int | None = None
@@ -187,6 +188,7 @@ class MockAnalyzer:
                     self._stream_trace_dump(connection)
             elif message_type == p.DECODER_CFG:
                 self.last_decoder = payload
+                self.decoder_history.append(payload)
                 if self.scenario in _LIVE_SCENARIOS:
                     self._send(connection, p.ACK, p.pack_ack(p.DECODER_CFG, sequence))
             elif message_type == p.LIVE_START:

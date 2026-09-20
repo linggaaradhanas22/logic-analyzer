@@ -447,11 +447,49 @@ static void acq_handle_pl(la_acq_ctx_t *ctx)
     }
 }
 
+/* V09: apply one slot's config while a live session runs (or while idle).
+ * AcqTask is the only writer of decoder_enabled/enabled_decoders, so the
+ * mid-session enable/disable must come through here: it updates the segment
+ * consumer count and then hands the config to that slot's decoder task. */
+static void acq_apply_decoder_cfg(la_acq_ctx_t *ctx, uint8_t slot,
+                                  const la_proto_decoder_config_t *config,
+                                  uint8_t evt_format)
+{
+    la_decoder_config_msg_t message;
+    int enable = config->type != LA_PROTO_DECODER_OFF;
+
+    memset(&message, 0, sizeof(message));
+    message.config = *config;
+    message.valid = 1u;
+    message.evt_format = evt_format;
+    if (ctx->decoder_enabled[slot] == 0u && enable != 0) {
+        ctx->enabled_decoders++;
+    } else if (ctx->decoder_enabled[slot] != 0u && enable == 0) {
+        ctx->enabled_decoders--;
+    }
+    ctx->decoder_enabled[slot] = enable != 0 ? 1u : 0u;
+    if (xQueueSend(ctx->app->decoders[slot].cfg_q, &message, 0) == pdTRUE) {
+        (void)xTaskNotify(ctx->app->decoders[slot].task, LA_NOTIFY_DECODER,
+                          eSetBits);
+    }
+}
+
 static void acq_handle_ctrl(la_acq_ctx_t *ctx, const la_ctrl_msg_t *message)
 {
     la_app_t *app = ctx->app;
     uint64_t words;
 
+    if (message->kind == LA_CTRL_DECODER_CFG) {
+        uint8_t slot;
+
+        for (slot = 0u; slot < LA_PROTO_DECODER_MAX_SLOTS; ++slot) {
+            if (message->decoder_valid[slot] != 0u) {
+                acq_apply_decoder_cfg(ctx, slot, &message->decoders[slot],
+                                      message->evt_format);
+            }
+        }
+        return;
+    }
     if (message->kind == LA_CTRL_ABORT) {
         if (ctx->live != 0u) {
             acq_stop_live(ctx, 0, 0u, 0);

@@ -99,9 +99,10 @@ the portal at `/using`. Typical first commands:
 ```
 
 `la-web` (or `la-cli live --serve`) serves the host browser view on
-`http://127.0.0.1:8080/`: open the page and click **Start** to stream, **Stop**
-to end the session (the analyzer stays connected for the next Start). The
-gateway profile uses `tcp://la-esp32.local:5555` with the same commands.
+`http://127.0.0.1:8080/`: each decoder pane has its own **Start**/**Stop**
+(up to three decoders via repeated `--decoder`, one per slot), the header has
+**Stop all**, and the analyzer stays connected between sessions. The gateway
+profile uses `tcp://la-esp32.local:5555` with the same commands.
 
 ## Known limits
 
