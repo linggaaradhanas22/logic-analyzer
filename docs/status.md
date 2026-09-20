@@ -838,6 +838,31 @@ portal `components/host-tools.ts`, this ledger. The [HUMAN] browser click
 smoke (open page, Start, watch lines, Stop, reload reconnect) remains open and
 is now the exact documented procedure.
 
+### Full-USB live pivot - V08 page rendering performance (2026-09-20)
+
+**User-reported freeze fixed.** The page went unresponsive during a stream
+because it inserted one DOM node per record via `insertAdjacentHTML` and, once
+the 1500-line cap was hit (~1.2 s at the measured rate), rebuilt the whole pane
+with `innerHTML.split().slice().join()` on every message. The renderer now
+coalesces records and draws once per animation frame (`requestAnimationFrame`,
+2000-record budget), builds DOM nodes directly (no HTML parsing), keeps 2000
+lines per pane and trims by removing child nodes in chunks of 500 (no pane
+rebuild), preserves the scroll position when the user has scrolled up, and
+counts over-budget records as `display-skipped` in the footer while the stats
+bar keeps the authoritative received count. The measured load is ~9,952
+events/s in ~491 messages/s over `serial://COM13` (115200 UART), so a frame
+carries ~166 records and stays far inside the budget.
+
+Verification: `python tools/run.py test-host` PASS 109 passed (the page test
+now guards `requestAnimationFrame`/budget/child-trim and rejects
+`insertAdjacentHTML` and `innerHTML.split`); the page script passes
+`node --check`; bench `la-web` on the V06 image: 10 s stream 99,519 events /
+4,913 messages, 0 client drops, Stop returned idle. Files:
+`host/la_live_web/static/index.html`, `host/tests/test_live_web.py`,
+`docs/live-web.md` (3b rendering budget), this ledger. The browser-side
+smoothness check remains [HUMAN]: restart the bridge (the page is read at
+server start) and confirm scrolling/clicking during a stream.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

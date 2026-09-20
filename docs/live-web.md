@@ -79,6 +79,20 @@ messages).
   the stats; the scripted `--autostart` path ends on it like the classic
   `la-cli live` command.
 
+## 3b. Page rendering budget (V08)
+
+- The live page is a high-rate view (measured 115200 UART stream: ~9,950
+  events/s in ~491 SSE messages/s). It must stay interactive while streaming:
+  - incoming messages are coalesced and drawn once per animation frame
+    (`requestAnimationFrame`), never one DOM insertion per record;
+  - each pane keeps at most 2000 lines and trims by removing child nodes
+    (chunked at 500); the pane is never rebuilt with `innerHTML`;
+  - a frame carrying more than 2000 records renders the newest and counts the
+    rest as `display-skipped` in the footer; the stats bar's `events` remains
+    the authoritative received count;
+  - auto-scroll follows only while the pane is at the bottom, so scrolling up
+    during a stream keeps the user's position.
+
 ## 4. Event feed, replay and backpressure
 
 - On `GET /events` the bridge attaches the client, then replays the current

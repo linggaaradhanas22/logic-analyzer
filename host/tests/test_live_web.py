@@ -283,6 +283,14 @@ def test_page_is_served_from_package_data() -> None:
     assert "WebSocket" not in page
     assert "/control/start" in page and "/control/stop" in page
     assert 'id="start"' in page and 'id="stop"' in page
+    # V08: the renderer coalesces records per animation frame, keeps a bounded
+    # DOM by removing child nodes and never rebuilds the pane with innerHTML.
+    assert "requestAnimationFrame" in page
+    assert "RENDER_BUDGET" in page and "MAX_LINES" in page
+    assert "removeChild(pane.firstChild)" in page
+    assert "innerHTML.split" not in page
+    assert "insertAdjacentHTML" not in page
+    assert "display-skipped" in page
 
 
 # -- integration with the mock analyzer ------------------------------------
