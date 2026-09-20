@@ -661,6 +661,24 @@ workspace currently holds only the gateway `la_app.elf`, so a default `boot`
 is expected to report the missing `la_app_usb.elf` until V06 rebuilds the USB
 profile. Next: V01 host live-bridge contract (`docs/live-web.md`).
 
+### Full-USB live pivot - V01 bridge contract (2026-09-20)
+
+**V01 complete; the host live-web bridge contract is frozen.** New
+`docs/live-web.md`: the bridge owns the analyzer target (one serial port; a
+second owner fails honestly), consumes `AnalyzerClient.live(...)` events,
+serves `/` (host page), `/events` (SSE) and `/status` (JSON snapshot) on
+`127.0.0.1:8080` by default, and sends `LIVE_STOP` plus releases the port on
+teardown. Settled: **SSE** (`text/event-stream`, stdlib only; WebSocket
+rejected for V02), the browser payload is byte-compatible with `la_web_core`
+(`{"s":<slot>,"e":[[<t>,<kind>,"<hex>"],...]}`, 16-byte cap, lowercase hex),
+**single client** with `409 Conflict` for a second feed and a per-client
+bounded queue (256 messages; drop and count, never block the pump), a
+**4096-message bounded replay ring** with drop accounting, one stats message
+per second, and the V02/V03/V04 acceptance checks. No wire-protocol change
+(`docs/protocol.md` untouched) and no hardware result claimed. Verification:
+documentation-only change; `git diff --check` clean. Next: V02 bridge core
+with host tests.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

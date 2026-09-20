@@ -79,6 +79,7 @@ not-run, not pass.
 | `docs/decoders.md` | UART/SPI/I²C transition-decoder specification |
 | `docs/wiring.md` | JC/JE/JD pin maps, loopback wiring, power rules |
 | `docs/spi-link.md` | P9.1 SPI bulk-link contract and measured results |
+| `docs/live-web.md` | V01 host live-web bridge contract (SSE, single client, bounded replay ring) |
 | [`docs/usb-migration-implementation-instructions.md`](docs/usb-migration-implementation-instructions.md) | Proposed direct-Zynq USB migration: agent work packets, decision gates and handoff; execution not started |
 | [`docs/usb-link.md`](docs/usb-link.md) | Proposed USB CDC-ACM contract, verified prerequisites and remaining bench questions |
 | `docs/test-plan.md` | Acceptance matrices per phase |
