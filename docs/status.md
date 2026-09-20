@@ -558,6 +558,26 @@ Evidence: `build/reports/usb-u06-performance.{md,json}`; docs updated:
 `docs/protocol.md`, `docs/usb-link.md` section 16, `docs/plan.md`,
 `docs/limits.md`, `docs/using-the-analyzer.md`.
 
+### USB migration execution - U05 wired bench (2026-09-19)
+
+**The wiring-gated U05 gates now run and pass over USB.** With the JE->JC
+loopback installed: P6.3 external matrix 18/18 (`--external-loopback
+--channel-mask 0xFF`), P6.2 18/18, `test_zynq_burst` 7 passed/1 skipped, the
+500-capture soak passed, P9.2 19/19 including the live compact comparison,
+the live suite `--live --live-seconds 60` 8 passed/3 skipped, and the live
+trace 1/1. The live 60 s UART zero-drop gate, isolated-byte p99, SPI/I2C
+10 kHz decoders, decoded-pattern stop, raw stream and garbage-flood resync
+all pass. Skipped with reasons: the relay-ring stall injection (no relay on
+USB), the TCP-kill injection (needs a `tcp://` target) and the 1 MHz SPI
+overload loss report. **Open item:** on direct USB the sustained 1 MHz SPI
+flood leaves a multi-second backlog and can stall the device (a bounded 2 s
+flood recovers at 2.1 s with 189,488 events); the 5 s gateway-window variant
+is not a passing gate until that recovery gap is fixed. The `pnputil`
+reset-during-capture probe reported a PnP "reboot needed" quirk; the device
+stayed responsive and IDLE but a true bus reset was not proven. Physical
+unplug/replug and suspend/resume remain [HUMAN]. Evidence:
+`build/reports/usb-u05-regression.md`.
+
 ### USB migration execution - U08 and U09 (2026-09-19)
 
 **U08 documentation reconciled; U09 packaging passes, SD boot and tag remain
