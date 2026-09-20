@@ -1098,6 +1098,66 @@ trailing-constant-run limitation is inherent to the format and is surfaced as
 a warning; `.sr` is the exact-count path. Next: W08 docs, packaging and the
 regression suite.
 
+### Unified UI - W08 docs, portal and packaging (2026-09-20)
+
+**W08 complete locally.** Documentation: `README.md` (doc map plus a `la-ui`
+quick start), `docs/using-the-analyzer.md` (new section 7 Unified UI, later
+sections renumbered, command-reference row), `docs/windows-dev.md` (Unified UI
+subsection), `docs/architecture.md` (host-only layer note),
+`docs/test-plan.md` (W00-W09 row), `docs/live-web.md` (unified-UI note; the
+legacy contract is unchanged) and `docs/unified-ui-plan.md` (implementation
+status). Packaging: `tools/make_release.py` now requires the `host/la_ui`
+package, its static files and the `la-ui` entry point in the wheel. Portal:
+`web-artifact/lib/docs/components/host-tools.ts` gained the `unified-ui`
+component, `coverage.ts` the `host/la_ui` and plan paths, and `subsystems.ts`
+the host-tools boundary/secondary text.
+
+Verification: portal `npm run validate` PASS (7 subsystems, 79 components, 21
+registers, 24 protocol messages, 11 roadmap phases, 55 glossary terms, 186
+coverage entries); `npm run build` completed and emitted all routes (not
+published); `python tools/run.py package` PASS with the wheel (133,161 bytes)
+containing `host/la_ui/*` and the `la-ui` entry point. Evidence:
+`build/release/release-manifest.json`. Next: W09 bench E2E and browser smoke.
+
+### Unified UI - W09 bench E2E, browser smoke and release tooling (2026-09-20)
+
+**W09 complete on the bench; the [HUMAN] visual click-through remains the only
+open UI item.** New `tests/e2e/test_ui.py` drives the real `UiServer` API
+against `serial://COM13` (fw 0x00090000, pl 0x4C410002):
+`python tools/run.py test-e2e -- --target serial://COM13 -k ui` PASS 6/6 in
+11.6 s - connect/ping/state, a 64,000-sample patgen counter capture with
+envelope/detail/export/offline reopen, a host decode of a patgen UART capture
+(0x4c/0x41 BYTE events), per-slot live control with a real SSE reader (slot 0
+UART events, slot 1 joined mid-session, slot 0 stopped alone, a capture
+auto-stopped the session), the trace dump model, and a **1,000,000-sample
+capture in 1.58 s** (32,780-byte envelope, no warnings).
+
+The V04 regression initially failed the SPI/I²C gates because the UI's live
+test left a latched SPI slot on the device and the older V04 tests do not
+state their full slot set (the V09 latch). Fixed at the source:
+`AnalyzerClient.configure_decoder()` sends one DECODER_CFG and waits for its
+ACK, `UiState.disconnect()` states OFF for all three slots before closing, and
+the mock analyzer ACKs DECODER_CFG in every scenario like the real device.
+After the fix: `test-e2e --target serial://COM13 --live-seconds 60 -k
+usb_live_web` PASS 8/8 (90.1 s), and a UI run followed immediately by the V04
+I²C gate passes without manual cleanup.
+
+Browser: a headless-Chrome DevTools-protocol run against the real device
+(UiServer connected to COM13) connected, captured 64,000 samples (28,461 lit
+canvas pixels), decoded 65 events, rendered the annotation row, streamed
+37,656 live events and returned to idle with **zero console errors and zero
+failed fetches** (`build/reports/ui-w09-browser-bench.txt`); the local page
+smoke `build/reports/ui-w03-browser-smoke.txt` remains valid.
+
+Release regression: `test-native` 18/18, `release` 22/22, `test-host` 166
+passed, `boot` PASS (BOOT.BIN 2,413,488 bytes, USB profile), `package` PASS
+(wheel 133,161 bytes with `host/la_ui` and the `la-ui` entry point), portal
+validate/build PASS. The `[HUMAN]` browser click-through (open the page and
+click through capture/decode/live/trace/export visually) and the `[HUMAN]` SD
+boot of the USB BOOT.BIN remain open; no `v1.0` tag was created. Evidence:
+`build/reports/ui-w09-bench.txt`, `build/reports/ui-w09-browser-bench.txt`,
+`build/reports/test-e2e.json`.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

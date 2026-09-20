@@ -189,8 +189,9 @@ class MockAnalyzer:
             elif message_type == p.DECODER_CFG:
                 self.last_decoder = payload
                 self.decoder_history.append(payload)
-                if self.scenario in _LIVE_SCENARIOS:
-                    self._send(connection, p.ACK, p.pack_ack(p.DECODER_CFG, sequence))
+                # The real device ACKs DECODER_CFG in idle and mid-session
+                # (V09); the UI uses that on disconnect to clear latched slots.
+                self._send(connection, p.ACK, p.pack_ack(p.DECODER_CFG, sequence))
             elif message_type == p.LIVE_START:
                 if self.scenario in _LIVE_SCENARIOS:
                     self._send(connection, p.ACK, p.pack_ack(p.LIVE_START, sequence))

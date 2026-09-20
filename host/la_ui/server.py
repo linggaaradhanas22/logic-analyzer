@@ -178,8 +178,24 @@ class UiState:
             self.hub.target = ""
             self.hub.state = "idle"
         if client is not None:
+            self._clear_decoder_slots(client)
             client.close()
         return {"connected": False}
+
+    @staticmethod
+    def _clear_decoder_slots(client: AnalyzerClient) -> None:
+        """Sends DECODER_CFG OFF for all three slots before closing.
+
+        The device latches decoder configs across sessions (V09), so a UI
+        session with slots 1/2 enabled would otherwise leak into a later
+        la-cli/la-web session that only states its own slot. Best effort:
+        a timeout is swallowed so disconnect cannot hang."""
+        for slot in range(3):
+            try:
+                client.configure_decoder(p.pack_decoder_off(slot),
+                                         timeout_s=2.0)
+            except Exception:  # noqa: BLE001 - best effort cleanup
+                break
 
     def shutdown(self) -> None:
         try:

@@ -159,6 +159,21 @@ def test_capture_requires_connection(ui):
     assert status == 409 and "not connected" in payload["error"]
 
 
+def test_disconnect_clears_latched_decoder_slots(ui):
+    _state, server = ui
+    from host.la_cli import protocol as p
+
+    with MockAnalyzer("ping") as mock:
+        assert _json(server, "POST", "/api/connect",
+                     {"target": mock.uri})[0] == 200
+        assert _json(server, "POST", "/api/disconnect")[0] == 200
+        # The V09 device latches decoder configs across sessions; disconnect
+        # states OFF for all three slots so a later la-cli session starts clean.
+        assert len(mock.decoder_history) == 3
+        assert all(config[1] == p.DECODER_OFF
+                   for config in mock.decoder_history)
+
+
 def test_ports_route(ui):
     _state, server = ui
     status, payload = _json(server, "GET", "/api/ports")

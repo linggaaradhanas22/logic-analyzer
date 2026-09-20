@@ -300,6 +300,17 @@ class AnalyzerClient:
         self._send(p.PATGEN_CFG, p.pack_patgen_cfg(patgen_ctrl))
         self._expect_ack(p.PATGEN_CFG, "PATGEN_CFG", deadline)
 
+    def configure_decoder(self, config_payload: bytes,
+                          timeout_s: float = 5.0) -> None:
+        """Sends one DECODER_CFG payload and waits for its ACK.
+
+        Works while idle and mid-session (the firmware forwards it to the
+        slot's decoder task). The UI uses it on disconnect to clear latched
+        slots (V09: the device latches decoder configs across sessions)."""
+        deadline = time.monotonic() + timeout_s
+        self._send(p.DECODER_CFG, bytes(config_payload))
+        self._expect_ack(p.DECODER_CFG, "DECODER_CFG", deadline)
+
     def configure_link(self, transport: int, spi_clock_mhz: int = 0,
                        timeout_s: float = 5.0) -> None:
         """Selects the burst DATA_* transport (additive v1 LINK_CFG, P9.1).

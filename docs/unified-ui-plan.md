@@ -13,6 +13,31 @@ bridge, which this package extends rather than replaces.
 packets. No implementation is authorized until the user issues an execution
 instruction.
 
+## Implementation status (2026-09-20)
+
+- **W00 complete**: the scope freeze is in `docs/plan.md` and `docs/status.md`.
+- **W01-W07 complete locally**: `host/la_ui/` (store, decimation, native
+  decode, jobs, exports, offline open, HTTP API), the workspace page
+  (`static/{index.html,app.js,waveform.js,timeline.js,style.css}`), the
+  `la-ui` / `la-cli ui` entry points and the `la-ui`/`la_ui` packaging.
+  Verification: host suite 166 passed, `node host/tests/page_check.mjs` PAGE
+  CHECK OK, real headless-Chrome CDP smoke with zero console errors. The
+  packet-by-packet evidence is in `docs/status.md`.
+- **W08 complete locally**: README/using/architecture/windows-dev/test-plan
+  updates, the wheel check for `host/la_ui` and the `la-ui` entry point, and
+  the portal `unified-ui` component (validate 79 components / 186 coverage
+  entries, build PASS).
+- **W09 complete on the bench**: `test-e2e -k ui` PASS 6/6 over
+  `serial://COM13` (64k capture with exports and offline reopen, host decode,
+  per-slot live with auto-stop, trace dump, 1M-sample capture in 1.58 s), the
+  V04 regression 8/8 after the disconnect slot-cleanup fix, and a real
+  headless-Chrome bench smoke with zero console errors. The **[HUMAN]**
+  visual click-through and the **[HUMAN]** SD boot of the USB BOOT.BIN remain
+  open and are not claimed as passing.
+
+The device-side boundary held: no firmware, PL, register-map or protocol file
+was modified by any packet.
+
 ## 1. Outcome
 
 - New entry point `la-ui` (and `la-cli ui`, one implementation) starts a
