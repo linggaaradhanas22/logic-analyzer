@@ -477,7 +477,8 @@ class AnalyzerClient:
              on_started=None, stop_on_overrun: bool = True,
              collect_events: bool = True,
              event_format: int = p.EVT_FORMAT_RECORDS,
-             stop_on_match: bool = False) -> list[dict]:
+             stop_on_match: bool = False,
+             on_event=None) -> list[dict]:
         """Configures the live stream and collects decoded events (P7.5).
 
         `config` is an optional 37-byte STREAM CONFIG payload sent before the
@@ -498,12 +499,19 @@ class AnalyzerClient:
         returned list then holds only the overrun records. `event_format`
         selects the encoding (P9.2): the default 0 keeps the v1 EVT_DECODED
         records, 1 requests the compact EVT_BLOCK encoding with an EVT_CFG
-        frame before DECODER_CFG. `stop_on_match=True` (P7.7) stops the pump
+        frame before DECODER_CFG.         `stop_on_match=True` (P7.7) stops the pump
         when the firmware reports an EVT_TRIGGERED frame for a decoded stop
         pattern; the match sample index is kept in `self.live_match_index`.
         `self.live_stats` reports the decoded event count, received event
         frames and their wire bytes for the comparison of the two
-        encodings."""
+        encodings.
+
+        `on_event(frame_events)` (V02) is an optional sink called with the
+        decoded event dicts of each event frame as they arrive, including the
+        final batches drained while waiting for the LIVE_STOP ACK. It must not
+        raise or block; the host web bridge uses it to publish the browser
+        feed. It is called before the `count` trimming, so a sink that needs
+        an exact count applies its own limit."""
         if timeout_s is None:
             deadline = float("inf")
         else:
@@ -555,18 +563,22 @@ class AnalyzerClient:
             account_frame(message_type, payload)
             if message_type in (p.EVT_DECODED, p.EVT_BLOCK):
                 arrival = time.monotonic()
+                frame_events = [
+                    {"slot": slot, "kind": kind, "t_sample": t_sample,
+                     "data": data, "arrival": arrival}
+                    for slot, kind, t_sample, data in events_of(message_type, payload)
+                ]
+                if on_event is not None:
+                    on_event(frame_events)
                 if not collect_events:
-                    for _slot, _kind, _t_sample, _data in events_of(message_type, payload):
+                    for _event in frame_events:
                         decoded_seen += 1
                         if count is not None and decoded_seen >= count:
                             stop_requested = True
                             break
                     return stop_requested
-                for slot, kind, t_sample, data in events_of(message_type, payload):
-                    collected.append(
-                        {"slot": slot, "kind": kind, "t_sample": t_sample,
-                         "data": data, "arrival": arrival}
-                    )
+                for event in frame_events:
+                    collected.append(event)
                     if count is not None and len(collected) >= count:
                         stop_requested = True
                         break
@@ -618,13 +630,16 @@ class AnalyzerClient:
                 return payload[0] == p.LIVE_STOP
             account_frame(message_type, payload)
             if message_type in (p.EVT_DECODED, p.EVT_BLOCK):
+                arrival = time.monotonic()
+                frame_events = [
+                    {"slot": slot, "kind": kind, "t_sample": t_sample,
+                     "data": data, "arrival": arrival}
+                    for slot, kind, t_sample, data in events_of(message_type, payload)
+                ]
+                if on_event is not None:
+                    on_event(frame_events)
                 if collect_events:
-                    arrival = time.monotonic()
-                    for slot, kind, t_sample, data in events_of(message_type, payload):
-                        collected.append(
-                            {"slot": slot, "kind": kind, "t_sample": t_sample,
-                             "data": data, "arrival": arrival}
-                        )
+                    collected.extend(frame_events)
                 return False
             if message_type == p.EVT_OVERRUN:
                 dropped = int.from_bytes(payload[:4], "little")

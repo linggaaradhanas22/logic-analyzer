@@ -679,6 +679,30 @@ per second, and the V02/V03/V04 acceptance checks. No wire-protocol change
 documentation-only change; `git diff --check` clean. Next: V02 bridge core
 with host tests.
 
+### Full-USB live pivot - V02 bridge core (2026-09-20)
+
+**V02 complete; the portable bridge and its host tests are in.** New
+`host/la_live_web/`: `core.py` (a byte-for-byte port of `la_web_core`'s
+`begin/event/end` formatting with the 16-byte data cap and no partial message;
+the `LiveEventHub` with the 4096-message bounded replay ring, drop accounting
+and the single-client policy), `server.py` (stdlib `ThreadingHTTPServer` with
+`/`, `/events` SSE and `/status`, `409` for a second feed, per-client bounded
+queue) and `static/index.html` (host page using `EventSource`; the data
+formatting is unchanged from the gateway page). `AnalyzerClient.live()` gained
+the additive `on_event(frame_events)` sink (dict records, called for each
+decoded frame including the LIVE_STOP drain) so the bridge publishes in real
+time. `pyproject.toml` packages `host.la_live_web` with the static page as
+package data.
+
+Verification: `python tools/run.py test-host` PASS 103 passed (was 87; 16 new
+tests: native formatting vectors from `tests/native/esp32_web_host_tests.c`,
+16-byte cap, truncation, ring overflow/replay, `409` conflict, slow-client
+drops without blocking, `publish_frame` limit, stats shape, page/status/SSE
+serving and the mock-analyzer live integration) and the full host suite is
+green. No hardware result claimed; V03 wires the CLI and the [HUMAN] browser
+smoke. Next: V03 (`la-cli live --serve` / `la-web`,
+`docs/using-the-analyzer.md`).
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

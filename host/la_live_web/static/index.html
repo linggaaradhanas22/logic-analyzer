@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RTOS Logic Analyzer - host live view</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; font: 13px/1.45 Consolas, "Courier New", monospace;
+         background: #101418; color: #d6e2ea; }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+           background: #182028; border-bottom: 1px solid #26323c; }
+  h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .3px; }
+  .pill { padding: 2px 9px; border-radius: 10px; font-size: 11px;
+          background: #3a2020; color: #ff9d9d; }
+  .pill.on { background: #14351f; color: #7ee2a0; }
+  nav { display: flex; gap: 6px; padding: 8px 14px 0; }
+  nav button { font: inherit; padding: 4px 14px; border: 1px solid #2c3a46;
+               background: #182028; color: #9fb3c1; border-radius: 4px 4px 0 0;
+               cursor: pointer; }
+  nav button.active { background: #0f1720; color: #7ec8ff; border-bottom-color: #0f1720; }
+  main { padding: 0 14px 10px; }
+  pre.pane { display: none; margin: 0; height: 62vh; overflow-y: auto;
+             background: #0f1720; border: 1px solid #26323c; border-radius: 0 4px 4px 4px;
+             padding: 8px 10px; white-space: pre-wrap; word-break: break-all; }
+  pre.pane.active { display: block; }
+  .t { color: #5d7284; }
+  .b { color: #e8f4ff; }
+  .e { color: #ffb86b; }
+  .m { color: #8f9fb0; }
+  footer { display: flex; flex-wrap: wrap; gap: 16px; padding: 8px 14px;
+           color: #8fa3b3; font-size: 12px; border-top: 1px solid #26323c; }
+</style>
+</head>
+<body>
+<header>
+  <h1>RTOS Logic Analyzer &mdash; host live view</h1>
+  <span id="conn" class="pill">connecting</span>
+  <span id="rate"></span>
+</header>
+<nav>
+  <button data-slot="0" class="active">Decoder 0</button>
+  <button data-slot="1">Decoder 1</button>
+  <button data-slot="2">Decoder 2</button>
+</nav>
+<main>
+  <pre id="pane0" class="pane active"></pre>
+  <pre id="pane1" class="pane"></pre>
+  <pre id="pane2" class="pane"></pre>
+</main>
+<footer>
+  <span id="stats">no stats yet</span>
+  <span id="counts"></span>
+</footer>
+<script>
+"use strict";
+const KINDS = {1:"BYTE",2:"FRAME_ERR",3:"PARITY_ERR",4:"START",5:"STOP",
+               6:"DISCONT",7:"ADDRESS",8:"ACK",9:"NACK",10:"CS_ASSERT",
+               11:"CS_RELEASE"};
+const MAX_LINES = 1500;
+const panes = [document.getElementById("pane0"),
+               document.getElementById("pane1"),
+               document.getElementById("pane2")];
+const firstT = [null, null, null];
+const lines = [0, 0, 0];
+let events = 0;
+let dropped = 0;
+
+document.querySelectorAll("nav button").forEach(function (button) {
+  button.addEventListener("click", function () {
+    document.querySelectorAll("nav button").forEach(function (other) {
+      other.classList.toggle("active", other === button);
+    });
+    panes.forEach(function (pane, slot) {
+      pane.classList.toggle("active", slot === Number(button.dataset.slot));
+    });
+  });
+});
+
+function hexToText(hex) {
+  let text = "";
+  for (let index = 0; index + 1 < hex.length; index += 2) {
+    const code = parseInt(hex.substr(index, 2), 16);
+    if (code === 0x0a) { text += "\\n"; }
+    else if (code === 0x0d) { text += "\\r"; }
+    else if (code === 0x09) { text += "\\t"; }
+    else if (code >= 0x20 && code < 0x7f) { text += String.fromCharCode(code); }
+    else { text += "\\x" + code.toString(16).padStart(2, "0"); }
+  }
+  return text;
+}
+
+function escapeHtml(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function append(slot, list) {
+  if (slot < 0 || slot > 2) { return; }
+  const pane = panes[slot];
+  const atBottom = pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 8;
+  list.forEach(function (record) {
+    const kind = record[1];
+    const data = record[2] || "";
+    if (firstT[slot] === null) { firstT[slot] = record[0]; }
+    const delta = record[0] - firstT[slot];
+    let body;
+    if (kind === 1) {
+      body = '<span class="b">' + escapeHtml(hexToText(data)) + "</span>";
+    } else {
+      body = '<span class="e">&lt;' + (KINDS[kind] || ("KIND" + kind)) + "&gt;</span>" +
+             (data ? ' <span class="m">' + data + "</span>" : "");
+    }
+    pane.insertAdjacentHTML("beforeend",
+      '<span class="t">+' + delta + "</span> " + body + "\n");
+    lines[slot] += 1;
+    events += 1;
+    if (lines[slot] > MAX_LINES + 100) {
+      pane.innerHTML = pane.innerHTML.split("\n").slice(-MAX_LINES).join("\n");
+      lines[slot] = MAX_LINES;
+    }
+  });
+  if (atBottom) { pane.scrollTop = pane.scrollHeight; }
+  document.getElementById("counts").textContent =
+    "events " + events + (dropped ? " | dropped " + dropped : "");
+}
+
+function showStats(s) {
+  document.getElementById("stats").textContent =
+    "target " + (s.target || "-") + " | state " + (s.state || "-") +
+    " | events " + s.events + " | messages " + s.messages +
+    " | ring " + s.ring + "/" + s.ring_capacity +
+    " | dropped " + s.dropped;
+  document.getElementById("rate").textContent =
+    "clients " + s.clients + " | uptime " + s.uptime_s + " s";
+  dropped = s.dropped;
+}
+
+function connect() {
+  const pill = document.getElementById("conn");
+  const source = new EventSource("/events");
+  source.onopen = function () {
+    pill.textContent = "connected";
+    pill.className = "pill on";
+  };
+  source.onerror = function () {
+    pill.textContent = "reconnecting";
+    pill.className = "pill";
+  };
+  source.onmessage = function (event) {
+    let message;
+    try { message = JSON.parse(event.data); } catch (error) { return; }
+    if (message.stats) {
+      showStats(message.stats);
+      return;
+    }
+    if (message.e) { append(message.s, message.e); }
+  };
+}
+
+connect();
+</script>
+</body>
+</html>
