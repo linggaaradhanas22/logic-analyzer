@@ -50,6 +50,7 @@
   <button id="stopall" class="ctl">Stop all</button>
   <span id="session" class="pill">idle</span>
   <span id="conn" class="pill">connecting</span>
+  <span id="build" class="label"></span>
   <span id="msg"></span>
 </header>
 <nav>
@@ -102,6 +103,7 @@ const KINDS = {1:"BYTE",2:"FRAME_ERR",3:"PARITY_ERR",4:"START",5:"STOP",
 const MAX_LINES = 2000;
 const TRIM_CHUNK = 500;
 const RENDER_BUDGET = 2000;
+const PAGE_VERSION = "v09";
 const panes = [document.getElementById("pane0"),
                document.getElementById("pane1"),
                document.getElementById("pane2")];
@@ -305,6 +307,8 @@ function render() {
 }
 
 function showStats(s) {
+  document.getElementById("build").textContent =
+    "page " + PAGE_VERSION + " | server " + (s.bridge || "?");
   document.getElementById("stats").textContent =
     "target " + (s.target || "-") +
     " | events " + s.events + " | messages " + s.messages +

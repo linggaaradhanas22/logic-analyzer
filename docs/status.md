@@ -902,6 +902,25 @@ commands.py}`, `host/la_live_web/{session.py,server.py,core.py,static/index.html
 `docs/using-the-analyzer.md`, `docs/test-plan.md`, `README.md`, the portal
 `components/host-tools.ts`/`subsystems.ts`/`verification.ts`, this ledger.
 
+### Full-USB live pivot - V09 follow-up: page freshness (2026-09-20)
+
+**User-reported "unconfigured" panes traced to a stale browser page, not the
+bridge.** Verified on the bench: the server serves the V09 page (with
+`applySlots`), `/status` and the SSE stats message both carry
+`slots: ["idle","idle","idle"]` and the three `slot_labels`, and a Node
+DOM-stub run of the served page script (`build/reports/v09-page-logic-check.js`)
+turns the pills to `idle`, enables Start and fills the labels from that stats
+message (`PAGE LOGIC OK`). Robustness/diagnosis added: the bridge now sends
+one stats message **immediately on SSE attach** (the page shows real slot
+state without waiting up to a second), and the page header shows
+`page v09 | server v09` from the stats `bridge` field so a stale cached page
+is obvious. Verification: `test-host` 114 passed; the Node page-logic check
+PASS. The user must restart the bridge and hard-refresh the tab (Ctrl+Shift+R);
+if the marker is missing or older, the browser is serving a cached page. No
+firmware or protocol change. Files: `host/la_live_web/{core.py,server.py,
+static/index.html}`, `host/tests/test_live_web.py`, `docs/live-web.md`, this
+ledger.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

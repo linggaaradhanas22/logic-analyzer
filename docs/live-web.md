@@ -123,8 +123,13 @@ messages).
   message is dropped for that client and `client_dropped` is counted; the live
   pump and the analyzer link are never blocked. Reconnect replays the ring.
 - The bridge emits one `{"stats":{...}}` message per second to each attached
-  client (also serving as an SSE keepalive). A client that stops reading is
-  detected by the socket write failing; it is detached and its slot freed.
+  client (also serving as an SSE keepalive), plus one immediately when the
+  feed attaches so the page shows the real slot state without the first-second
+  delay. A client that stops reading is detected by the socket write failing;
+  it is detached and its slot freed.
+- The page header shows a `page vXX | server vXX` marker from the stats
+  message; a missing or older marker means the browser is running a stale
+  page and needs a hard refresh (Ctrl+Shift+R).
 
 ## 5. Stats message and `/status` snapshot
 

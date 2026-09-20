@@ -166,10 +166,13 @@ def test_stats_message_shape() -> None:
     stats = payload["stats"]
     for key in ("clients", "events", "messages", "sent", "dropped", "ring",
                 "ring_capacity", "ring_dropped", "client_dropped", "refused",
-                "state", "target", "uptime_s"):
+                "state", "target", "uptime_s", "slots", "slot_labels",
+                "bridge"):
         assert key in stats, key
     assert stats["state"] == "streaming"
     assert stats["target"] == "serial://COM13"
+    assert stats["bridge"] == "v09"
+    assert stats["slots"] == ["unconfigured"] * 3
 
 
 # -- HTTP/SSE server -------------------------------------------------------
@@ -296,6 +299,8 @@ def test_page_is_served_from_package_data() -> None:
     assert "innerHTML.split" not in page
     assert "insertAdjacentHTML" not in page
     assert "display-skipped" in page
+    # V09 build marker and immediate slot state.
+    assert 'id="build"' in page and "PAGE_VERSION" in page
 
 
 # -- integration with the mock analyzer ------------------------------------

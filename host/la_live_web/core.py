@@ -22,6 +22,7 @@ MAX_DATA = 16
 DEFAULT_CAPACITY = 4096
 DEFAULT_RING_SIZE = 4096
 DEFAULT_CLIENT_QUEUE = 256
+BRIDGE_VERSION = "v09"
 
 
 class HubFull(RuntimeError):
@@ -237,6 +238,7 @@ class LiveEventHub:
                 "state": self.state,
                 "target": self.target,
                 "decoder": self.decoder,
+                "bridge": BRIDGE_VERSION,
                 "slots": list(self.slots),
                 "slot_labels": list(self.slot_labels),
                 "error": self.error,

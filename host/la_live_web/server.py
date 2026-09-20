@@ -140,6 +140,14 @@ class _LiveWebHandler(BaseHTTPRequestHandler):
             self.send_header("X-Accel-Buffering", "no")
             self.end_headers()
             self.close_connection = True
+            # One immediate stats message so the page shows the real slot
+            # state as soon as the feed connects (not up to a second later).
+            try:
+                self.wfile.write(
+                    f"data: {hub.stats_message()}\n\n".encode("utf-8"))
+                self.wfile.flush()
+            except OSError:
+                return
             while not self.server.stop_event.is_set():
                 try:
                     message = feed.queue.get(timeout=self.server.stats_interval)
