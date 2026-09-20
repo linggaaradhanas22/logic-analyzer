@@ -1003,6 +1003,24 @@ run or UI result is claimed. Planning commit
 staged set contained exactly the three intended documents. Next: await the
 user's execution instruction; begin W00/W01 only when authorized.
 
+### Unified UI - W01 capture store, decimation and decode (2026-09-20)
+
+**W01 complete locally.** New `host/la_ui/` package core: `store.py`
+(session-memory `Capture`/`CaptureStore`, lazy numpy sample expansion for raw
+and transition captures, >1M-sample warning), `render.py` (min/max envelope
+binary `LAEN` plus exact sample windows), `decode.py` (ctypes binding to the
+`la_native` C ABI for UART/SPI/I²C, spec parser matching the CLI grammar,
+`LA_NATIVE_LIB`/`build/native` resolution, a 16M-sample decode bound and an
+explicit `NativeLibraryMissing` error). Files: `host/la_ui/{__init__,store,render,decode}.py`,
+`host/tests/{test_ui_store,test_ui_decode}.py`, this ledger. Verification:
+`python tools/run.py test-native` PASS 18/18 (builds the DLL);
+`.venv\Scripts\python.exe -m pytest host/tests -q` PASS 129 passed (14 new:
+envelope parity against a Python reference at 1/2/4/8/16 buckets, clamping,
+empty captures, windows, store lifecycle, UART/SPI/I²C capture decode parity
+with `tools/models/decoders.py`, multi-slot decoding, spec errors and the
+missing-library path). No device, bench or UI result is claimed. Next: W02
+job runner, HTTP API and exports.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |
