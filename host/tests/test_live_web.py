@@ -301,6 +301,10 @@ def test_page_is_served_from_package_data() -> None:
     assert "display-skipped" in page
     # V09 build marker and immediate slot state.
     assert 'id="build"' in page and "PAGE_VERSION" in page
+    # V09 fix: the slot pill must keep its slot-state class (the selector the
+    # next update uses); overwriting className breaks every later update.
+    assert 'class="pill slot-state"' in page
+    assert 'classList.toggle("on", state === "streaming")' in page
 
 
 # -- integration with the mock analyzer ------------------------------------

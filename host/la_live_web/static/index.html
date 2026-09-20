@@ -138,11 +138,16 @@ function setSessionState(state) {
 function updateSlotUI() {
   for (let slot = 0; slot < 3; slot += 1) {
     const state = slotStates[slot] || "unconfigured";
+    // Keep the slot-state class: it is the selector the next update uses.
     const pill = document.querySelector('.slot-state[data-slot="' + slot + '"]');
-    pill.textContent = state;
-    pill.className = "pill" + (state === "streaming" ? " on" : "");
-    document.querySelector('.start[data-slot="' + slot + '"]').disabled = state !== "idle";
-    document.querySelector('.stop[data-slot="' + slot + '"]').disabled = state !== "streaming";
+    if (pill) {
+      pill.textContent = state;
+      pill.classList.toggle("on", state === "streaming");
+    }
+    const start = document.querySelector('.start[data-slot="' + slot + '"]');
+    if (start) { start.disabled = state !== "idle"; }
+    const stop = document.querySelector('.stop[data-slot="' + slot + '"]');
+    if (stop) { stop.disabled = state !== "streaming"; }
   }
 }
 
@@ -319,8 +324,8 @@ function showStats(s) {
   applySlots(s.slots);
   if (Array.isArray(s.slot_labels)) {
     for (let slot = 0; slot < 3; slot += 1) {
-      document.querySelector('.label[data-slot="' + slot + '"]').textContent =
-        s.slot_labels[slot] || "";
+      const label = document.querySelector('.label[data-slot="' + slot + '"]');
+      if (label) { label.textContent = s.slot_labels[slot] || ""; }
     }
   }
   if (s.error) { document.getElementById("msg").textContent = s.error; }

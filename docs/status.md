@@ -921,6 +921,26 @@ firmware or protocol change. Files: `host/la_live_web/{core.py,server.py,
 static/index.html}`, `host/tests/test_live_web.py`, `docs/live-web.md`, this
 ledger.
 
+### Full-USB live pivot - V09 fix: slot pill class wipe (2026-09-20)
+
+**Root cause of the persistent "unconfigured" panes found and fixed.** The
+page's first `updateSlotUI()` at load set `pill.className = "pill"`, deleting
+the `slot-state` class that is also the selector for every later update; the
+next update (stats or Stop all) then threw
+`Cannot set properties of null (setting 'textContent')` and the panes stayed
+unconfigured. Fixed by preserving the class with
+`pill.classList.toggle("on", ...)` and null-guarding the label/button lookups.
+Verified with a real-browser DevTools-protocol run against a live bridge
+(`build/reports/v09-cdp-check.js`): `pillCount=3`,
+`pills=["idle","idle","idle"]`, `startDisabled=false`, label
+`uart:rx=0,baud=115200`, marker `page v09 | server v09`. The same check run
+against the previous page revision reproduces the exact user error
+(`build/reports/v09-page-logic-check.js` against `build/tmp/index-old.html`).
+Host tests 114 passed with a new guard that the slot pill keeps its class.
+Files: `host/la_live_web/static/index.html`, `host/tests/test_live_web.py`,
+this ledger. The user's running bridge must be restarted and the tab
+hard-refreshed to pick up the fix.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |
