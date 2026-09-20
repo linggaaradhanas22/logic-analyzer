@@ -615,7 +615,9 @@ def _run_target(target: str, forwarded: Sequence[str]) -> int:
     if target == "jtag-zynq":
         xsdb = _tool("xsdb")
         script = PROJECT_ROOT / "fw-zynq" / "scripts" / "jtag_load.tcl"
-        profile = "gateway"
+        # V00 (2026-09-20): USB is the default product profile; pass
+        # `--profile gateway` to load the ESP32-gateway application.
+        profile = "usb"
         if "--profile" in forwarded:
             index = forwarded.index("--profile")
             if index + 1 < len(forwarded):
@@ -659,11 +661,11 @@ def _run_target(target: str, forwarded: Sequence[str]) -> int:
         return _run_steps(target, [(command, PROJECT_ROOT / "fw-esp32")])
     if target == "boot":
         script = PROJECT_ROOT / "fw-zynq" / "scripts" / "make_bootbin.py"
-        command = [sys.executable, str(script), str(PROJECT_ROOT)]
+        command = [sys.executable, str(script), str(PROJECT_ROOT), *forwarded]
         return _run_steps(target, [(command, PROJECT_ROOT)])
     if target == "package":
         script = PROJECT_ROOT / "tools" / "make_release.py"
-        command = [sys.executable, str(script), str(PROJECT_ROOT)]
+        command = [sys.executable, str(script), str(PROJECT_ROOT), *forwarded]
         return _run_steps(target, [(command, PROJECT_ROOT)])
     if target == "program":
         return _blocked(

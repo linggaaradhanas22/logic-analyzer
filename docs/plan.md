@@ -45,6 +45,28 @@ wireless features are retained, not deleted. P9.4 (Wi-Fi tuning), P10.1
 features, optional/deferred for the USB-first default. Release packaging
 becomes profile-aware so the SD image can carry the USB application.
 
+**V00 scope freeze (2026-09-20, user-directed).** The pivot defaults are now
+executable, not only planned:
+
+- **USB is the default product transport/profile.** `python tools/run.py
+  fw-zynq`, `jtag-zynq`, `boot` and `package` default to the USB profile
+  (`la_app_usb`); `--profile gateway` keeps the ESP32-gateway build, load and
+  packaging paths fully working. Docs and tool help state the default so
+  nothing silently builds the wrong image.
+- **The live browser view moves to the PC host.** The host bridge streams the
+  decoded events that `la-cli live` already receives; the ESP32 `la_web` page
+  and server stay in the repository for the gateway profile.
+- **Settled transport choice: SSE** (stdlib `http.server` long-lived response)
+  with the existing `{"s":<slot>,"e":[[<t>,<kind>,"<hex>"],...]}` browser
+  message, so the event payload stays byte-compatible with `la_web_core`; the
+  host page uses a small `EventSource` listener.
+- **Settled client policy: single client first**, with the hub built so a
+  multi-client fan-out can be enabled later (bounded replay ring, drop
+  accounting, one serial owner).
+- **P9.4, P10.1 and the ESP32-S3 transport port** are gateway-profile
+  features, retained and optional/deferred for the USB-first default. P9.1's
+  SPI findings and the U00-U09 evidence stay valid and are not rewritten.
+
 The local preset/BSP exposes USB0 and the `usbps` / `XUsbPs` driver, but device
 enumeration, physical configuration and throughput are unverified. The new
 contract corrects the initial driver and power assumptions and retains the

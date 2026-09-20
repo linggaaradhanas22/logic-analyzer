@@ -57,12 +57,14 @@ authoritative execution ledger is `docs/status.md`.
   (the gateway's and the ESP32 ROM's) fails to open with `GetCommState` hangs
   or errors 22/31. Keep **both** USB cables connected: with only one cable the
   S3 browns out (`E BOD`) under Wi-Fi transmit peaks.
-- **Direct Zynq USB link: adopted 2026-09-19; drain 1.62 MB/s measured.** The
-  Zynq PS USB0 CDC-ACM profile enumerates at high speed, passes the
-  burst/trace/recovery suites and clears the U06 gate (three consecutive
-  64 MiB trials at 1.62 MB/s with byte-exact transfers) after the DATA_CHUNK
-  amendment (4092-byte chunks, 64 KiB host reads, ACK every 4 chunks). The
-  gateway remains supported and the default build (`docs/usb-link.md`
+- **Direct Zynq USB link: default product transport since the V00 pivot
+  (2026-09-20); drain 1.62 MB/s measured.** The Zynq PS USB0 CDC-ACM profile
+  enumerates at high speed, passes the burst/trace/recovery suites and clears
+  the U06 gate (three consecutive 64 MiB trials at 1.62 MB/s with byte-exact
+  transfers) after the DATA_CHUNK amendment (4092-byte chunks, 64 KiB host
+  reads, ACK every 4 chunks). `fw-zynq`/`jtag-zynq`/`boot`/`package` default to
+  this profile; `--profile gateway` builds and packages the ESP32-gateway
+  application instead. The gateway remains supported (`docs/usb-link.md`
   section 16).
 - **Gateway loopback echo: ~40–44 kB/s round trip**, unchanged from 921600 to
   2 Mbps. This is a relay-processing measurement, not a universal one-way

@@ -2,10 +2,12 @@
 
 A logic analyzer records when digital signals are high or low so you can debug
 timing and communication. This project builds one from a Zybo Z7-10
-(Zynq-7010), an ESP32 Wi-Fi gateway and a native-Windows Python host tool. Eight
-3.3 V channels are sampled in the FPGA at up to 100 MS/s, captured around a
-trigger into DDR through ordinary AXI DMA scatter-gather descriptors, relayed
-over a CRC-protected link, and exported or live-decoded by the host.
+(Zynq-7010), an optional ESP32 Wi-Fi gateway and a native-Windows Python host
+tool. Eight 3.3 V channels are sampled in the FPGA at up to 100 MS/s, captured
+around a trigger into DDR through ordinary AXI DMA scatter-gather descriptors,
+relayed over a CRC-protected link, and exported or live-decoded by the host.
+Direct Zynq USB is the default host transport; the ESP32 Wi-Fi gateway is a
+supported optional profile.
 
 The implementation source of truth is `docs/plan.md`. The execution ledger,
 measured evidence, blockers and next actions are in `docs/status.md`.
@@ -17,10 +19,11 @@ measured evidence, blockers and next actions are in `docs/status.md`.
 | FPGA capture pipeline (`fpga/rtl`, 12 RTL blocks) | Implemented; 12/12 self-checking Questa tests |
 | Vivado integration, Zybo bitstream/XSA | Built and on bench; timing closed, DRC clean |
 | Zynq FreeRTOS core (acquisition, commands, TX, status, live decoders) | Bench-verified burst and live paths |
-| ESP32 gateway (UART + SPI bulk link, TCP relay, web live view) | Bench-verified; Wi-Fi drain is the open performance limit |
+| ESP32 gateway (UART + SPI bulk link, TCP relay, web live view) | Optional supported profile (`--profile gateway`); bench-verified; Wi-Fi drain is its open performance limit |
 | Host `la-cli` (capture, `.sr`/VCD/PNG export, live decode, trace) | Host-tested; burst and live used on bench |
-| Live web view on the ESP32 (HTTP + WebSocket) | Bench-verified (P10.1) |
-| Release packaging (BOOT.BIN tooling, ESP32 bin set, Python wheel) | Tooling present; final release waits on the P9.1 transport port |
+| Direct Zynq USB transport (CDC-ACM, 1.62 MB/s measured) | Default product transport since the 2026-09-20 V00 pivot |
+| Live web view (host bridge, V01-V03; ESP32 `la_web` for the gateway profile) | Host bridge in progress; ESP32 view bench-verified (P10.1) |
+| Release packaging (profile-aware BOOT.BIN, optional ESP32 bin set, Python wheel) | Tooling present; the [HUMAN] SD boot and tag are release gates |
 
 ## Specifications
 
@@ -50,10 +53,11 @@ python tools/run.py test-host
 python tools/run.py lint          # run lint and sim sequentially
 python tools/run.py sim
 python tools/run.py bit           # Vivado bitstream/XSA
-python tools/run.py fw-zynq       # Vitis firmware
-python tools/run.py fw-esp32      # ESP-IDF gateway
-python tools/run.py boot          # BOOT.BIN packaging
-python tools/run.py test-e2e -- --target tcp://la-esp32.local:5555
+python tools/run.py fw-zynq       # Vitis firmware (USB profile; --profile gateway)
+python tools/run.py fw-esp32      # ESP-IDF gateway (optional profile)
+python tools/run.py boot          # BOOT.BIN packaging (USB profile; --profile gateway)
+python tools/run.py package       # wheel + optional ESP32 set (--profile gateway)
+python tools/run.py test-e2e -- --target serial://COM13
 python tools/run.py release
 ```
 
@@ -87,18 +91,20 @@ For bench operation start with `docs/using-the-analyzer.md`; the same guide is o
 the portal at `/using`. Typical first commands:
 
 ```text
-.venv\Scripts\la-cli.exe ping -t tcp://la-esp32.local:5555
-.venv\Scripts\la-cli.exe capture -t tcp://la-esp32.local:5555 --rate 10M --words 64k --out capture.sr
-.venv\Scripts\la-cli.exe live -t tcp://la-esp32.local:5555 --decoder uart:rx=0,baud=115200
+.venv\Scripts\la-cli.exe ping -t serial://COM13
+.venv\Scripts\la-cli.exe capture -t serial://COM13 --rate 10M --words 64k --out capture.sr
+.venv\Scripts\la-cli.exe live -t serial://COM13 --decoder uart:rx=0,baud=115200
 ```
+
+The gateway profile uses `tcp://la-esp32.local:5555` with the same commands.
 
 ## Known limits
 
 See `docs/limits.md`. The headline items: 3.3 V inputs only; the released MVP
-is 100 MS/s with the 200 MS/s stretch unproven; the ESP32 Wi-Fi relay caps the
-host drain at ~0.28 MB/s today, so the P9.1 64 MB/1.5 MB/s gate is blocked on
-the ESP32-S3 USB transport port; and Wi-Fi jitter can delay the isolated-byte
-latency gate.
+is 100 MS/s with the 200 MS/s stretch unproven; the default direct-USB transport
+drains 1.62 MB/s measured, while the optional ESP32 Wi-Fi relay caps its host
+drain at ~0.28 MB/s and keeps the P9.1 64 MB/1.5 MB/s gate open; and Wi-Fi
+jitter can delay the isolated-byte latency gate on the gateway profile.
 
 ## Workflow rules
 

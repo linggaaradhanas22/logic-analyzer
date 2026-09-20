@@ -632,6 +632,35 @@ No code changed in this planning step. Next: V00 scope freeze (record the
 dispositions and the open choices: WebSocket vs SSE, single vs multi client,
 default profile flag) then V01 contract freeze.
 
+### Full-USB live pivot - V00 scope freeze (2026-09-20)
+
+**V00 complete locally; USB is the default product profile.** The dated
+decision and dispositions are in `docs/plan.md` (V00 scope freeze section):
+USB is the default transport/profile, the gateway is a supported optional
+profile (build, `la_web`, wireless retained), P9.4/P10.1/the ESP32-S3 port are
+gateway-profile features (optional/deferred), the live view moves to the PC
+host, and the settled choices are **SSE** (reusing the
+`{"s":<slot>,"e":[[<t>,<kind>,"<hex>"],...]}` browser message), **single
+client first** with a multi-capable hub, and **USB as the default profile**
+with `--profile gateway` fully working. Tooling: `fw-zynq`, `jtag-zynq`,
+`boot` and `package` default to the USB profile (`la_app_usb`);
+`fw-zynq/scripts/make_bootbin.py` and `tools/make_release.py` are
+profile-aware, and the ESP32 `.bin` set is optional for the USB profile
+(staged and labeled as the gateway profile when present) and required for
+`--profile gateway`. Files: `docs/plan.md`, `docs/limits.md`, `README.md`,
+`tools/run.py`, `tools/make_release.py`, `fw-zynq/scripts/la_platform.py`,
+`fw-zynq/scripts/jtag_load.tcl`, `fw-zynq/scripts/make_bootbin.py`, this
+ledger.
+
+Verification: `python -m compileall -q tools host tests fw-zynq/scripts` PASS;
+`la_platform.usage`, `make_bootbin.parse_args` and `make_release.parse_args`
+report `usb` by default, accept `gateway`, and reject an unknown profile
+(`boot blocked`/`package blocked`) PASS; `git diff --check` clean. No
+firmware build, load, package or bench result is claimed in V00. The Vitis
+workspace currently holds only the gateway `la_app.elf`, so a default `boot`
+is expected to report the missing `la_app_usb.elf` until V06 rebuilds the USB
+profile. Next: V01 host live-bridge contract (`docs/live-web.md`).
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

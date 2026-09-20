@@ -495,7 +495,9 @@ def make_client():
 
 def usage(argv) -> tuple[Path, Path, str]:
     tokens = list(argv[1:])
-    profile = "gateway"
+    # V00 (2026-09-20): USB is the default product profile; the gateway
+    # remains a fully supported optional profile (`--profile gateway`).
+    profile = "usb"
     if "--profile" in tokens:
         index = tokens.index("--profile")
         if index + 1 >= len(tokens):
@@ -507,7 +509,7 @@ def usage(argv) -> tuple[Path, Path, str]:
     if len(tokens) < 2:
         raise SystemExit(
             "usage: vitis -s <script>.py -- PROJECT_ROOT XSA "
-            "[--profile gateway|usb|example]"
+            "[--profile usb|gateway|example] (default usb)"
         )
     root = Path(tokens[-2]).resolve()
     xsa = Path(tokens[-1]).resolve()

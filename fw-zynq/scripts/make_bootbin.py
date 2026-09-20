@@ -1,11 +1,15 @@
-"""P10.4 BOOT.BIN packaging (tool-only step; SD boot is a bench gate).
+"""P10.4/V05 BOOT.BIN packaging (tool-only step; SD boot is a bench gate).
 
-Collects the release artifacts (bitstream, FSBL ELF, la_app ELF renamed to
-la_fw.elf), writes the bootgen image file under build/release and invokes
-bootgen so the image creation flow is verified locally before the [HUMAN]
-SD-card boot gate. Runs natively on Windows.
+Collects the release artifacts (bitstream, FSBL ELF, the profile's application
+ELF renamed to la_fw.elf), writes the bootgen image file under build/release
+and invokes bootgen so the image creation flow is verified locally before the
+[HUMAN] SD-card boot gate. Runs natively on Windows.
 
-Usage: python fw-zynq/scripts/make_bootbin.py PROJECT_ROOT
+V00 (2026-09-20): USB is the default profile, so the default SD image carries
+``la_app_usb``; pass ``--profile gateway`` to package the ESP32-gateway
+application instead.
+
+Usage: python fw-zynq/scripts/make_bootbin.py PROJECT_ROOT [--profile usb|gateway]
 """
 
 from __future__ import annotations
@@ -16,6 +20,8 @@ import sys
 from pathlib import Path
 
 BOOT_SYNC = b"\xfe\xff\xff\xea"  # bootgen Zynq image sync pad word
+
+APP_NAMES = {"usb": "la_app_usb", "gateway": "la_app"}
 
 
 def _single_elf(workspace: Path, name: str) -> Path:
@@ -57,10 +63,27 @@ def _bootgen() -> list[str]:
     return [str(override)]
 
 
+def parse_args(argv: list[str]) -> tuple[Path, str]:
+    tokens = [token for token in argv[1:]]
+    profile = "usb"
+    if "--profile" in tokens:
+        index = tokens.index("--profile")
+        if index + 1 >= len(tokens):
+            raise SystemExit("boot blocked: --profile needs a value")
+        profile = tokens[index + 1]
+        del tokens[index:index + 2]
+    if profile not in APP_NAMES:
+        raise SystemExit(f"boot blocked: unknown profile: {profile}")
+    if len(tokens) != 1:
+        raise SystemExit(
+            "usage: make_bootbin.py PROJECT_ROOT [--profile usb|gateway]"
+        )
+    return Path(tokens[0]).resolve(), profile
+
+
 def main(argv: list[str]) -> int:
-    if len(argv) < 2:
-        raise SystemExit("usage: make_bootbin.py PROJECT_ROOT")
-    root = Path(argv[1]).resolve()
+    root, profile = parse_args(argv)
+    app_name = APP_NAMES[profile]
     release = root / "build" / "release"
     workspace = root / "build" / "vitis" / "ws"
     bit = release / "logic_analyzer.bit"
@@ -69,7 +92,7 @@ def main(argv: list[str]) -> int:
             f"boot blocked: bitstream missing at {bit}; run `python tools/run.py bit` first"
         )
     fsbl = _single_elf(workspace, "fsbl")
-    app = _single_elf(workspace, "la_app")
+    app = _single_elf(workspace, app_name)
     staged_fsbl = release / "fsbl.elf"
     staged_app = release / "la_fw.elf"
     shutil.copyfile(fsbl, staged_fsbl)
@@ -116,6 +139,7 @@ def main(argv: list[str]) -> int:
     }
     for name, size in sizes.items():
         print(f"BOOT release artifact {name}: {size} bytes")
+    print(f"BOOT profile: {profile} (application {app_name})")
     print(f"BOOT-BIN PASS: {image}")
     return 0
 

@@ -6,7 +6,9 @@ if {$argc < 1} {
 }
 
 set project_root [file normalize [lindex $argv 0]]
-set profile "gateway"
+# V00 (2026-09-20): USB is the default product profile; `--profile gateway`
+# loads the ESP32-gateway application instead.
+set profile "usb"
 if {[llength $argv] >= 3 && [lindex $argv 1] eq "--profile"} {
     set profile [lindex $argv 2]
 }

@@ -1,18 +1,21 @@
-"""P10.4 release packaging: stage the release artifact set and verify it.
+"""P10.4/V05 release packaging: stage the release artifact set and verify it.
 
 Collects the artifacts a release consists of into ``build/release``:
 
 - ``BOOT.BIN`` (produced by ``python tools/run.py boot`` from the FSBL, the
-  bitstream and ``la_fw.elf``);
-- the ESP32 flash set (``bootloader.bin``, ``partition-table.bin`` and
-  ``la_gateway.bin``) under ``build/release/esp32``;
-- a Python wheel for the host tools under ``build/release/wheel``.
+  bitstream and the selected profile's application ELF);
+- the host tools wheel under ``build/release/wheel``;
+- for the ``gateway`` profile, the ESP32 flash set (``bootloader.bin``,
+  ``partition-table.bin`` and ``la_gateway.bin``) under
+  ``build/release/esp32``. The ESP32 set is optional for the USB profile
+  (the default): when present it is staged and labeled as the gateway
+  profile, but a missing ESP32 build does not block a USB release.
 
 Then it writes ``build/release/release-manifest.json`` with sizes and SHA-256
 hashes. The ``[HUMAN]`` SD-card boot and the ``v1.0`` tag are separate gates and
 are not performed here.
 
-Usage: python tools/make_release.py PROJECT_ROOT
+Usage: python tools/make_release.py PROJECT_ROOT [--profile usb|gateway]
 """
 
 from __future__ import annotations
@@ -24,6 +27,24 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+
+PROFILES = ("usb", "gateway")
+
+
+def parse_args(argv: list[str]) -> tuple[Path, str]:
+    tokens = list(argv[1:])
+    profile = "usb"
+    if "--profile" in tokens:
+        index = tokens.index("--profile")
+        if index + 1 >= len(tokens):
+            raise SystemExit("usage: make_release.py PROJECT_ROOT [--profile usb|gateway]")
+        profile = tokens[index + 1]
+        del tokens[index:index + 2]
+    if profile not in PROFILES:
+        raise SystemExit(f"package blocked: unknown profile: {profile}")
+    if len(tokens) != 1:
+        raise SystemExit("usage: make_release.py PROJECT_ROOT [--profile usb|gateway]")
+    return Path(tokens[0]).resolve(), profile
 
 
 def sha256(path: Path) -> str:
@@ -54,9 +75,7 @@ def verify_wheel(wheel: Path) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) < 2:
-        raise SystemExit("usage: make_release.py PROJECT_ROOT")
-    root = Path(argv[1]).resolve()
+    root, profile = parse_args(argv)
     release = root / "build" / "release"
     esp32_build = root / "build" / "esp32"
     release.mkdir(parents=True, exist_ok=True)
@@ -69,17 +88,24 @@ def main(argv: list[str]) -> int:
         errors.append("BOOT.BIN has an unexpected header")
 
     esp32_stage = release / "esp32"
-    esp32_stage.mkdir(exist_ok=True)
     esp32_sources = {
         "bootloader.bin": esp32_build / "bootloader" / "bootloader.bin",
         "partition-table.bin": esp32_build / "partition_table" / "partition-table.bin",
         "la_gateway.bin": esp32_build / "la_gateway.bin",
     }
-    for name, source in esp32_sources.items():
-        if not source.is_file():
-            errors.append(f"ESP32 artifact missing: {source}; run `python tools/run.py fw-esp32` first")
-            continue
-        shutil.copyfile(source, esp32_stage / name)
+    esp32_artifacts: list[Path] = []
+    esp32_present = all(source.is_file() for source in esp32_sources.values())
+    if profile == "gateway" and not esp32_present:
+        for name, source in esp32_sources.items():
+            if not source.is_file():
+                errors.append(
+                    f"ESP32 artifact missing: {source}; run `python tools/run.py fw-esp32` first"
+                )
+    if esp32_present:
+        esp32_stage.mkdir(exist_ok=True)
+        for name, source in esp32_sources.items():
+            shutil.copyfile(source, esp32_stage / name)
+            esp32_artifacts.append(esp32_stage / name)
 
     wheel_dir = release / "wheel"
     if wheel_dir.exists():
@@ -106,8 +132,9 @@ def main(argv: list[str]) -> int:
             print(f"PACKAGE BLOCKED: {error}")
         return 1
 
-    artifacts = [boot, *[esp32_stage / name for name in esp32_sources], wheels[0]]
+    artifacts = [boot, *esp32_artifacts, wheels[0]]
     manifest = {
+        "profile": profile,
         "artifacts": [
             {
                 "path": str(path.relative_to(root)).replace("\\", "/"),
@@ -116,7 +143,10 @@ def main(argv: list[str]) -> int:
             }
             for path in artifacts
         ],
-        "note": "Tooling evidence only: the [HUMAN] SD boot and the v1.0 tag are separate gates.",
+        "note": "Tooling evidence only: the [HUMAN] SD boot and the v1.0 tag are "
+        f"separate gates. Profile: {profile} (BOOT.BIN carries the "
+        f"{'la_app_usb' if profile == 'usb' else 'la_app'} application); the ESP32 "
+        "images are the optional gateway profile.",
     }
     manifest_path = release / "release-manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")
