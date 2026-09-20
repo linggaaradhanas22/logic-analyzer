@@ -615,6 +615,23 @@ Blocked/not authorized: the `[HUMAN]` SD boot and on-image gates, the `v1.0`
 tag and publication, and wiring photos. Evidence:
 `build/reports/usb-u09-release.md`.
 
+### Full-USB live pivot - planning (2026-09-19)
+
+**User-directed scope change: USB becomes the default transport and the live
+browser view moves to the PC host.** Wrote the execution package
+`docs/usb-full-live-pivot.md` with packets V00-V06: scope freeze and
+dispositions; host live-bridge contract (reuse the existing
+`{"s":slot,"e":[[t,kind,"hex"],...]}` browser message, stdlib-only server,
+bounded replay ring); portable host bridge with tests; CLI/browser
+integration; USB live end-to-end gates; docs and profile-aware packaging; and
+the USB-profile SD release. The gateway stays a supported optional profile
+(build, `la_web`, wireless retained); P9.4, P10.1 and the ESP32-S3 transport
+port become gateway-profile features, optional/deferred for the USB-first
+default. The normative plan carries the pivot note and points to the package.
+No code changed in this planning step. Next: V00 scope freeze (record the
+dispositions and the open choices: WebSocket vs SSE, single vs multi client,
+default profile flag) then V01 contract freeze.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

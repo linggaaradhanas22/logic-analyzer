@@ -35,6 +35,16 @@ feature is removed. P9.1/P9.4/P10.1 keep their current status. Details are in
 [usb-link.md](usb-link.md) section 16 and
 `build/reports/usb-u06-performance.md`.
 
+**Full-USB live pivot (2026-09-19, user-directed).** The default product
+transport moves to direct USB and the live browser view moves to the PC host.
+The execution package is
+[usb-full-live-pivot.md](usb-full-live-pivot.md) with packets V00-V06. The
+gateway remains a supported optional profile: its build, `la_web` UI and
+wireless features are retained, not deleted. P9.4 (Wi-Fi tuning), P10.1
+(browser live view) and the ESP32-S3 transport port become gateway-profile
+features, optional/deferred for the USB-first default. Release packaging
+becomes profile-aware so the SD image can carry the USB application.
+
 The local preset/BSP exposes USB0 and the `usbps` / `XUsbPs` driver, but device
 enumeration, physical configuration and throughput are unverified. The new
 contract corrects the initial driver and power assumptions and retains the
