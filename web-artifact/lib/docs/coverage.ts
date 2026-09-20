@@ -172,11 +172,26 @@ export const COVERAGE: CoverageEntry[] = [
   { path: 'host/la_cli/trace.py', destination: '/subsystems/host-tools', note: 'Trace payload parser and timeline renderer.' },
   { path: 'host/la_cli/__init__.py', destination: '/subsystems/host-tools' },
   {
+    path: 'host/la_ui/**',
+    destination: '/subsystems/host-tools',
+    note: 'W00-W09 unified UI: capture store, LAEN decimation, native decode, jobs, exports, offline open, HTTP API and the workspace page.',
+  },
+  {
+    path: 'host/la_ui/static/**',
+    destination: '/subsystems/host-tools',
+    note: 'Vanilla-JS workspace page, waveform renderer, live/trace timelines and dark theme.',
+  },
+  {
     path: 'host/la_sigrok_bridge/__init__.py',
     destination: '/tooling',
     note: 'Placeholder package; the P10.2 SUMP bridge is deferred (docs/sigrok-bridge.md).',
   },
-  { path: 'host/tests/**', destination: '/verification', note: 'Pytest suites: protocol, client/mock, export, live, trace, CLI and Wi-Fi helper.' },
+  {
+    path: 'host/tests/page_check.mjs',
+    destination: '/verification',
+    note: 'Node DOM-stub run of the workspace page: unknown-id audit and renderer exercise.',
+  },
+  { path: 'host/tests/**', destination: '/verification', note: 'Pytest suites: protocol, client/mock, export, live, trace, CLI, UI store/decode/API/page/export/trace/open and Wi-Fi helper.' },
 
   { path: 'tests/native/**', destination: '/verification', note: 'CTest C suites plus the ctypes ABI and model-parity Python tests.' },
   { path: 'tests/hil/**', destination: '/verification', note: 'Zynq serial bring-up; [HUMAN] gate, skipped without --port.' },
@@ -221,6 +236,7 @@ export const COVERAGE: CoverageEntry[] = [
   { path: 'docs/spi-link.md', destination: 'spi-bulk-link', note: 'P9.1 SPI bulk-link contract and measured results.' },
   { path: 'docs/sigrok-bridge.md', destination: '/tooling', note: 'P10.2 SUMP bridge assessment and deferral.' },
   { path: 'docs/windows-dev.md', destination: '/tooling', note: 'Native setup, build, flash and troubleshooting.' },
+  { path: 'docs/unified-ui-plan.md', destination: '/subsystems/host-tools', note: 'W00-W09 unified UI package: frozen decisions, architecture and packet gates.' },
   { path: 'docs/research-review.md', destination: '/roadmap', note: 'v0.4 plan corrections.' },
   { path: 'docs/web-artifact-content-review.md', destination: '/tooling', note: 'Portal content review and claim corrections.' },
   { path: 'docs/web-artifact-implementation-instructions.md', destination: '/tooling', note: 'Documentation-portal contract.' },

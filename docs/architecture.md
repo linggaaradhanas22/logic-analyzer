@@ -120,6 +120,12 @@ signoff run replaces them.
   ESP32 gateway, its `la_web` page and the Wi-Fi drain (~0.28 MB/s, S3
   USB-OTG full-speed ceiling about 1.2 MB/s) remain a supported optional
   profile.
+- The unified UI (`host/la_ui`, W00-W09) is a host-only layer on top of that
+  bridge: a stdlib HTTP API around the same `AnalyzerClient` (capture jobs,
+  `LAEN` min/max envelopes and detail windows, host decoding through the
+  `la_native` C ABI, exports, trace and offline open) plus a vanilla-JS
+  workspace page. No firmware, PL, register-map or protocol change; the
+  direct-USB profile is the only UI transport.
 - Remaining honest caveats: PS DDR behavior with the board-preset negative
   DQS-to-CLK skew values is only verified at boot/bring-up on hardware;
   `IRQ_F2P` carries three sources (analyzer, DMA, SPI) and the drivers must

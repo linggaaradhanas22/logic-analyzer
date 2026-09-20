@@ -522,7 +522,7 @@ export const SUBSYSTEMS: SubsystemDoc[] = [
       'It can also stream decoded protocol events live and render them in text, CSV or a browser page.',
     ],
     boundary:
-      'Inside: the `la-cli` commands, TCP/serial transports, the Python protocol mirror, the analyzer client, reconstruction/export and the live client. Outside: the firmware and FPGA behavior it talks to.',
+      'Inside: the `la-cli` commands, `la-ui` unified workspace, TCP/serial transports, the Python protocol mirror, the analyzer client, reconstruction/export, the live client and the host-side capture decode. Outside: the firmware and FPGA behavior it talks to.',
     diagram: [
       'CLI command',
       'transport',
@@ -534,6 +534,7 @@ export const SUBSYSTEMS: SubsystemDoc[] = [
     secondary: [
       'Live mode: client → decoded event iterator → text/CSV/web view',
       'Host live bridge (V02-V03): SSE /events + page, bounded replay ring, single client',
+      'Unified UI (W00-W09): `la-ui` workspace with the waveform viewer, host capture decode, exports, trace and offline open; legacy page at /legacy',
       'Mock analyzer for tests; optional SUMP bridge deferred (P10.2)',
     ],
     sequence: [
@@ -561,6 +562,7 @@ export const SUBSYSTEMS: SubsystemDoc[] = [
     ],
     components: [
       'host-cli',
+      'unified-ui',
       'host-transport',
       'host-protocol',
       'analyzer-client',

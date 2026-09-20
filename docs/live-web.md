@@ -8,6 +8,12 @@ its web UI intact. `docs/plan.md` remains normative; `docs/protocol.md` defines
 the analyzer wire protocol and is **not** changed by this bridge (no new wire
 messages).
 
+**Unified UI note (W00-W09, 2026-09-20).** The unified workspace
+(`docs/unified-ui-plan.md`) reuses this bridge's hub, SSE feed, `/status` and
+`/control/*` contract unchanged and serves the workspace at `/` with this
+legacy page at `/legacy`. `la-web` keeps serving the page below exactly as
+documented here; the acceptance checks in section 8 still apply to it.
+
 ## 1. Scope and ownership
 
 - The bridge runs on the PC, next to `la-cli`, and owns the analyzer target for

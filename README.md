@@ -80,6 +80,7 @@ not-run, not pass.
 | `docs/wiring.md` | JC/JE/JD pin maps, loopback wiring, power rules |
 | `docs/spi-link.md` | P9.1 SPI bulk-link contract and measured results |
 | `docs/live-web.md` | V01 host live-web bridge contract (SSE, single client, bounded replay ring) |
+| [`docs/unified-ui-plan.md`](docs/unified-ui-plan.md) | W00-W09 unified UI package: one browser workspace for capture, waveform viewing, live decode, exports and trace |
 | [`docs/usb-migration-implementation-instructions.md`](docs/usb-migration-implementation-instructions.md) | Proposed direct-Zynq USB migration: agent work packets, decision gates and handoff; execution not started |
 | [`docs/usb-link.md`](docs/usb-link.md) | Proposed USB CDC-ACM contract, verified prerequisites and remaining bench questions |
 | `docs/test-plan.md` | Acceptance matrices per phase |
@@ -96,13 +97,23 @@ the portal at `/using`. Typical first commands:
 .venv\Scripts\la-cli.exe capture -t serial://COM13 --rate 10M --words 64k --out capture.sr
 .venv\Scripts\la-cli.exe live -t serial://COM13 --decoder uart:rx=0,baud=115200
 .venv\Scripts\la-web.exe -t serial://COM13 --decoder uart:rx=0,baud=115200
+.venv\Scripts\la-ui.exe -t serial://COM13
 ```
 
-`la-web` (or `la-cli live --serve`) serves the host browser view on
+`la-web` (or `la-cli live --serve`) serves the legacy host live view on
 `http://127.0.0.1:8080/`: each decoder pane has its own **Start**/**Stop**
 (up to three decoders via repeated `--decoder`, one per slot), the header has
 **Stop all**, and the analyzer stays connected between sessions. The gateway
 profile uses `tcp://la-esp32.local:5555` with the same commands.
+
+`la-ui` serves the unified workspace on the same default address: connect,
+burst capture with the waveform viewer (zoom/pan, cursors, measurements,
+channel layout, trigger and pre/post markers, edge and pattern search),
+host-side capture decoding with annotation rows, live decoded events on a
+time-aligned timeline with per-slot control, exports (`.sr`/`.vcd`/CSV/PNG),
+offline open of saved captures, the trace timeline and the pattern generator.
+The legacy page stays available at `/legacy` on the same server; see
+`docs/using-the-analyzer.md` section 7 and `docs/unified-ui-plan.md`.
 
 ## Known limits
 

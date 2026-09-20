@@ -1,4 +1,4 @@
-# Using the Analyzer
+﻿# Using the Analyzer
 
 This is the operating guide: how to wire the boards, bring the link up, capture
 signals, decode live traffic and open the results. Development setup (toolchain,
@@ -17,7 +17,8 @@ console script installed in the project environment:
   link uses its native USB port (CDC-ACM, `serial://COMx`); for the Wi-Fi TCP
   link and the live web view it joins the same **2.4 GHz** network as the PC.
 - PC with the project `.venv` and, for viewing captures, PulseView
-  (`build/pulseview`) or any VCD viewer.
+  (`build/pulseview`) or any VCD viewer. The unified UI (`la-ui`) renders the
+  waveform in Chrome/Edge, so PulseView is optional for interactive work.
 - Wiring per `docs/wiring.md`: signals to **JC** (3.3 V only), the UART ribbon
   **JD-1..4 + GND** to the ESP32, optional **JD-7..10 + JA-1** SPI bulk jumpers,
   and optional **JE→JC** loopback jumpers for self-test.
@@ -283,7 +284,64 @@ internal pattern generator (no jumpers):
   selectable.
 - Open `i2c.sr` in PulseView (`.vcd` in GTKWave, `.png` for a snapshot).
 
-## 7. Browser live view
+## 7. Unified UI (la-ui)
+
+`la-ui` (or `la-cli ui`) serves the unified workspace at
+`http://127.0.0.1:8080/`: one page for connection, burst capture with a
+waveform viewer, host-side capture decoding, live decoding, exports, the trace
+timeline and the pattern generator. It is a host-only feature (no firmware or
+PL change) and connects to the direct-USB analyzer only (`serial://COMx`);
+the ESP32/gateway path stays with `la-web`. The page needs Chrome or Edge.
+
+```powershell
+# Start idle; connect from the page (port dropdown + Connect)
+.\.venv\Scripts\la-ui.exe
+
+# Or connect immediately and pre-configure the live decoder slots
+.\.venv\Scripts\la-ui.exe -t serial://COM13 `
+    --decoder uart:rx=0,baud=115200 `
+    --decoder spi:sck=1,mosi=2,cs=3
+```
+
+1. **Connect.** Pick a COM port (or type `serial://COMx`) and click
+   **Connect**; the header shows `linked` plus the firmware/PL identity.
+   **Ping** refreshes it.
+2. **Capture.** Set rate, words, pre-trigger, raw/txn mode, trigger edges and
+   an optional patgen mode, then **Capture**. The waveform appears when the
+   transfer finishes; the status line shows the sample count. **Abort**
+   cancels a running capture. Captures above 1,000,000 samples are allowed
+   with a warning (the view is decimated).
+3. **Inspect.** Wheel zooms at the cursor, drag pans, double-click fits.
+   Click the ruler to place cursor A, Shift+click for cursor B, drag a line
+   to move it; Δt and 1/Δt show in the Channels panel. **Zoom A/B** fits the
+   cursor range, **◀ edge / edge ▶** step to the selected channel's edges,
+   and the search box finds a 0/1/x pattern on that channel. Channel names,
+   colors, visibility, order and heights persist in the browser. **PNG**
+   saves the visible canvas.
+4. **Decode.** Fill the slot spec fields (same grammar as `la-cli live`) and
+   press **Decode capture**; decoded UART/SPI/I²C events are drawn as
+   annotation rows under the signals. Decoding uses the same C decoders as
+   the device through the native DLL, so build it first with
+   `python tools/run.py test-native`.
+5. **Live.** **Apply live config** validates the three slot specs, then each
+   pane's **Start**/**Stop** controls that decoder independently; decoded
+   events stream onto the pane's time axis (up to 100,000 events kept per
+   slot, drops counted). Starting a capture stops a running live session
+   automatically, and vice versa.
+6. **Export / open.** `.sr`, `.vcd`, events CSV and samples CSV download
+   from the Export panel; **Open** loads a saved `.sr`/`.vcd`/`.csv` without
+   a device, so the viewer and decode work offline. `.sr` is the exact-count
+   format; a VCD cannot recover a trailing constant run.
+7. **Trace / patgen.** **Dump** renders the P8.3 task/queue timeline;
+   **Arm** latches a pattern-generator mode for the next session.
+
+The legacy three-pane live page remains at `http://127.0.0.1:8080/legacy`
+(the same contract as `la-web`), and `la-cli` remains the scripted interface.
+`la-ui` owns the serial port for its lifetime: stop it before running another
+`la-cli`/`la-web` session on the same port. Ctrl+C stops any live session and
+releases the port.
+
+## 8. Browser live view (legacy la-web)
 
 Since the 2026-09-20 pivot the live view is hosted on the PC; since V07 the
 page controls the session, and since V09 each decoder runs independently. The
@@ -335,7 +393,7 @@ blocking the link. The host bridge works over any target (`serial://` or
 
 No external assets or internet access are needed.
 
-## 8. Task/queue trace
+## 9. Task/queue trace
 
 ```powershell
 .\.venv\Scripts\la-cli.exe trace -t tcp://la-esp32.local:5555 --start
@@ -348,7 +406,7 @@ The PNG is a relative-time timeline of task switches, queue/stream-buffer
 activity and app markers. The dump is best-effort: a few `LOG` records can drop
 under relay pressure.
 
-## 9. SPI bulk transport (P9.1)
+## 10. SPI bulk transport (P9.1)
 
 By default burst `DATA_*` frames travel over the UART. To route them over the
 SPI slave (JD-7..10 + JA-1 wired), select it once per session:
@@ -364,7 +422,7 @@ captures use the native USB CDC port (`serial://COMx`): the ESP32-S3 USB-OTG is
 full-speed, so the host drain is bounded near 1.2 MB/s, far above the ~0.28 MB/s
 of the Wi-Fi TCP leg; see `docs/limits.md`.
 
-## 10. Command reference
+## 11. Command reference
 
 | Command | Purpose |
 |---|---|
@@ -376,6 +434,7 @@ of the Wi-Fi TCP leg; see `docs/limits.md`.
 | `la-cli live -t URI [options]` | Stream decoded UART/SPI/I²C events. |
 | `la-cli live -t URI ... --serve [--bind HOST] [--port N] [--autostart]` | Serve the host browser page; each pane's Start/Stop controls its decoder (V09). Repeat `--decoder` for slots 0-2. |
 | `la-cli web -t URI [options]` / `la-web` | Standalone host live web view (same implementation as `live --serve`). |
+| `la-cli ui [options]` / `la-ui` | Unified workspace: capture + waveform viewer, live decode, host decode, exports, trace, patgen. `--target` optional; `--decoder` repeatable; `--bind`/`--port`; legacy page at `/legacy`. |
 | `la-cli trace -t URI [--start\|--stop\|--dump]` | Task/queue trace ring. |
 | `la-cli link -t URI --spi\|--uart [--clock MHz]` | Select the burst transport. |
 
@@ -383,7 +442,7 @@ Target URIs: `serial://COMx` (gateway native USB CDC port, or a direct 3.3 V
 USB-UART adapter on JD-1..4 + GND, `[HUMAN]`), `tcp://la-esp32.local:5555`
 (Wi-Fi gateway) or `tcp://<ip>:5555`.
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 - **Ping times out after a flash/reset:** wait ~15 s and retry once (listener
   refresh). Then check the ESP32 console for `net CONNECTED` and the Wi-Fi

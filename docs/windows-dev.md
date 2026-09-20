@@ -183,7 +183,22 @@ once and retry (the known stale-client state); if it still fails, check the
 monitor log and `ping la-esp32.local`. The burst E2E gate then runs as
 `python tools\run.py test-e2e -- --target tcp://la-esp32.local:5555`.
 
-### Live web view
+### Unified UI (la-ui)
+
+The unified workspace is `la-ui` (or `la-cli ui`), served on
+`http://127.0.0.1:8080/` with the legacy page at `/legacy`:
+
+```powershell
+.venv\Scripts\la-ui.exe -t serial://COM13
+```
+
+It needs Chrome or Edge, the project `.venv`, and (for capture decoding) the
+native decoder DLL built by `python tools\run.py test-native`. Host tests:
+`python tools\run.py test-host`; the page checks also need Node
+(`node host\tests\page_check.mjs`). See `docs/using-the-analyzer.md` section 7
+and the W00-W09 package `docs/unified-ui-plan.md`.
+
+### Live web view (legacy la-web)
 
 Since the V00 pivot the default live view is hosted by the PC bridge: start
 `la-cli live -t serial://COMx --decoder uart:rx=0,baud=115200 --serve` (or

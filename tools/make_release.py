@@ -74,12 +74,19 @@ def verify_wheel(wheel: Path) -> list[str]:
         "host/la_live_web/__init__.py",
         "host/la_live_web/static/index.html",
         "host/la_sigrok_bridge/__init__.py",
+        "host/la_ui/__init__.py",
+        "host/la_ui/server.py",
+        "host/la_ui/static/index.html",
+        "host/la_ui/static/app.js",
+        "host/la_ui/static/waveform.js",
+        "host/la_ui/static/timeline.js",
+        "host/la_ui/static/style.css",
         "tools/run.py",
     ]
     for entry in required:
         if not any(name == entry for name in names):
             problems.append(f"wheel missing {entry}")
-    for script in ("la-cli", "la-web"):
+    for script in ("la-cli", "la-web", "la-ui"):
         if script not in entry_points:
             problems.append(f"wheel missing the {script} console-script entry point")
     return problems
