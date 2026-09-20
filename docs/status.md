@@ -726,6 +726,28 @@ browser smoke (open `http://127.0.0.1:8080`, render patgen UART events, reload
 reconnect) has not been performed in a browser; it is scheduled with the V04
 bench run. Next: V04 USB live E2E gates over `serial://COM13`.
 
+### Full-USB live pivot - V04 USB live E2E gates (2026-09-20, bench)
+
+**V04 passes on the bench; the [HUMAN] visual browser smoke is still open.**
+New `tests/e2e/test_usb_live_web.py` runs a real `LiveWebServer` +
+`LiveEventHub` with an SSE reader thread against `serial://COM13` (USB-profile
+device, fw `0x00090000`, PL `0x4C410002`). `python tools/run.py test-e2e --
+--target serial://COM13 --live-seconds 60 -k usb_live_web` PASS 8/8 in 90.55 s.
+Numbers: 60 s UART 606,411 events / 606,411 feed events (0 client drops, 0
+format drops, 0 overruns, 0 dropped segments, 606,405 decoded bytes, 124.7 kB/s
+wire, IDLE); isolated byte -0.6 ms against the 25 ms budget; SPI 10 kHz 4,380
+events with 0 frame errors; I²C 10 kHz 5,347 events / 668 complete frames / 0
+NACKs; `--stop-on` "LA" match at sample 72,678 in 0.172 s; compact EVT_BLOCK
+29,472 events at 57.1 kB/s; 1 MHz SPI overload served 14,469 events with 0
+client drops and recovered to IDLE in 0.05 s; bridge close/reopen delivered
+exactly 32 events on each session and `ping` still answered. Ring evictions
+(`ring_dropped`, 25,841 in the 60 s run) are the bounded replay bound, not feed
+loss. Evidence: `build/reports/usb-v04-live-web.md`,
+`build/reports/usb-v04-live-web-evidence.txt` (helper
+`build/reports/usb-v04-live-web-measure.py`), `build/reports/test-e2e.json`.
+Still open: the [HUMAN] browser render/reload check, and the re-run against the
+V06-packaged image. Next: V05 docs and profile-aware packaging.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |
