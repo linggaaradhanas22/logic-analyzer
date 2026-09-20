@@ -337,6 +337,26 @@ def _configure_patgen(client: AnalyzerClient, patgen_mode: str) -> None:
     client.configure_patgen(p.PATGEN_EN_MASK | (PATGEN_MODES[patgen_mode] << 4))
 
 
+PATGEN_PINS = {"uart": "CH0", "spi": "sck=CH0, mosi=CH1, cs=CH2",
+               "i2c": "scl=CH3, sda=CH4"}
+
+
+def _patgen_note(patgen_mode: str, slot_configs: dict[int, bytes]) -> None:
+    """Warns when several decoders share a single-protocol pattern source.
+
+    The internal patgen drives one protocol's pins at a time (and not the
+    generic counter/walking/prbs modes), so extra decoders need external
+    signals on their own channels (docs/using-the-analyzer.md)."""
+    if patgen_mode in ("off", "counter", "walking", "prbs"):
+        return
+    if len(slot_configs) <= 1:
+        return
+    click.echo(
+        f"note: --patgen {patgen_mode} drives only {PATGEN_PINS[patgen_mode]}; "
+        "the other decoders need external signals on their own channels"
+    )
+
+
 def _serve_live(client: AnalyzerClient, target: str,
                 slot_configs: dict[int, bytes], stream_config: bytes,
                 count: int | None, compact: bool, stop_bytes: bytes | None,
@@ -384,6 +404,7 @@ def _serve_live(client: AnalyzerClient, target: str,
             f"cannot bind the live web view on {bind}:{port}: {exc}"
         ) from exc
     click.echo(f"live web view: {url} (target {target})")
+    _patgen_note(patgen_mode, slot_configs)
     try:
         if autostart:
             controller.start_all()
@@ -458,6 +479,7 @@ def live(target: str, decoder_specs: tuple[str, ...], rate: str, patgen_mode: st
                         patgen_mode, autostart)
             return
         _configure_patgen(client, patgen_mode)
+        _patgen_note(patgen_mode, slot_configs)
         try:
             events = client.live(
                 list(slot_configs.values()), config=stream_config, count=count,

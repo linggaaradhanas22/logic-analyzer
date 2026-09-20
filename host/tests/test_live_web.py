@@ -556,6 +556,17 @@ def test_web_command_multiple_decoders(analyzer) -> None:
     assert mock.decoder_history[2] == p.pack_decoder_off(2)
 
 
+def test_web_patgen_note_with_multiple_decoders(analyzer) -> None:
+    mock = analyzer("live")
+    result = CliRunner().invoke(web, [
+        "-t", mock.uri, "--port", "0", "--autostart", "--patgen", "spi",
+        "--decoder", "uart:rx=0,baud=115200",
+        "--decoder", "spi:sck=0,mosi=1,cs=2",
+    ])
+    assert result.exit_code == 0, result.output
+    assert "drives only sck=CH0, mosi=CH1, cs=CH2" in result.output
+
+
 def test_web_command_rejects_four_decoders(analyzer) -> None:
     mock = analyzer("live")
     result = CliRunner().invoke(web, [

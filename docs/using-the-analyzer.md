@@ -299,6 +299,12 @@ frozen contract.
    (single-client policy).
 
 A pane with no `--decoder` spec shows `unconfigured` and cannot be started.
+`--patgen` drives **one protocol's pins at a time**: UART `CH0`, SPI
+`sck=CH0, mosi=CH1, cs=CH2`, I²C `scl=CH3, sda=CH4` (`counter`/`walking`/`prbs`
+drive the raw pattern outputs). A decoder on other channels sees undriven pins
+— SPI can sit on a stuck `CS_ASSERT` and I²C stays empty — so simultaneous
+decoders need external signals on their own channels; the CLI prints a note
+when several decoders share one patgen source.
 `--autostart` starts every configured decoder immediately and exits when the
 session ends (scripted smoke); `--count N` caps a session at N events and
 `--timeout S` bounds it. Ctrl+C stops all decoders, closes the server and
