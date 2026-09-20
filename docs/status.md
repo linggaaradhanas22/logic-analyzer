@@ -997,8 +997,11 @@ documentation-only change; `git diff --check` clean; the packet list, gates
 and frozen-decision table were reviewed against the current host code
 (`host/la_cli`, `host/la_live_web`, `common/la_decode`, `CMakeLists.txt`,
 `tools/run.py`) and the recorded V04/V09 evidence. No firmware build, bench
-run or UI result is claimed. Next: await the user's execution instruction;
-begin W00/W01 only when authorized.
+run or UI result is claimed. Planning commit
+`8b45a9be3af0eef5241b1ac2ac5cb5199b8b1bd4` was pushed to `origin/main`;
+`git ls-remote origin refs/heads/main` matched `git rev-parse HEAD` and the
+staged set contained exactly the three intended documents. Next: await the
+user's execution instruction; begin W00/W01 only when authorized.
 
 | Item | Current value |
 |---|---|
