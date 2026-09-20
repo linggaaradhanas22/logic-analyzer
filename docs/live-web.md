@@ -1,7 +1,8 @@
-# Host live web bridge — frozen contract (V01)
+# Host live web bridge — frozen contract (V01, revised V07)
 
 This document is the V01 contract for the PC-hosted live view introduced by the
-full-USB pivot (`docs/usb-full-live-pivot.md`). The bridge replaces the ESP32
+full-USB pivot (`docs/usb-full-live-pivot.md`), revised by V07 (2026-09-20) to
+add interactive Start/Stop control from the page. The bridge replaces the ESP32
 `la_web` server for the USB-first default while keeping the gateway profile and
 its web UI intact. `docs/plan.md` remains normative; `docs/protocol.md` defines
 the analyzer wire protocol and is **not** changed by this bridge (no new wire
@@ -16,9 +17,10 @@ messages).
   error, not retry silently.
 - The bridge consumes the same `AnalyzerClient.live(...)` events as the CLI.
   The Zynq keeps decoding; the bridge only transports and formats.
-- Teardown: on Ctrl+C, `--count`/`--timeout` completion or an HTTP server stop,
-  the bridge sends `LIVE_STOP` (the client does this in its normal path),
-  closes the analyzer transport and releases the port before exiting.
+- Teardown: on Ctrl+C the bridge stops any running session (LIVE_STOP), stops
+  the HTTP server, closes the analyzer transport and releases the port before
+  exiting. A page Stop only ends the session; the transport stays open for the
+  next Start.
 - No new PyPI runtime dependency: Python standard library only
   (`http.server`, `json`, `queue`, `threading`).
 
@@ -44,6 +46,8 @@ messages).
 | GET | `/` (and `/index.html`) | `text/html` live page (host copy of the gateway page) |
 | GET | `/events` | `text/event-stream` feed (see section 4) |
 | GET | `/status` | `application/json` bridge snapshot (see section 5) |
+| POST | `/control/start` | starts a live session; `409` when one is running |
+| POST | `/control/stop` | stops the running session; idempotent, always `200` |
 | other | | `404` |
 
 - Default bind: **`127.0.0.1`**, default port: **`8080`** (`--bind`/`--port`
@@ -53,6 +57,27 @@ messages).
 - The page is served from `host/la_live_web/static/index.html`, shipped inside
   the wheel as package data. No CDN or external asset is referenced.
 - `HEAD` is not required; responses are UTF-8.
+
+## 3a. Interactive session control (V07)
+
+- The bridge starts **idle**: opening the page does not start decoding. The
+  page's **Start** button posts `/control/start`; **Stop** posts
+  `/control/stop`. The CLI prints the URL and waits for the browser
+  (`--autostart` keeps the old scripted behavior: one session starts
+  immediately and the command exits when it ends).
+- One session at a time. `start` while streaming returns `409` with
+  `{"error": "a live session is already running"}`; `stop` while idle is a
+  no-op `200`. A session that ends by `--count`, `--timeout` or an error
+  returns to idle and Start is enabled again.
+- The analyzer transport stays open between sessions (one owner), so Start →
+  Stop → Start works without re-opening the port. Each start re-arms the
+  pattern generator when `--patgen` was selected (the mode/DIV latch rule).
+- State machine: `idle -> streaming -> stopping -> idle`. `/status` reports
+  `session` (`idle`/`streaming`/`stopping`), `sessions` (started count) and the
+  last session `error` when one occurred.
+- Interactive sessions keep draining after an `EVT_OVERRUN` and count it in
+  the stats; the scripted `--autostart` path ends on it like the classic
+  `la-cli live` command.
 
 ## 4. Event feed, replay and backpressure
 
@@ -82,11 +107,12 @@ counters (no relay/heap):
 {"stats":{"clients":1,"events":1234,"messages":42,"sent":42,"dropped":0,
           "ring":17,"ring_capacity":4096,"ring_dropped":0,"client_dropped":0,
           "refused":0,"state":"streaming","target":"serial://COM13",
-          "uptime_s":12.3}}
+          "decoder":"uart:rx=0,baud=115200","error":null,"uptime_s":12.3}}
 ```
 
-`/status` returns the same fields plus `"connected": true|false` so the E2E
-gates can assert counts without parsing SSE.
+`/status` returns the same fields plus `"connected": true|false` and, when a
+session controller is present, `"session"`, `"sessions"` and the last session
+`"error"`, so the E2E gates can assert counts without parsing SSE.
 
 ## 6. Formatting parity
 
@@ -106,13 +132,13 @@ gates can assert counts without parsing SSE.
 
 ## 7. CLI surface (V03)
 
-- `la-cli live ... --serve [--bind HOST] [--port PORT]` runs the live session
-  with the bridge instead of printing events; the text/CSV modes are unchanged
-  when `--serve` is absent.
+- `la-cli live ... --serve [--bind HOST] [--port PORT] [--autostart]` serves
+  the host live view; the text/CSV modes are unchanged when `--serve` is
+  absent. Without `--autostart` the session is controlled from the page.
 - `la-web` is the standalone equivalent (`--target`, `--decoder`, `--rate`,
   `--patgen`, `--count`, `--compact`, `--stop-on`, `--timeout`, `--bind`,
-  `--port`). Both entry points call the same implementation and print the
-  bound URL once.
+  `--port`, `--autostart`). Both entry points call the same implementation and
+  print the bound URL once.
 - Exit codes: 0 on a clean session, non-zero with a Click error when the
   target cannot be opened or the server cannot bind.
 
@@ -122,8 +148,11 @@ gates can assert counts without parsing SSE.
   vectors, ring overflow/drop accounting, single-client `409`, slow-client
   drop without blocking, malformed frame rejection (no partial message) and
   clean detach.
-- V03: `[HUMAN]` browser smoke — open `http://127.0.0.1:8080`, run the patgen
-  UART source, confirm events render and the page reconnects after reload.
+- V03/V07: `[HUMAN]` browser smoke — open `http://127.0.0.1:8080`, click
+  **Start**, run the patgen UART source, confirm events render line by line,
+  click **Stop**, confirm the state returns to idle, Start again, and reload
+  the page to confirm the feed reconnects. Host tests cover the same control
+  endpoints against the mock analyzer.
 - V04: over `serial://COM13` the feed receives exactly the requested event
   count (`--count`), `/status` matches the SSE message total, the device
   returns to IDLE, and the 1 MHz SPI overload recovers within 3 s while the

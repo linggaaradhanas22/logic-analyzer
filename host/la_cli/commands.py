@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import sys
+import time
 from pathlib import Path
 
 import click
@@ -324,46 +325,53 @@ def _configure_patgen(client: AnalyzerClient, patgen_mode: str) -> None:
 def _serve_live(client: AnalyzerClient, target: str, decoder_cfg: bytes,
                 stream_config: bytes, count: int | None, compact: bool,
                 stop_bytes: bytes | None, timeout_s: float | None,
-                bind: str, port: int) -> dict:
-    """V03: runs a live session with the host web bridge attached.
+                bind: str, port: int, decoder_spec: str,
+                patgen_mode: str, autostart: bool) -> dict:
+    """V03/V07: serves the host web bridge and its interactive live session.
 
-    The bridge owns the target for the session (the caller already opened it);
-    on teardown the live pump sends LIVE_STOP and the server stops. Events are
-    counted, not retained, so a long session stays bounded; `count` caps the
-    browser feed exactly even when the final device batch overshoots."""
-    from ..la_live_web import LiveEventHub, LiveWebServer
+    The bridge owns the target for its lifetime (the caller already opened
+    it) and starts idle. The page's Start button (POST /control/start) begins
+    a live session; Stop (POST /control/stop) ends it with LIVE_STOP and the
+    page returns to idle, ready to start again. `--autostart` starts one
+    session immediately and exits when it ends (scripted smoke/tests). Events
+    are counted, not retained; `count` caps the browser feed exactly even when
+    the final device batch overshoots."""
+    from ..la_live_web import LiveEventHub, LiveSessionController, LiveWebServer
 
     hub = LiveEventHub()
     hub.target = target
-    server = LiveWebServer(hub, host=bind, port=port)
+    hub.decoder = decoder_spec
+    controller = LiveSessionController(
+        client, hub, decoder_cfg, stream_config,
+        count=count, timeout_s=timeout_s,
+        event_format=p.EVT_FORMAT_BLOCK if compact else p.EVT_FORMAT_RECORDS,
+        stop_bytes=stop_bytes,
+        prepare=(lambda: _configure_patgen(client, patgen_mode))
+        if patgen_mode != "off" else None,
+        # Interactive sessions keep draining after a loss report; the scripted
+        # autostart path ends on it like the classic live command.
+        stop_on_overrun=autostart,
+    )
+    server = LiveWebServer(hub, host=bind, port=port, controller=controller)
     try:
         url = server.start()
     except OSError as exc:
         raise click.ClickException(
             f"cannot bind the live web view on {bind}:{port}: {exc}"
         ) from exc
-    click.echo(f"live web view: {url} (target {target}; Ctrl+C to stop)")
-    hub.state = "streaming"
-
-    def publish(frame_events) -> None:
-        limit = None if count is None else max(0, count - hub.events)
-        hub.publish_frame(frame_events, limit=limit)
-
+    click.echo(f"live web view: {url} (target {target})")
     try:
-        try:
-            client.live(
-                decoder_cfg, config=stream_config, count=count,
-                timeout_s=timeout_s,
-                event_format=p.EVT_FORMAT_BLOCK if compact else p.EVT_FORMAT_RECORDS,
-                stop_on_match=stop_bytes is not None,
-                collect_events=False,
-                on_event=publish,
-            )
-        except KeyboardInterrupt:
-            client.stop_live()
-            click.echo("live stopped")
+        if autostart:
+            controller.start()
+            controller.wait()
+        else:
+            click.echo("open the page and click Start (Ctrl+C to quit)")
+            while True:
+                time.sleep(0.2)
+    except KeyboardInterrupt:
+        click.echo("live web view stopped")
     finally:
-        hub.state = "idle"
+        controller.stop()
         server.stop()
     stats = hub.stats()
     message_word = "message" if stats["messages"] == 1 else "messages"
@@ -372,6 +380,8 @@ def _serve_live(client: AnalyzerClient, target: str, decoder_cfg: bytes,
         f"({stats['dropped']} dropped: {stats['ring_dropped']} ring, "
         f"{stats['client_dropped']} client)"
     )
+    if controller.error:
+        click.echo(f"last session error: {controller.error}")
     if client.live_match_index is not None:
         click.echo(f"stop-on match at sample {client.live_match_index}")
     return stats
@@ -399,11 +409,14 @@ def _serve_live(client: AnalyzerClient, target: str, decoder_cfg: bytes,
               help="live web view bind address (--serve)")
 @click.option("--port", default=8080, show_default=True, type=int,
               help="live web view port (--serve)")
+@click.option("--autostart", is_flag=True,
+              help="start one live session immediately and exit when it ends "
+                   "instead of waiting for the page's Start button (--serve)")
 @click.option("--timeout", "timeout_s", default=None, type=float,
               help="overall deadline in seconds (default: until --count or Ctrl+C)")
 def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int | None,
          compact: bool, stop_on: str | None, csv: bool, serve: bool, bind: str,
-         port: int, timeout_s: float | None) -> None:
+         port: int, autostart: bool, timeout_s: float | None) -> None:
     if serve and csv:
         raise click.BadParameter("--csv cannot be combined with --serve")
     decoder_cfg, stream_config, stop_bytes, _actual_rate = _prepare_live(
@@ -412,11 +425,12 @@ def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int
 
     client = _make_client(target)
     try:
-        _configure_patgen(client, patgen_mode)
         if serve:
             _serve_live(client, target, decoder_cfg, stream_config, count, compact,
-                        stop_bytes, timeout_s, bind, port)
+                        stop_bytes, timeout_s, bind, port, decoder_spec,
+                        patgen_mode, autostart)
             return
+        _configure_patgen(client, patgen_mode)
         try:
             events = client.live(
                 decoder_cfg, config=stream_config, count=count,
@@ -478,20 +492,23 @@ def live(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int
               help="live web view bind address")
 @click.option("--port", default=8080, show_default=True, type=int,
               help="live web view port")
+@click.option("--autostart", is_flag=True,
+              help="start one live session immediately and exit when it ends "
+                   "instead of waiting for the page's Start button")
 @click.option("--timeout", "timeout_s", default=None, type=float,
               help="overall deadline in seconds (default: until --count or Ctrl+C)")
 def web(target: str, decoder_spec: str, rate: str, patgen_mode: str, count: int | None,
         compact: bool, stop_on: str | None, bind: str, port: int,
-        timeout_s: float | None) -> None:
+        autostart: bool, timeout_s: float | None) -> None:
     """`la-web` / `la-cli web`: the same implementation as `live --serve`."""
     decoder_cfg, stream_config, stop_bytes, _actual_rate = _prepare_live(
         decoder_spec, rate, stop_on
     )
     client = _make_client(target)
     try:
-        _configure_patgen(client, patgen_mode)
         _serve_live(client, target, decoder_cfg, stream_config, count, compact,
-                    stop_bytes, timeout_s, bind, port)
+                    stop_bytes, timeout_s, bind, port, decoder_spec,
+                    patgen_mode, autostart)
     except (AnalyzerError, TransportError) as exc:
         raise click.ClickException(str(exc)) from exc
     finally:

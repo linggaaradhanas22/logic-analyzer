@@ -36,8 +36,8 @@ export const hostToolsComponents: ComponentDoc[] = [
       'ports: no target; lists USB-UART (CP210x/CH340/FTDI) candidates.',
       'ping, status, abort: --target/-t required, --timeout default 5.0 s.',
       'capture: --target required; --rate default 10M; --words default 64k; --mode raw|txn default raw; --pre default 0; --trig-rise/--trig-fall channel 0..7; --out required; --timeout 30.0 s.',
-      'live: --target required; --decoder default uart:rx=0,baud=115200; --rate default 100M; --patgen off|counter|walking|prbs|uart|spi|i2c; --count optional; --compact; --stop-on hex; --csv; --serve [--bind HOST] [--port N] for the host live web bridge; --timeout optional.',
-      'web (and the la-web console script): the standalone host live web bridge with the same live options plus --bind/--port.',
+      'live: --target required; --decoder default uart:rx=0,baud=115200; --rate default 100M; --patgen off|counter|walking|prbs|uart|spi|i2c; --count optional; --compact; --stop-on hex; --csv; --serve [--bind HOST] [--port N] [--autostart] for the host live web bridge; --timeout optional.',
+      'web (and the la-web console script): the standalone host live web bridge with the same live options plus --bind/--port/--autostart; the page Start/Stop buttons control the session (V07).',
       'trace: --target required; --start, --stop or --dump (default); --out; --png; --title; --timeout 30.0 s.',
       'link: --target required; --spi or --uart; --clock MHz requires --spi.',
       'Sizes accept SI suffixes (4096, 64k, 1M); the sample rate must fit within 1 Hz .. 100 MHz.',
@@ -423,6 +423,7 @@ export const hostToolsComponents: ComponentDoc[] = [
       'read_stall_s is the P8.4 fault-injection hook; on_started supports the P7.6 isolated-byte measurement.',
       'The CLI supplies rate 100M, the patgen mode mapping and live_flush_cycles 200000 (2 ms at 100 MHz).',
       'The host live bridge attaches through on_event and applies the --count limit exactly, then serves the la_web_core-compatible JSON over SSE (docs/live-web.md).',
+      'The V07 session controller starts/stops a live session per page request; stop sets a threading.Event polled by the client pump, which still sends LIVE_STOP.',
       'The firmware requires transition encoding when a decoder slot is enabled; LIVE_START is NAKed otherwise.',
     ],
     failures: [

@@ -149,12 +149,14 @@ class AnalyzerClient:
         }
 
     def _pump(self, deadline: float, handler, deadline_ok: bool = False,
-              recv_cap: float = 0.02) -> None:
+              recv_cap: float = 0.02, stop_check=None) -> None:
         """Feeds the parser until handler() returns True, the deadline passes
         or the transport fails. handler receives (type, sequence, payload).
         With deadline_ok the deadline is a normal stop (live streaming);
         otherwise it raises TransportError. recv_cap bounds each read; the
-        drain gate passes 0 to poll without the timeout tail."""
+        drain gate passes 0 to poll without the timeout tail. stop_check is an
+        optional predicate polled every iteration so another thread can end a
+        live session promptly."""
         stopped = False
 
         def on_frame(message_type, sequence, payload) -> None:
@@ -163,6 +165,8 @@ class AnalyzerClient:
                 stopped = True
 
         while not stopped:
+            if stop_check is not None and stop_check():
+                return
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 if deadline_ok:
@@ -478,7 +482,7 @@ class AnalyzerClient:
              collect_events: bool = True,
              event_format: int = p.EVT_FORMAT_RECORDS,
              stop_on_match: bool = False,
-             on_event=None) -> list[dict]:
+             on_event=None, stop_event=None) -> list[dict]:
         """Configures the live stream and collects decoded events (P7.5).
 
         `config` is an optional 37-byte STREAM CONFIG payload sent before the
@@ -511,7 +515,11 @@ class AnalyzerClient:
         final batches drained while waiting for the LIVE_STOP ACK. It must not
         raise or block; the host web bridge uses it to publish the browser
         feed. It is called before the `count` trimming, so a sink that needs
-        an exact count applies its own limit."""
+        an exact count applies its own limit.
+
+        `stop_event` (V07) is an optional `threading.Event` polled by the
+        pump; when set, the session stops promptly and still sends LIVE_STOP,
+        so a browser Stop button can end a live session from another thread."""
         if timeout_s is None:
             deadline = float("inf")
         else:
@@ -619,7 +627,8 @@ class AnalyzerClient:
                 self._log_lines.append(payload.decode("utf-8", errors="replace"))
             return False
 
-        self._pump(deadline, on_live, deadline_ok=True)
+        self._pump(deadline, on_live, deadline_ok=True,
+                   stop_check=(stop_event.is_set if stop_event is not None else None))
         self._send(p.LIVE_STOP)
         stop_deadline = time.monotonic() + 5.0
 

@@ -5,6 +5,8 @@ Standard library only. Routes (see ``docs/live-web.md``):
 - ``GET /`` and ``/index.html`` -> the packaged live page;
 - ``GET /events`` -> ``text/event-stream`` feed (single client, 409 when busy);
 - ``GET /status`` -> JSON bridge snapshot;
+- ``POST /control/start`` -> starts a live session (409 when one is running);
+- ``POST /control/stop`` -> stops the running session (idempotent);
 - anything else -> 404.
 """
 
@@ -39,6 +41,10 @@ class _LiveWebHandler(BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(body)
 
+    def _send_json(self, status, payload: dict) -> None:
+        body = json.dumps(payload, indent=2).encode("utf-8") + b"\n"
+        self._send_bytes(status, "application/json", body)
+
     def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
         path = urlsplit(self.path).path
         if path in ("/", "/index.html"):
@@ -47,8 +53,13 @@ class _LiveWebHandler(BaseHTTPRequestHandler):
         elif path == "/status":
             snapshot = dict(self.server.hub.stats())
             snapshot["connected"] = snapshot["clients"] > 0
-            body = json.dumps(snapshot, indent=2).encode("utf-8") + b"\n"
-            self._send_bytes(HTTPStatus.OK, "application/json", body)
+            controller = self.server.controller
+            if controller is not None:
+                snapshot["session"] = controller.state
+                snapshot["sessions"] = controller.sessions
+                if controller.error:
+                    snapshot["error"] = controller.error
+            self._send_json(HTTPStatus.OK, snapshot)
         elif path == "/events":
             self._serve_events()
         else:
@@ -57,6 +68,32 @@ class _LiveWebHandler(BaseHTTPRequestHandler):
 
     def do_HEAD(self) -> None:  # noqa: N802
         self.do_GET()
+
+    def do_POST(self) -> None:  # noqa: N802
+        path = urlsplit(self.path).path
+        controller = self.server.controller
+        if path not in ("/control/start", "/control/stop"):
+            self._send_bytes(HTTPStatus.NOT_FOUND, "text/plain; charset=utf-8",
+                             b"not found\n")
+            return
+        if controller is None:
+            self._send_json(HTTPStatus.CONFLICT,
+                            {"error": "this bridge has no session controller"})
+            return
+        if path == "/control/start":
+            if not controller.start():
+                self._send_json(HTTPStatus.CONFLICT, {
+                    "error": "a live session is already running",
+                    "state": controller.state,
+                })
+                return
+            self._send_json(HTTPStatus.OK, {"state": controller.state})
+            return
+        stopped = controller.stop()
+        self._send_json(HTTPStatus.OK, {
+            "state": controller.state,
+            "stopped": stopped,
+        })
 
     def _serve_events(self) -> None:
         hub: LiveEventHub = self.server.hub
@@ -96,10 +133,11 @@ class _LiveWebServer(ThreadingHTTPServer):
     block_on_close = False
 
     def __init__(self, address, handler, hub: LiveEventHub, page: bytes,
-                 stats_interval: float) -> None:
+                 stats_interval: float, controller=None) -> None:
         self.hub = hub
         self.page = page
         self.stats_interval = stats_interval
+        self.controller = controller
         self.stop_event = threading.Event()
         super().__init__(address, handler)
 
@@ -109,12 +147,13 @@ class LiveWebServer:
 
     def __init__(self, hub: LiveEventHub, host: str = "127.0.0.1",
                  port: int = 8080, stats_interval: float = 1.0,
-                 page: bytes | None = None) -> None:
+                 page: bytes | None = None, controller=None) -> None:
         self.hub = hub
         self.host = host
         self.port = int(port)
         self.stats_interval = float(stats_interval)
         self.page = page if page is not None else PAGE_PATH.read_bytes()
+        self.controller = controller
         self._server: _LiveWebServer | None = None
         self._thread: threading.Thread | None = None
 
@@ -129,7 +168,8 @@ class LiveWebServer:
         if self._server is not None:
             raise RuntimeError("live web server already started")
         self._server = _LiveWebServer((self.host, self.port), _LiveWebHandler,
-                                      self.hub, self.page, self.stats_interval)
+                                      self.hub, self.page, self.stats_interval,
+                                      controller=self.controller)
         self.port = self._server.server_address[1]
         self._thread = threading.Thread(target=self._server.serve_forever,
                                         name="la-live-web", daemon=True)

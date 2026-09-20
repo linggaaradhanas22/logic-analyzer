@@ -13,6 +13,7 @@ from .core import (
     format_frame,
 )
 from .server import LiveWebServer
+from .session import LiveSessionController
 
 __all__ = [
     "DEFAULT_CAPACITY",
@@ -23,6 +24,7 @@ __all__ = [
     "ClientFeed",
     "HubFull",
     "LiveEventHub",
+    "LiveSessionController",
     "LiveWebServer",
     "MessageBuilder",
     "format_frame",

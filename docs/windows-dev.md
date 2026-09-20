@@ -187,10 +187,13 @@ monitor log and `ping la-esp32.local`. The burst E2E gate then runs as
 
 Since the V00 pivot the default live view is hosted by the PC bridge: start
 `la-cli live -t serial://COMx --decoder uart:rx=0,baud=115200 --serve` (or
-`la-web`) and open `http://127.0.0.1:8080/`. The bridge consumes the same live
+`la-web`) and open `http://127.0.0.1:8080/`. The bridge starts idle; the
+page's **Start**/**Stop** buttons control the live session (V07) and the
+transport stays open between sessions. The bridge consumes the same live
 events, keeps a bounded replay ring and serves SSE; see `docs/live-web.md` and
 `docs/using-the-analyzer.md` section 7. The [HUMAN] browser smoke is opening
-the page during a patgen session and reloading it.
+the page, clicking Start, watching decoded bytes arrive, clicking Stop, and
+reloading the page to see the feed reconnect.
 
 The gateway profile also keeps its ESP32-hosted page (P10.1). Open
 `http://la-esp32.local/` (or the IP from the boot log) while a live session

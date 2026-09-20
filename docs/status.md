@@ -806,6 +806,38 @@ authorization, and the optional gateway-profile work (P9.4 Wi-Fi tuning, the
 ESP32-S3 port) retained as deferred features. No wireless or browser feature
 was removed and the U00-U09 evidence is untouched.
 
+### Full-USB live pivot - V07 interactive browser Start/Stop (2026-09-20)
+
+**User-directed follow-up: the bridge now starts idle and the page controls
+the session.** New `host/la_live_web/session.py` (`LiveSessionController`:
+`idle -> streaming -> stopping -> idle`, restartable, one session at a time,
+re-arms the patgen before each start); `LiveWebServer` gained
+`POST /control/start` (409 while streaming) and `POST /control/stop`
+(idempotent), and `/status` now reports `session`, `sessions`, `error`,
+`decoder`; the page has **Start**/**Stop** buttons, shows the session state and
+error, and clears the panes on start. `AnalyzerClient.live()` gained the
+additive `stop_event` polled by the pump so a Stop from another thread ends the
+session promptly and still sends LIVE_STOP. The CLI serves interactively by
+default (`la-cli live --serve` / `la-web` print the URL and wait);
+`--autostart` keeps the scripted one-session behavior (tests, smoke). The
+interactive path keeps draining after an `EVT_OVERRUN`; autostart ends on it.
+
+Verification: `python tools/run.py test-host` PASS 109 passed (22 in
+`test_live_web.py`, including controller start/stop/restart, the HTTP control
+endpoints, 409-on-second-start, idempotent stop and the page/status shape);
+bench with the V06-built USB image on `serial://COM13`: `la-web --patgen uart`
+starts idle (`session=idle events=0`), Start streams (38,486 events / 1,880
+messages in 4 s, 0 dropped), Stop returns `{"state":"idle","stopped":true}`
+with the device back in IDLE, a second Start streams again (67,493 events,
+`sessions=2`), and the V04 bridge suite still passes 8/8. `python -m
+compileall` and `git diff --check` clean. Files: `host/la_live_web/{session.py,
+server.py,core.py,static/index.html,__init__.py}`, `host/la_cli/{client.py,
+commands.py}`, `host/tests/test_live_web.py`, `docs/live-web.md` (revised
+V07), `docs/using-the-analyzer.md`, `docs/windows-dev.md`, `README.md`, the
+portal `components/host-tools.ts`, this ledger. The [HUMAN] browser click
+smoke (open page, Start, watch lines, Stop, reload reconnect) remains open and
+is now the exact documented procedure.
+
 | Item | Current value |
 |---|---|
 | Observed date | 2026-09-14 |

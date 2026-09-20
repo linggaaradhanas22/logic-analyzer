@@ -136,6 +136,8 @@ class LiveEventHub:
         self.capacity = int(capacity)
         self.state = "idle"
         self.target = ""
+        self.decoder = ""
+        self.error: str | None = None
         self._lock = threading.Lock()
         self._ring: deque[str] = deque()
         self._feeds: list[ClientFeed] = []
@@ -232,6 +234,8 @@ class LiveEventHub:
                 "refused": self._refused,
                 "state": self.state,
                 "target": self.target,
+                "decoder": self.decoder,
+                "error": self.error,
                 "uptime_s": round(time.monotonic() - self._started, 3),
             }
 

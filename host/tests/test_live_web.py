@@ -21,6 +21,7 @@ from host.la_cli.transport import open_uri
 from host.la_live_web import (
     HubFull,
     LiveEventHub,
+    LiveSessionController,
     LiveWebServer,
     MessageBuilder,
     format_frame,
@@ -191,6 +192,16 @@ def _get(port: int, path: str) -> tuple[int, dict, bytes]:
     return response.status, headers, body
 
 
+def _post(port: int, path: str) -> tuple[int, dict, bytes]:
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    connection.request("POST", path, body=b"")
+    response = connection.getresponse()
+    headers = dict(response.getheaders())
+    body = response.read()
+    connection.close()
+    return response.status, headers, body
+
+
 def test_server_serves_page_and_status(web_server) -> None:
     server, hub = web_server
     status, headers, body = _get(server.port, "/")
@@ -198,6 +209,7 @@ def test_server_serves_page_and_status(web_server) -> None:
     assert "text/html" in headers["Content-Type"]
     assert b"host live view" in body
     assert b"/events" in body
+    assert b"/control/start" in body
 
     status, headers, body = _get(server.port, "/status")
     assert status == 200
@@ -208,6 +220,11 @@ def test_server_serves_page_and_status(web_server) -> None:
 
     status, _headers, _body = _get(server.port, "/missing")
     assert status == 404
+
+    # A server without a controller refuses start/stop instead of hanging.
+    status, _headers, body = _post(server.port, "/control/start")
+    assert status == 409
+    assert b"no session controller" in body
 
 
 def test_server_sse_streams_events_and_stats(web_server) -> None:
@@ -264,6 +281,8 @@ def test_page_is_served_from_package_data() -> None:
     page = PAGE_PATH.read_text(encoding="utf-8")
     assert "EventSource" in page
     assert "WebSocket" not in page
+    assert "/control/start" in page and "/control/stop" in page
+    assert 'id="start"' in page and 'id="stop"' in page
 
 
 # -- integration with the mock analyzer ------------------------------------
@@ -299,13 +318,96 @@ def test_bridge_publishes_mock_live_frames(analyzer) -> None:
         hub.detach(feed)
 
 
+# -- interactive session control (V07) --------------------------------------
+
+
+def _mock_stream_config() -> bytes:
+    return p.pack_config(
+        ctrl_flags=p.CTRL_STREAM, sample_div=0, mode=1, chan_en=0xFF,
+        post_samples=0, txn_max_run=0x00FFFFFF, live_flush_cycles=200_000,
+    )
+
+
+def _wait_events(hub: LiveEventHub, count: int, timeout: float = 3.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and hub.events < count:
+        time.sleep(0.01)
+
+
+def test_controller_start_stop_and_restart(analyzer) -> None:
+    mock = analyzer("live")
+    hub = LiveEventHub()
+    client = AnalyzerClient(open_uri(mock.uri))
+    controller = LiveSessionController(
+        client, hub, p.pack_decoder_cfg_uart(0, 0, 115200, FCLK_HZ),
+        _mock_stream_config())
+    try:
+        assert controller.state == "idle"
+        assert controller.start()
+        _wait_events(hub, 24)
+        assert hub.events == 24
+        assert controller.state == "streaming"
+        assert not controller.start(), "a second start must be refused"
+        assert controller.stop()
+        assert controller.state == "idle"
+        assert hub.error is None
+        # The transport stays open and the same bridge can stream again.
+        assert controller.start()
+        _wait_events(hub, 48)
+        assert hub.events == 48
+        assert controller.stop()
+        assert controller.sessions == 2
+    finally:
+        controller.stop()
+        client.close()
+
+
+def test_control_endpoints_start_stop_with_mock(analyzer) -> None:
+    mock = analyzer("live")
+    hub = LiveEventHub()
+    client = AnalyzerClient(open_uri(mock.uri))
+    controller = LiveSessionController(
+        client, hub, p.pack_decoder_cfg_uart(0, 0, 115200, FCLK_HZ),
+        _mock_stream_config())
+    server = LiveWebServer(hub, port=0, controller=controller)
+    server.start()
+    try:
+        status, _headers, body = _post(server.port, "/control/start")
+        assert status == 200
+        assert json.loads(body)["state"] == "streaming"
+        _wait_events(hub, 24)
+        assert hub.events == 24
+
+        status, _headers, body = _post(server.port, "/control/start")
+        assert status == 409
+        assert "already running" in json.loads(body)["error"]
+
+        status, _headers, body = _post(server.port, "/control/stop")
+        assert status == 200
+        assert json.loads(body)["stopped"] is True
+        assert controller.state == "idle"
+
+        # Stop is idempotent and /status reports the session counters.
+        status, _headers, _body = _post(server.port, "/control/stop")
+        assert status == 200
+        status, _headers, body = _get(server.port, "/status")
+        snapshot = json.loads(body)
+        assert snapshot["session"] == "idle"
+        assert snapshot["sessions"] == 1
+        assert snapshot["error"] is None
+    finally:
+        controller.stop()
+        server.stop()
+        client.close()
+
+
 # -- CLI integration (V03) --------------------------------------------------
 
 
 def test_live_serve_command_with_mock(analyzer) -> None:
     mock = analyzer("live")
     result = CliRunner().invoke(cli, ["live", "-t", mock.uri, "--serve",
-                                      "--port", "0"])
+                                      "--port", "0", "--autostart"])
     assert result.exit_code == 0, result.output
     assert "live web view: http://127.0.0.1:" in result.output
     assert "24 events in 3 messages" in result.output
@@ -314,7 +416,7 @@ def test_live_serve_command_with_mock(analyzer) -> None:
 def test_web_command_count_limits_the_feed(analyzer) -> None:
     mock = analyzer("live")
     result = CliRunner().invoke(web, ["-t", mock.uri, "--port", "0",
-                                      "--count", "5"])
+                                      "--count", "5", "--autostart"])
     assert result.exit_code == 0, result.output
     assert "5 events in 1 message" in result.output
 
