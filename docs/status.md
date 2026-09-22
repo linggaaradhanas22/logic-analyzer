@@ -55,9 +55,9 @@ commit, and the worktree is clean.
 
 ## Snapshot
 
-### UI-first operator runbook and portal update (2026-09-22, WIP)
+### UI-first operator runbook and portal update (2026-09-22)
 
-**Implementation complete locally; commit/push and publication are pending.**
+**Complete in the repository; website publication is intentionally delegated.**
 Replaced the mixed gateway/CLI-first operating guide with one direct-Zynq USB,
 UI-first runbook: pre-power 3.3 V checks; JP5=JTAG, JP6=USB, J12 power/JTAG and
 J10 data; the verified JTAG load; Windows/UI COM identification by the current
@@ -68,8 +68,8 @@ trace, troubleshooting and safe shutdown. The optional ESP32-S3 gateway remains
 a separate supported `la-web` path and the physical USB-profile SD boot remains
 explicitly unverified. Mirrored the operator sequence at the portal `/using`
 route. Files: `docs/using-the-analyzer.md`,
-`web-artifact/app/using/page.tsx` and this ledger; no firmware, FPGA, protocol or
-bench behavior changed.
+`web-artifact/app/using/page.tsx`, `web-artifact/lib/docs/snapshot.ts` and this
+ledger; no firmware, FPGA, protocol or bench behavior changed.
 
 Source review against `host/la_ui`, the pattern generator, `tools/run.py`, the
 USB/power contract and current limits corrected six draft issues before close:
@@ -94,9 +94,13 @@ same validator passed by direct lockfile-binary invocation. Repository-wide
 `components/ui/` and `hooks/use-mobile.ts`; targeted lint is clean. No firmware,
 FPGA, native or hardware test was required for this documentation/portal-only
 change. No new browser or bench result is claimed; the existing `[HUMAN]`
-visual click-through and SD boot gates remain open. Next: review the intended
-three-file diff, commit/push it, pin the portal snapshot to that source commit,
-then leave website publication to the user's requested Codex workflow.
+visual click-through and SD boot gates remain open. Content commit `1bd7655`
+contains the canonical runbook and `/using` update; the portal evidence snapshot
+is pinned to that commit. The content and close-out changes were pushed to
+`origin/main`; the pre-existing untracked `docs/hardwarex/` and `docs/learning/`
+directories were not staged or modified. The website itself was not published,
+as requested; next: the user's Codex publication workflow can deploy the updated
+portal source.
 
 ### USB migration planning (2026-09-17)
 
