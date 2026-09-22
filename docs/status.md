@@ -55,6 +55,49 @@ commit, and the worktree is clean.
 
 ## Snapshot
 
+### UI-first operator runbook and portal update (2026-09-22, WIP)
+
+**Implementation complete locally; commit/push and publication are pending.**
+Replaced the mixed gateway/CLI-first operating guide with one direct-Zynq USB,
+UI-first runbook: pre-power 3.3 V checks; JP5=JTAG, JP6=USB, J12 power/JTAG and
+J10 data; the verified JTAG load; Windows/UI COM identification by the current
+`1209:0001` development identity; `la-ui` startup and identity checks; a
+100 MS/s binary-counter capture; waveform controls; UART/SPI/I2C capture and
+live recipes; real-target wiring/capture/decode; export/offline-open semantics;
+trace, troubleshooting and safe shutdown. The optional ESP32-S3 gateway remains
+a separate supported `la-web` path and the physical USB-profile SD boot remains
+explicitly unverified. Mirrored the operator sequence at the portal `/using`
+route. Files: `docs/using-the-analyzer.md`,
+`web-artifact/app/using/page.tsx` and this ledger; no firmware, FPGA, protocol or
+bench behavior changed.
+
+Source review against `host/la_ui`, the pattern generator, `tools/run.py`, the
+USB/power contract and current limits corrected six draft issues before close:
+the legacy `la-cli ports` filter does not include VID `0x1209`; a DIV=0 counter
+must be sampled at 100 MS/s to show consecutive binary counts; a clean checkout
+needs `bit` before `fw-zynq`; successful capture completion proves exact size
+and whole-capture CRC but the page does not expose parser counters; SPI patgen
+frames repeat; and the ESP32-S3 optional path needs both USB cables. A final
+review also distinguished replay-ring rollover from active-client loss, removed
+live-drop checks from burst acceptance, documented events CSV as annotations
+only, and aligned server-error recovery with the actual browser/server split.
+
+Verification: `npx oxlint app/using/page.tsx` PASS;
+`npx oxfmt --check app/using/page.tsx` PASS; the documentation validator invoked
+with the lockfile's `esbuild@0.27.3` binary PASS (7 subsystems, 79 components,
+21 registers, 24 protocol messages, 11 roadmap phases, 55 glossary terms and
+186 coverage entries); `npm run build` PASS and emitted `/using`; `git diff
+--check` PASS. The packaged `npm run validate` command is currently BLOCKED
+because `esbuild` is transitive and not root-linked in this pnpm workspace; the
+same validator passed by direct lockfile-binary invocation. Repository-wide
+`npm run lint` remains BLOCKED by 19 pre-existing errors in unrelated
+`components/ui/` and `hooks/use-mobile.ts`; targeted lint is clean. No firmware,
+FPGA, native or hardware test was required for this documentation/portal-only
+change. No new browser or bench result is claimed; the existing `[HUMAN]`
+visual click-through and SD boot gates remain open. Next: review the intended
+three-file diff, commit/push it, pin the portal snapshot to that source commit,
+then leave website publication to the user's requested Codex workflow.
+
 ### USB migration planning (2026-09-17)
 
 **Planning complete; implementation not started.** Prepared

@@ -3,343 +3,804 @@ import { Breadcrumbs } from '@/components/docs/breadcrumbs';
 import { StatusBadge } from '@/components/docs/status-badge';
 
 export const metadata = {
-  title: 'Using the analyzer — RTOS Logic Analyzer',
+  title: 'Using the analyzer - RTOS Logic Analyzer',
+  description:
+    'Power, load, connect and verify the direct-USB logic analyzer through the unified browser UI, then capture, decode and export real signals.',
 };
 
 function Cmd({ children }: { children: string }) {
   return <pre className="doc-pre">{children}</pre>;
 }
 
+function Inline({ children }: { children: React.ReactNode }) {
+  return <code className="doc-inline-code">{children}</code>;
+}
+
 export default function UsingPage() {
   return (
     <main className="doc-main">
       <div className="section-shell">
-        <Breadcrumbs items={[{ label: 'System', href: '/' }, { label: 'Using the analyzer' }]} />
+        <Breadcrumbs
+          items={[
+            { label: 'System', href: '/' },
+            { label: 'Using the analyzer' },
+          ]}
+        />
         <header className="doc-header">
-          <p className="doc-eyebrow">Guide · Operating the analyzer</p>
-          <h1>Using the analyzer</h1>
+          <p className="doc-eyebrow">
+            Operator runbook · Direct USB · Unified UI
+          </p>
+          <h1>From power-off to a trusted capture</h1>
           <p className="doc-answer">
-            This guide covers the bench workflow: wire the boards, load the firmware, verify the
-            link, capture signals, decode traffic live, and open the results. Development setup
-            (toolchain, venv, ESP-IDF, Vivado/Vitis) is in{' '}
-            <a className="inline-source" href="/tooling">tooling</a>; the electrical contract is in{' '}
-            <a className="inline-source" href="/reference/wiring">wiring</a>.
+            Start with the verified JTAG development boot, connect the Zybo
+            directly to the PC over J10, prove the complete path with an
+            internal counter waveform, and only then attach a real 3.3 V target.
+            The browser workspace handles connection, capture, waveform
+            inspection, decode, live events, export and trace in one page.
           </p>
           <div className="doc-status-row">
-            <StatusBadge status="bench-verified" label="Burst capture and live decode verified on hardware" />
-            <StatusBadge status="blocked" label="Large-capture drain limited by the ESP32 Wi-Fi relay" />
+            <StatusBadge
+              status="bench-verified"
+              label="Direct USB and unified UI bench-verified"
+            />
+            <StatusBadge
+              status="known-issue"
+              label="Development USB identity 1209:0001"
+            />
+            <StatusBadge
+              status="blocked"
+              label="Physical SD boot remains unverified"
+            />
           </div>
+          <p className="doc-scope">
+            Current default: JP5 = JTAG, JP6 = USB, J12 power/JTAG/console, J10
+            analyzer data. The ESP32 gateway is optional and is not a supported
+            unified-UI target.
+          </p>
         </header>
 
-        <section className="doc-section">
-          <h2>1. What you need</h2>
-          <ul className="doc-prose">
-            <li>Zybo Z7-10 with the project bitstream and firmware (JTAG development load or SD release boot).</li>
-            <li>ESP32 DOIT DevKit V1 gateway flashed with the project firmware, on the same <strong>2.4 GHz</strong> Wi-Fi network as the PC (the classic ESP32 has no 5 GHz radio).</li>
-            <li>PC with the project <code className="doc-inline-code">.venv</code> and PulseView (or any VCD viewer).</li>
-            <li>Wiring: signals to <strong>JC</strong> (3.3 V only), UART ribbon <strong>JD-1..4 + GND</strong>, optional SPI jumpers <strong>JD-7..10 + JA-1</strong>, optional <strong>JE→JC</strong> loopback for self-test.</li>
-            <li>[HUMAN] checks before power: common ground, RTS/CTS direction, no 5 V exposure, correct JP5 position.</li>
-          </ul>
+        <section className="doc-section" aria-labelledby="route-title">
+          <h2 id="route-title">The known-good route</h2>
+          <div className="doc-flow-row" aria-label="Startup sequence">
+            <span className="doc-flow-node" data-state="verified">
+              Safety check
+            </span>
+            <span className="doc-flow-arrow" aria-hidden="true">
+              -&gt;
+            </span>
+            <span className="doc-flow-node" data-state="verified">
+              Power from J12
+            </span>
+            <span className="doc-flow-arrow" aria-hidden="true">
+              -&gt;
+            </span>
+            <span className="doc-flow-node" data-state="verified">
+              Load with JTAG
+            </span>
+            <span className="doc-flow-arrow" aria-hidden="true">
+              -&gt;
+            </span>
+            <span className="doc-flow-node" data-state="verified">
+              J10 USB Serial Device
+            </span>
+            <span className="doc-flow-arrow" aria-hidden="true">
+              -&gt;
+            </span>
+            <span className="doc-flow-node" data-state="verified">
+              Connect la-ui
+            </span>
+            <span className="doc-flow-arrow" aria-hidden="true">
+              -&gt;
+            </span>
+            <span className="doc-flow-node" data-state="verified">
+              Counter self-test
+            </span>
+            <span className="doc-flow-arrow" aria-hidden="true">
+              -&gt;
+            </span>
+            <span className="doc-flow-node" data-state="verified">
+              Real target
+            </span>
+          </div>
+          <p className="doc-flow-caption">
+            Do not skip the counter self-test. It separates analyzer setup
+            faults from target-signal faults before the two systems are
+            connected.
+          </p>
         </section>
 
-        <section className="doc-section">
-          <h2>2. Build and load</h2>
-          <Cmd>{`python tools\\run.py bit          # bitstream + XSA (Vivado)
-python tools\\run.py fw-zynq      # Zynq FreeRTOS application (Vitis)
-python tools\\run.py fw-esp32     # ESP32 gateway firmware (ESP-IDF)`}</Cmd>
-          <p className="doc-prose">
-            <strong>Zynq, development (JP5 = JTAG):</strong>
+        <nav className="doc-section" aria-labelledby="contents-title">
+          <h2 id="contents-title">Runbook sections</h2>
+          <div className="doc-index">
+            {[
+              ['01', 'Before power', '#before-power'],
+              ['02', 'Power and load', '#power-load'],
+              ['03', 'Find the COM port', '#find-port'],
+              ['04', 'Open and check the UI', '#open-ui'],
+              ['05', 'First self-test', '#self-test'],
+              ['06', 'Protocol recipes', '#protocol-tests'],
+              ['07', 'Capture a target', '#real-target'],
+              ['08', 'Export and shut down', '#export-shutdown'],
+              ['09', 'Troubleshooting', '#troubleshooting'],
+            ].map(([order, name, href]) => (
+              <a className="doc-index-card" href={href} key={href}>
+                <span className="order">{order}</span>
+                <strong>{name}</strong>
+              </a>
+            ))}
+          </div>
+        </nav>
+
+        <section className="doc-section" id="before-power">
+          <h2>1. Before applying power</h2>
+          <div className="doc-grid cols-2">
+            <article className="doc-panel">
+              <h3>Board setup</h3>
+              <ul>
+                <li>
+                  <strong>JP5 = JTAG.</strong> Power-cycle once after moving it.
+                </li>
+                <li>
+                  <strong>JP6 = USB.</strong> The recorded bench powers the
+                  board through J12.
+                </li>
+                <li>
+                  <strong>JP1 and JP2 open; J11 unused.</strong>
+                </li>
+                <li>
+                  <strong>J12 to the PC:</strong> power, JTAG and FTDI debug
+                  console.
+                </li>
+                <li>
+                  <strong>J10 directly to the PC:</strong> analyzer CDC-ACM
+                  data.
+                </li>
+                <li>
+                  Leave all JC acquisition inputs disconnected for the first
+                  test.
+                </li>
+              </ul>
+            </article>
+            <article className="doc-panel">
+              <h3>Electrical and host checks</h3>
+              <ul>
+                <li>
+                  JC, JE and JD are 3.3 V LVCMOS only. Never apply 5 V directly.
+                </li>
+                <li>J10 does not replace J12 board power.</li>
+                <li>Use data-capable cables and a direct PC port for J10.</li>
+                <li>Use native Windows and Chrome or Edge.</li>
+                <li>
+                  Install the project <Inline>.venv</Inline> and host package.
+                </li>
+                <li>
+                  Run <Inline>python tools/run.py test-native</Inline> once for
+                  host capture decode.
+                </li>
+              </ul>
+            </article>
+          </div>
+          <p className="doc-scope">
+            The recorded board is a Zybo Z7-10 Rev D.0. Check the schematic for
+            another revision. The FPGA pins have no project-added input
+            protection; see{' '}
+            <a className="inline-source" href="/reference/wiring">
+              wiring
+            </a>{' '}
+            before probing a target.
           </p>
+        </section>
+
+        <section className="doc-section" id="power-load">
+          <h2>2. Power and load the current image</h2>
+          <div className="doc-prose">
+            <ol>
+              <li>With power removed, set JP5 and JP6.</li>
+              <li>Connect J12 and apply board power.</li>
+              <li>Connect J10 directly to the PC.</li>
+              <li>
+                From the repository root, load the default direct-USB profile:
+              </li>
+            </ol>
+          </div>
           <Cmd>{`python tools\\run.py jtag-zynq`}</Cmd>
           <p className="doc-prose">
-            Programs the PL, runs the FSBL, downloads <code className="doc-inline-code">la_app.elf</code>{' '}
-            and starts CPU0. The FTDI COM port shows the boot banner and periodic{' '}
-            <code className="doc-inline-code">LA status:</code> lines.
+            This resets the PS, programs the PL, runs the FSBL, downloads{' '}
+            <Inline>la_app_usb</Inline> and starts CPU0. It writes{' '}
+            <Inline>build/reports/jtag-zynq.json</Inline>. The image is
+            volatile, so repeat this after every board power loss.
           </p>
           <p className="doc-prose">
-            <strong>Zynq, release (JP5 = SD):</strong> build <code className="doc-inline-code">BOOT.BIN</code>{' '}
-            with <code className="doc-inline-code">python tools\run.py boot</code>, copy it to a
-            FAT-formatted SD card, power-cycle with JP5 = SD.
+            On a clean checkout, build the bitstream/XSA before the firmware:
           </p>
-          <p className="doc-prose">
-            <strong>ESP32 gateway:</strong> set the Wi-Fi credentials once per network with{' '}
-            <code className="doc-inline-code">.venv\Scripts\python.exe tools\set_wifi.py</code> (the
-            helper prompts and never commits them), rebuild with{' '}
-            <code className="doc-inline-code">python tools\run.py fw-esp32</code>, then flash. This
-            board&apos;s auto-reset does not assert GPIO0: hold BOOT, tap EN, release BOOT, then use{' '}
-            <code className="doc-inline-code">esptool --before no_reset</code> and watch the console.
-            Success signs: <code className="doc-inline-code">station started</code>,{' '}
-            <code className="doc-inline-code">got ip</code>,{' '}
-            <code className="doc-inline-code">net CONNECTED</code>,{' '}
-            <code className="doc-inline-code">fifo_ovf=0</code>.
-          </p>
-        </section>
-
-        <section className="doc-section">
-          <h2>3. Verify the link</h2>
-          <Cmd>{`.venv\\Scripts\\la-cli.exe ping   -t tcp://la-esp32.local:5555
-.venv\\Scripts\\la-cli.exe status -t tcp://la-esp32.local:5555`}</Cmd>
-          <p className="doc-prose">
-            Expected: <code className="doc-inline-code">pong: fw ... pl 0x4C410002 uptime ...</code> and a
-            STATUS snapshot with <code className="doc-inline-code">state idle</code>. If the ping times
-            out right after a flash or reset, wait ~15 s and retry once; the first TCP session can need
-            a listener refresh. <code className="doc-inline-code">la-cli ports</code> lists USB-UART
-            candidates when you use a direct <code className="doc-inline-code">serial://COMx</code> link
-            instead of the gateway.
-          </p>
-        </section>
-
-        <section className="doc-section">
-          <h2>Two independent modes</h2>
-          <div className="doc-panel">
-            <p>
-              Burst capture and live decode are alternatives, not steps. <code className="doc-inline-code">capture</code>{' '}
-              configures, arms, drains and stops its own session; you can use it without ever running{' '}
-              <code className="doc-inline-code">live</code>. <code className="doc-inline-code">live</code> configures the
-              stream, starts it and stops on its own (<code className="doc-inline-code">--count</code>,{' '}
-              <code className="doc-inline-code">--timeout</code> or Ctrl+C); it does <strong>not</strong> need a
-              preceding capture or ARM.
-            </p>
-            <p>
-              They cannot run at the same time: both use the same acquisition engine and memory pool. Finish or
-              abort one before starting the other; if a capture is armed, run{' '}
-              <code className="doc-inline-code">la-cli abort -t ...</code> first. Every command latches its own
-              configuration at CONFIG/ARM or DECODER_CFG/LIVE_START, so there is no &quot;assert once, then
-              use&quot; step. With <code className="doc-inline-code">--patgen</code>, the CLI clears the
-              pattern-generator enable before setting the new mode, so repeated self-test sessions relatch
-              instead of keeping the previous pattern.
-            </p>
+          <Cmd>{`python tools\\run.py bit
+python tools\\run.py fw-zynq
+python tools\\run.py jtag-zynq`}</Cmd>
+          <div className="doc-evidence">
+            <div className="doc-evidence-item" data-status="blocked">
+              <p>
+                <strong>Do not substitute an assumed SD boot.</strong>
+              </p>
+              <p>
+                <Inline>python tools/run.py boot</Inline> builds a USB-profile
+                BOOT.BIN, but physical startup from the SD card with JP5 = SD
+                remains an open human release gate.
+              </p>
+            </div>
           </div>
         </section>
 
-        <section className="doc-section">
-          <h2>4. First capture without external signals</h2>
+        <section className="doc-section" id="find-port">
+          <h2>3. Find the analyzer COM port</h2>
           <p className="doc-prose">
-            The pattern generator can drive the capture input internally, so you can prove the whole
-            path before connecting anything:
+            After the load, J10 enumerates as{' '}
+            <strong>USB Serial Device (COMx)</strong>. The current in-house
+            identity is VID:PID <Inline>1209:0001</Inline>.
           </p>
-          <Cmd>{`.venv\\Scripts\\la-cli.exe capture -t tcp://la-esp32.local:5555 ^
-    --rate 10M --words 4096 --mode raw --patgen counter --out selftest.sr`}</Cmd>
           <p className="doc-prose">
-            <code className="doc-inline-code">--patgen</code> enables the internal self-test mux and
-            latches the pattern generator; <strong>omit it for real signals</strong>, or the JC inputs
-            are ignored. Modes: <code className="doc-inline-code">counter</code>,{' '}
-            <code className="doc-inline-code">walking</code>, <code className="doc-inline-code">prbs</code>,{' '}
-            <code className="doc-inline-code">uart</code>, <code className="doc-inline-code">spi</code>,{' '}
-            <code className="doc-inline-code">i2c</code>. Open the resulting file in PulseView.
+            Confirm the port under{' '}
+            <strong>Device Manager &gt; Ports (COM &amp; LPT)</strong>, or use
+            the UI&apos;s Ports list and <strong>Rescan</strong> in the next
+            step. The legacy la-cli port filter covers USB-UART adapter families
+            but does not currently include the project&apos;s 0x1209 direct-USB
+            identity.
           </p>
-        </section>
-
-        <section className="doc-section">
-          <h2>5. Capturing real signals</h2>
-          <p className="doc-prose">
-            Connect the signal to a JC channel (JC-1..4, JC-7..10 = CH0..CH7; 3.3 V only), then:
-          </p>
-          <Cmd>{`# 10 MS/s, 64k post-trigger samples, raw packing, rising edge on CH0
-.venv\\Scripts\\la-cli.exe capture -t tcp://la-esp32.local:5555 ^
-    --rate 10M --words 64k --mode raw --trig-rise 0 --out capture.sr
-
-# transition encoding with 1000 pre-trigger samples, falling edge on CH2
-.venv\\Scripts\\la-cli.exe capture -t tcp://la-esp32.local:5555 ^
-    --rate 100M --words 16k --mode txn --pre 1000 --trig-fall 2 --out capture.vcd
-
-# PNG snapshot
-.venv\\Scripts\\la-cli.exe capture -t tcp://la-esp32.local:5555 ^
-    --rate 1M --words 4096 --out capture.png`}</Cmd>
-          <div className="doc-table-wrap">
-            <table className="doc-table">
-              <caption>capture options</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Option</th>
-                  <th scope="col">Meaning</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td><code>--rate 1M|10M|100M</code></td><td>Requested sample rate; must map to <code>100 MHz / (div+1)</code>. The tool prints the actual rate when they differ.</td></tr>
-                <tr><td><code>--words N</code></td><td>Post-trigger samples (4096, 64k, 1M).</td></tr>
-                <tr><td><code>--pre N</code></td><td>Pre-trigger samples (0..32768).</td></tr>
-                <tr><td><code>--mode raw|txn</code></td><td>Raw packs four samples per word; txn stores transition records.</td></tr>
-                <tr><td><code>--trig-rise CH</code>, <code>--trig-fall CH</code></td><td>Trigger edge on one channel; with no trigger the capture starts immediately.</td></tr>
-                <tr><td><code>--patgen MODE</code></td><td>Internal self-test source.</td></tr>
-                <tr><td><code>--out FILE.sr|.vcd|.png</code></td><td>Export format follows the extension.</td></tr>
-                <tr><td><code>--timeout S</code></td><td>Command deadline (default 30 s).</td></tr>
-              </tbody>
-            </table>
+          <div className="doc-grid cols-2">
+            <article className="doc-panel">
+              <h3>Choose this</h3>
+              <p>
+                <Inline>USB Serial Device</Inline>, VID:PID{' '}
+                <Inline>1209:0001</Inline>, on J10.
+              </p>
+            </article>
+            <article className="doc-panel">
+              <h3>Do not choose this</h3>
+              <p>
+                The J12 FTDI console, VID:PID <Inline>0403:6010</Inline>. It
+                carries logs, not analyzer frames.
+              </p>
+            </article>
           </div>
           <p className="doc-scope">
-            The host verifies chunk order, the whole-capture CRC32 and the exact sample count before
-            writing the file. <code className="doc-inline-code">la-cli abort -t ...</code> cancels an
-            armed capture.
+            COM13 was used on the recorded bench, but Windows may assign another
+            number. Identify the port by device identity rather than copying the
+            old COM number.
           </p>
         </section>
 
-        <section className="doc-section">
-          <h2>6. Live decode</h2>
+        <section className="doc-section" id="open-ui">
+          <h2>4. Open and check the UI</h2>
+          <Cmd>{`.\\.venv\\Scripts\\la-ui.exe`}</Cmd>
           <p className="doc-prose">
-            Live mode streams decoded protocol events instead of raw samples. The decoder spec is{' '}
-            <code className="doc-inline-code">type:key=value,...</code>:
+            Open <Inline>http://127.0.0.1:8080/</Inline> in Chrome or Edge. The
+            command prints the URL; it does not launch a browser automatically.
           </p>
-          <ul className="doc-prose">
-            <li><code className="doc-inline-code">uart:rx=CH,baud=BAUD</code></li>
-            <li><code className="doc-inline-code">spi:sck=CH[,mosi=CH][,miso=CH][,cs=CH][,cpol=0][,cpha=0][,word=8][,lsb=0][,cs_active=0]</code></li>
-            <li><code className="doc-inline-code">i2c:scl=CH,sda=CH</code></li>
-          </ul>
-          <Cmd>{`# Self-test: patgen UART on CH0, decode it, stop after 20 events
-.venv\\Scripts\\la-cli.exe live -t tcp://la-esp32.local:5555 ^
-    --patgen uart --decoder uart:rx=0,baud=115200 --rate 100M --count 20
-
-# Real UART traffic, compact encoding, CSV output
-.venv\\Scripts\\la-cli.exe live -t tcp://la-esp32.local:5555 ^
-    --decoder uart:rx=0,baud=115200 --compact --csv --count 100
-
-# SPI: SCK CH0, MOSI CH1, CS CH2
-.venv\\Scripts\\la-cli.exe live -t tcp://la-esp32.local:5555 ^
-    --decoder spi:sck=0,mosi=1,cs=2
-
-# Stop when the decoded bytes match "LA" (hex 4c41)
-.venv\\Scripts\\la-cli.exe live -t tcp://la-esp32.local:5555 ^
-    --decoder uart:rx=0,baud=115200 --stop-on 4c41`}</Cmd>
+          <div className="doc-grid cols-3">
+            <article className="doc-panel">
+              <h3>Connect</h3>
+              <ol>
+                <li>
+                  Select the <Inline>1209:0001</Inline> device in Ports.
+                </li>
+                <li>
+                  Use <strong>Rescan</strong> if it appeared after page load.
+                </li>
+                <li>
+                  Confirm Target becomes <Inline>serial://COMx</Inline>.
+                </li>
+                <li>
+                  Click <strong>Connect</strong>.
+                </li>
+              </ol>
+            </article>
+            <article className="doc-panel">
+              <h3>Check identity</h3>
+              <ol>
+                <li>
+                  The link pill must say <strong>linked</strong>.
+                </li>
+                <li>
+                  Firmware should be <Inline>0x00090000</Inline>.
+                </li>
+                <li>
+                  PL should be <Inline>0x4C410002</Inline>.
+                </li>
+                <li>
+                  Click <strong>Ping</strong> and check nonzero uptime.
+                </li>
+              </ol>
+            </article>
+            <article className="doc-panel">
+              <h3>Check idle state</h3>
+              <ol>
+                <li>
+                  Bottom bar says <Inline>session idle</Inline>.
+                </li>
+                <li>
+                  <Inline>events 0</Inline> before live testing.
+                </li>
+                <li>
+                  <Inline>drops 0</Inline>.
+                </li>
+                <li>No warning text is present.</li>
+              </ol>
+            </article>
+          </div>
           <p className="doc-scope">
-            Qualified rates: 115200 UART (repeatable 60 s zero-drop gate) and 10 kHz SPI/I²C. 1 MHz SPI
-            is a deliberate overload test: the host receives <code className="doc-inline-code">EVT_OVERRUN</code>{' '}
-            reports and the system returns to IDLE. Overruns are always reported, never silent.
+            Stop if Connect or Ping fails. The UI exclusively owns the COM port
+            while connected; do not run la-cli or la-web against it at the same
+            time.
           </p>
         </section>
 
-        <section className="doc-section">
-          <h2>Worked example: decoding an I2C bus</h2>
+        <section className="doc-section" id="self-test">
+          <h2>5. Run the first self-test</h2>
           <p className="doc-prose">
-            Goal: watch an I2C bus live <strong>and</strong> save a full waveform on the PC.
+            The internal counter bypasses the JC pins and proves the
+            acquisition, DDR/DMA, USB, host, server and waveform renderer before
+            any target is attached.
           </p>
           <div className="doc-table-wrap">
             <table className="doc-table">
-              <caption>Wiring: probe the two signal wires plus the target ground</caption>
+              <caption>Capture panel settings</caption>
               <thead>
                 <tr>
-                  <th scope="col">Signal</th>
-                  <th scope="col">Target</th>
-                  <th scope="col">Zybo</th>
+                  <th scope="col">Control</th>
+                  <th scope="col">Set to</th>
                 </tr>
               </thead>
               <tbody>
-                <tr><td>SCL</td><td>I2C clock wire</td><td className="num">JC-1 = CH0</td></tr>
-                <tr><td>SDA</td><td>I2C data wire</td><td className="num">JC-2 = CH1</td></tr>
-                <tr><td>GND</td><td>target ground</td><td className="num">JC-5 or JC-11 (GND)</td></tr>
+                <tr>
+                  <td>Rate</td>
+                  <td className="num">100 MS/s</td>
+                </tr>
+                <tr>
+                  <td>Words</td>
+                  <td className="num">4096</td>
+                </tr>
+                <tr>
+                  <td>Mode</td>
+                  <td>raw (4 samples/word)</td>
+                </tr>
+                <tr>
+                  <td>Pre</td>
+                  <td className="num">0</td>
+                </tr>
+                <tr>
+                  <td>Trig rise / fall</td>
+                  <td>blank</td>
+                </tr>
+                <tr>
+                  <td>Patgen</td>
+                  <td>counter</td>
+                </tr>
+                <tr>
+                  <td>Timeout</td>
+                  <td className="num">30</td>
+                </tr>
               </tbody>
             </table>
           </div>
-          <ul className="doc-prose">
-            <li>Do <strong>not</strong> connect the bus VCC; the analyzer only senses the lines.</li>
-            <li>3.3 V only: if the bus pull-ups go to 5 V, use a level shifter.</li>
-            <li>Keep leads short and confirm common ground before powering.</li>
-            <li>This is separate from the PC link: the <strong>JD-1..4 + GND</strong> ribbon (or a 3.3 V USB-UART adapter on the same pins) carries the data, and <code className="doc-inline-code">la-cli ping</code> must answer first.</li>
-          </ul>
-          <p className="doc-prose"><strong>Live decode:</strong></p>
-          <Cmd>{`.venv\\Scripts\\la-cli.exe live -t tcp://la-esp32.local:5555 ^
-    --decoder i2c:scl=0,sda=1 --rate 10M`}</Cmd>
           <p className="doc-prose">
-            Events print as START / ADDRESS / ACK / DATA / STOP. Stop with Ctrl+C or{' '}
-            <code className="doc-inline-code">--count N</code>; add{' '}
-            <code className="doc-inline-code">--csv</code> to save rows. A dry run without a real bus
-            uses the internal pattern generator (no jumpers):
+            Click <strong>Capture</strong>, then require every pass sign:
           </p>
-          <Cmd>{`.venv\\Scripts\\la-cli.exe live -t tcp://la-esp32.local:5555 ^
-    --patgen i2c --decoder i2c:scl=3,sda=4 --count 10`}</Cmd>
-          <p className="doc-prose"><strong>Full waveform capture:</strong></p>
-          <Cmd>{`.venv\\Scripts\\la-cli.exe capture -t tcp://la-esp32.local:5555 ^
-    --rate 10M --words 64k --mode raw --pre 1000 --out i2c.sr`}</Cmd>
-          <ul className="doc-prose">
-            <li><code className="doc-inline-code">64k</code> samples at 10 MS/s is a ~6.5 ms window; raise <code className="doc-inline-code">--words</code> or use <code className="doc-inline-code">--mode txn</code> for longer records.</li>
-            <li>Trigger: <code className="doc-inline-code">--trig-fall 1</code> catches an SDA falling edge (usually a START); without a trigger the capture starts immediately. The CLI exposes one edge channel, so a true &quot;SCL high and SDA falling&quot; START condition is not directly selectable.</li>
-            <li>Open <code className="doc-inline-code">i2c.sr</code> in PulseView (<code className="doc-inline-code">.vcd</code> in GTKWave, <code className="doc-inline-code">.png</code> for a snapshot).</li>
-          </ul>
-        </section>
-
-        <section className="doc-section">
-          <h2>7. Browser live view</h2>
-          <p className="doc-prose">
-            The gateway serves an embedded page on port 80 while a live session runs. Start a live
-            session, then open <code className="doc-inline-code">http://la-esp32.local/</code> (or the
-            IP from the ESP32 boot log). The page shows per-decoder tabs with decoded bytes, sample
-            deltas and a stats bar, and reconnects automatically. No external assets or internet
-            access are needed.
-          </p>
-        </section>
-
-        <section className="doc-section">
-          <h2>8. Task/queue trace</h2>
-          <Cmd>{`.venv\\Scripts\\la-cli.exe trace -t tcp://la-esp32.local:5555 --start
-# ... run the workload ...
-.venv\\Scripts\\la-cli.exe trace -t tcp://la-esp32.local:5555 --dump ^
-    --out trace.txt --png trace.png --title "live UART"`}</Cmd>
+          <div className="doc-grid cols-2">
+            <article className="doc-panel">
+              <h3>Data result</h3>
+              <ul>
+                <li>
+                  Status says <Inline>captured 4096 samples (raw)</Inline>.
+                </li>
+                <li>Viewer title reports 4096 samples at 100,000,000 Hz.</li>
+                <li>All eight channel rows are visible.</li>
+                <li>CH0 toggles fastest; each higher counter bit is slower.</li>
+              </ul>
+            </article>
+            <article className="doc-panel">
+              <h3>Health result</h3>
+              <ul>
+                <li>The session returns to idle.</li>
+                <li>No red capture-failure toast appears.</li>
+                <li>
+                  Completion means exact size and whole-capture CRC passed.
+                </li>
+                <li>Zoom, pan, Fit, cursors and edge stepping work.</li>
+              </ul>
+            </article>
+          </div>
           <p className="doc-scope">
-            The PNG is a relative-time timeline of task switches, queue/stream-buffer activity and app
-            markers. The dump is best-effort: a few LOG records can drop under relay pressure.
+            If this fails, keep the target disconnected. Fix the base path
+            before debugging external signals.
           </p>
         </section>
 
-        <section className="doc-section">
-          <h2>9. SPI bulk transport</h2>
+        <section className="doc-section" id="protocol-tests">
+          <h2>6. Try capture decode and live decode</h2>
           <p className="doc-prose">
-            By default burst <code className="doc-inline-code">DATA_*</code> frames travel over the
-            UART. To route them over the SPI slave (JD-7..10 + JA-1 wired), select it once per session:
+            For each capture recipe use 10 MS/s, 64k words, raw mode, zero
+            pre-trigger and no trigger. Select one Patgen mode, capture, enter
+            the Slot 0 decoder text, then click <strong>Decode capture</strong>.
           </p>
-          <Cmd>{`.venv\\Scripts\\la-cli.exe link -t tcp://la-esp32.local:5555 --spi --clock 18
-.venv\\Scripts\\la-cli.exe capture -t tcp://la-esp32.local:5555 --rate 10M --words 64k --out big.sr`}</Cmd>
-          <p className="doc-scope">
-            Commands and ACKs stay on the UART. Framed transfers are bench-clean at 5/10/18 MHz (18 MHz
-            is the measured ceiling). The sustained host drain is currently limited to ~0.28 MB/s by
-            the ESP32 Wi-Fi relay, so very large captures take a long time even though the SPI wire is
-            faster.
-          </p>
-        </section>
-
-        <section className="doc-section">
-          <h2>10. Command reference</h2>
           <div className="doc-table-wrap">
             <table className="doc-table">
-              <caption>la-cli commands</caption>
+              <caption>Internal protocol recipes</caption>
               <thead>
                 <tr>
-                  <th scope="col">Command</th>
-                  <th scope="col">Purpose</th>
+                  <th scope="col">Try</th>
+                  <th scope="col">Patgen</th>
+                  <th scope="col">Slot 0</th>
+                  <th scope="col">Expect</th>
                 </tr>
               </thead>
               <tbody>
-                <tr><td><code>ports</code></td><td>List USB-UART candidates.</td></tr>
-                <tr><td><code>ping -t URI</code></td><td>Check the link and firmware identity.</td></tr>
-                <tr><td><code>status -t URI</code></td><td>STATUS snapshot: state, counters, watermarks, latency.</td></tr>
-                <tr><td><code>abort -t URI</code></td><td>Abort a running capture.</td></tr>
-                <tr><td><code>capture -t URI [options]</code></td><td>Arm a burst capture and export .sr/.vcd/.png.</td></tr>
-                <tr><td><code>live -t URI [options]</code></td><td>Stream decoded UART/SPI/I²C events.</td></tr>
-                <tr><td><code>trace -t URI [--start|--stop|--dump]</code></td><td>Task/queue trace ring.</td></tr>
-                <tr><td><code>link -t URI --spi|--uart [--clock MHz]</code></td><td>Select the burst transport.</td></tr>
+                <tr>
+                  <td>UART</td>
+                  <td>
+                    <code>uart</code>
+                  </td>
+                  <td>
+                    <code>uart:rx=0,baud=115200</code>
+                  </td>
+                  <td>Repeating LA-TEST newline bytes</td>
+                </tr>
+                <tr>
+                  <td>SPI</td>
+                  <td>
+                    <code>spi</code>
+                  </td>
+                  <td>
+                    <code>spi:sck=0,mosi=1,cs=2</code>
+                  </td>
+                  <td>Repeating 4C 41 frames; first may be partial</td>
+                </tr>
+                <tr>
+                  <td>I2C</td>
+                  <td>
+                    <code>i2c</code>
+                  </td>
+                  <td>
+                    <code>i2c:scl=3,sda=4</code>
+                  </td>
+                  <td>START, address, ACK, 4C 41, STOP</td>
+                </tr>
               </tbody>
             </table>
           </div>
+          <div className="doc-grid cols-2">
+            <article className="doc-panel">
+              <h3>Inspect a saved capture</h3>
+              <ol>
+                <li>
+                  Click <strong>Decode capture</strong>.
+                </li>
+                <li>Require a nonzero event count.</li>
+                <li>Zoom into the annotation row.</li>
+                <li>Compare event bytes with the recipe.</li>
+              </ol>
+            </article>
+            <article className="doc-panel">
+              <h3>Run UART live</h3>
+              <ol>
+                <li>Enter the UART Slot 0 text.</li>
+                <li>
+                  Click <strong>Apply live config</strong>.
+                </li>
+                <li>
+                  Select UART under Pattern generator and click{' '}
+                  <strong>Arm</strong>.
+                </li>
+                <li>
+                  Click Slot 0 <strong>Start</strong>; require events up and the{' '}
+                  <strong>client</strong> drop count to remain zero.
+                </li>
+                <li>
+                  Click Slot 0 <strong>Stop</strong>; require session idle.
+                </li>
+              </ol>
+            </article>
+          </div>
           <p className="doc-scope">
-            Target URIs: <code className="doc-inline-code">tcp://la-esp32.local:5555</code> (gateway),{' '}
-            <code className="doc-inline-code">tcp://&lt;ip&gt;:5555</code>, or{' '}
-            <code className="doc-inline-code">serial://COMx</code> (direct 3.3 V USB-UART adapter on
-            JD-1..4 + GND, [HUMAN]).
+            Burst capture and live decode are alternate uses of the acquisition
+            engine. Starting a capture stops live automatically; finish or abort
+            a capture before starting live. Host capture decode needs the native
+            DLL; device-side live decode does not. The bounded replay ring may
+            discard old history after it fills; a rising ring count alone does
+            not mean the active browser lost events.
+          </p>
+        </section>
+
+        <section className="doc-section" id="real-target">
+          <h2>7. Capture a real target</h2>
+          <div className="doc-grid cols-2">
+            <article className="doc-panel">
+              <h3>Wire with power removed</h3>
+              <ol>
+                <li>Stop live mode and Disconnect.</li>
+                <li>Remove target power.</li>
+                <li>Connect target ground to JC-5 or JC-11 first.</li>
+                <li>Connect only 3.3 V signal lines to JC.</li>
+                <li>Reconnect the UI, then power the target.</li>
+              </ol>
+            </article>
+            <article className="doc-panel">
+              <h3>JC channel order</h3>
+              <dl className="doc-kv">
+                <dt>CH0..CH3</dt>
+                <dd>JC-1, JC-2, JC-3, JC-4</dd>
+                <dt>CH4..CH7</dt>
+                <dd>JC-7, JC-8, JC-9, JC-10</dd>
+                <dt>Ground</dt>
+                <dd>JC-5 or JC-11</dd>
+                <dt>Target VCC</dt>
+                <dd>Do not connect it to the analyzer</dd>
+              </dl>
+            </article>
+          </div>
+          <div className="doc-prose">
+            <ol>
+              <li>
+                Set Capture <strong>Patgen = off</strong>, or the real JC pins
+                are ignored.
+              </li>
+              <li>
+                Start with 10 MS/s, 64k, raw mode, Pre 0 and blank triggers.
+              </li>
+              <li>
+                For a triggered capture, put one channel number 0..7 in Trig
+                rise or Trig fall.
+              </li>
+              <li>Use Pre to preserve up to 32,768 samples before the edge.</li>
+              <li>
+                Capture and check exact sample count, idle return and warnings.
+              </li>
+              <li>
+                Enter the target&apos;s real decoder mapping and click Decode
+                capture.
+              </li>
+            </ol>
+          </div>
+          <div className="doc-table-wrap">
+            <table className="doc-table">
+              <caption>
+                Decoder examples - change channels and options to match the
+                target
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Bus</th>
+                  <th scope="col">Decoder text</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>UART</td>
+                  <td>
+                    <code>uart:rx=0,baud=115200</code>
+                  </td>
+                </tr>
+                <tr>
+                  <td>SPI</td>
+                  <td>
+                    <code>
+                      spi:sck=0,mosi=1,miso=2,cs=3,cpol=0,cpha=0,word=8,lsb=0
+                    </code>
+                  </td>
+                </tr>
+                <tr>
+                  <td>I2C</td>
+                  <td>
+                    <code>i2c:scl=0,sda=1</code>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="doc-section" id="export-shutdown">
+          <h2>8. Export, reopen and shut down</h2>
+          <div className="doc-grid cols-2">
+            <article className="doc-panel">
+              <h3>Save the result</h3>
+              <ul>
+                <li>
+                  <strong>.sr:</strong> exact-count archive for PulseView.
+                </li>
+                <li>
+                  <strong>.vcd:</strong> transition waveform; trailing constant
+                  time is not recoverable.
+                </li>
+                <li>
+                  <strong>.png:</strong> the visible canvas.
+                </li>
+                <li>
+                  <strong>Events CSV:</strong> decoded annotations.
+                </li>
+                <li>
+                  <strong>Samples CSV:</strong> expanded sample values.
+                </li>
+                <li>
+                  <strong>Open:</strong> reopen .sr/.vcd/sample CSV as signal
+                  captures without a device; events CSV contains annotations
+                  only.
+                </li>
+              </ul>
+            </article>
+            <article className="doc-panel">
+              <h3>End cleanly</h3>
+              <ol>
+                <li>Stop all live slots and wait for session idle.</li>
+                <li>Export anything needed beyond this in-memory session.</li>
+                <li>
+                  Click <strong>Disconnect</strong>; decoder slots are cleared.
+                </li>
+                <li>Press Ctrl+C in PowerShell to stop la-ui.</li>
+                <li>Remove target power, then signals, then common ground.</li>
+                <li>Remove Zybo power; reload with JTAG next time.</li>
+              </ol>
+            </article>
+          </div>
+        </section>
+
+        <section className="doc-section" id="troubleshooting">
+          <h2>9. Troubleshooting</h2>
+          <div className="doc-table-wrap">
+            <table className="doc-table">
+              <caption>Start with the earliest failed step</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Symptom</th>
+                  <th scope="col">Check</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>la-ui.exe is missing</td>
+                  <td>
+                    Install the project into .venv using the tooling guide.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Port 8080 is busy</td>
+                  <td>
+                    Stop another la-ui/la-web process, or start with{' '}
+                    <code>--port N</code>.
+                  </td>
+                </tr>
+                <tr>
+                  <td>No 1209:0001 COM port</td>
+                  <td>
+                    Check J12 power, JP6=USB, jtag-zynq PASS, J10 cable and
+                    direct PC port; reconnect J10.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Only FTDI ports appear</td>
+                  <td>
+                    Those are J12 debug interfaces, not the J10 analyzer
+                    endpoint.
+                  </td>
+                </tr>
+                <tr>
+                  <td>COM port is busy</td>
+                  <td>
+                    Stop every UI, CLI, terminal or monitor process that owns
+                    it.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Identity differs</td>
+                  <td>
+                    Reload the current default image with{' '}
+                    <code>python tools/run.py jtag-zynq</code>.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Counter capture is flat</td>
+                  <td>
+                    Use Patgen counter, blank triggers and the current
+                    firmware/PL IDs.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Real capture shows test data</td>
+                  <td>Set Capture Patgen to off.</td>
+                </tr>
+                <tr>
+                  <td>Capture stays armed</td>
+                  <td>Abort; the selected trigger edge did not occur.</td>
+                </tr>
+                <tr>
+                  <td>Decode library missing</td>
+                  <td>
+                    Run <code>python tools/run.py test-native</code>, restart
+                    la-ui and reconnect.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Wrong decoded events</td>
+                  <td>
+                    Check channel mapping, sample rate, baud, SPI mode, word
+                    size and idle voltage.
+                  </td>
+                </tr>
+                <tr>
+                  <td>Live client drops or overrun</td>
+                  <td>
+                    Lower the event rate or active slot count. A rising ring
+                    count alone is normal replay-history rollover.
+                  </td>
+                </tr>
+                <tr>
+                  <td>UI says server error</td>
+                  <td>
+                    Confirm la-ui is still running in PowerShell. Restart it if
+                    needed, then reload the browser and reconnect.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="doc-section">
+          <h2>CLI and optional gateway paths</h2>
+          <p className="doc-prose">
+            For automation, stop the UI and use the same J10 port explicitly:
+          </p>
+          <Cmd>{`.\\.venv\\Scripts\\la-cli.exe ping -t serial://COM13
+.\\.venv\\Scripts\\la-cli.exe status -t serial://COM13
+.\\.venv\\Scripts\\la-cli.exe capture -t serial://COM13 --rate 10M --words 4096 --mode raw --patgen counter --out selftest.sr`}</Cmd>
+          <p className="doc-prose">
+            Replace COM13 with the identified port. The optional ESP32-S3
+            gateway uses the separate <Inline>--profile gateway</Inline> image,
+            JD wiring and <Inline>tcp://la-esp32.local:5555</Inline> with la-cli
+            or la-web. The supported unified-UI path is the default direct-USB{' '}
+            <Inline>serial://COMx</Inline> path; use la-web for the gateway.
+          </p>
+          <p className="doc-scope">
+            On the recorded ESP32-S3 bench setup, keep both of the
+            gateway&apos;s USB cables connected; one cable alone can brown out
+            under Wi-Fi transmit peaks.
           </p>
         </section>
 
         <section className="doc-section">
-          <h2>11. Troubleshooting</h2>
+          <h2>Current boundaries</h2>
           <ul className="doc-prose">
-            <li><strong>Ping times out after a flash/reset:</strong> wait ~15 s and retry once, then check the ESP32 console for <code className="doc-inline-code">net CONNECTED</code>.</li>
-            <li><strong>No PONG at all:</strong> confirm the 2.4 GHz network, the JD-1..4 + GND ribbon, and that the Zynq firmware is running.</li>
-            <li><strong>First capture after <code className="doc-inline-code">--patgen</code> looks wrong:</strong> self-test latches; omit <code className="doc-inline-code">--patgen</code> to capture real JC inputs.</li>
-            <li><strong>ESP32 will not flash:</strong> manual BOOT/EN sequence plus <code className="doc-inline-code">esptool --before no_reset</code>.</li>
-            <li><strong>Live stops with <code className="doc-inline-code">EVT_OVERRUN</code>:</strong> the event rate exceeded the link; lower the input rate, use <code className="doc-inline-code">--compact</code>, or accept the reported loss.</li>
-            <li><strong>PulseView decoder-probe warnings:</strong> a bundled PulseView issue; .sr viewing is unaffected.</li>
+            <li>
+              Direct Zynq USB measured 1.62 MB/s over three byte-exact 64 MiB
+              trials.
+            </li>
+            <li>
+              The MVP is qualified at 100 MS/s; 200 MS/s is not implemented or
+              proven.
+            </li>
+            <li>Pre-trigger depth is limited to 32,768 samples.</li>
+            <li>
+              The 1209:0001 development identity is not a final release USB
+              identity.
+            </li>
+            <li>The physical SD boot and final release tag remain open.</li>
+            <li>
+              Automated UI browser and bench gates pass; the human visual
+              click-through remains open.
+            </li>
           </ul>
-          <p className="doc-prose">
-            Known limits and their evidence are collected in{' '}
-            <code className="doc-inline-code">docs/limits.md</code> and on the{' '}
-            <a className="inline-source" href="/roadmap">roadmap</a> page.
+          <p className="doc-scope">
+            Canonical source: <Inline>docs/using-the-analyzer.md</Inline>. See{' '}
+            <a className="inline-source" href="/roadmap">
+              roadmap
+            </a>{' '}
+            for evidence and open gates,{' '}
+            <a className="inline-source" href="/tooling">
+              tooling
+            </a>{' '}
+            for environment setup, and{' '}
+            <a className="inline-source" href="/reference/wiring">
+              wiring
+            </a>{' '}
+            for the electrical map.
           </p>
         </section>
       </div>
