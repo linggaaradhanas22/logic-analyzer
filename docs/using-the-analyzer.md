@@ -125,6 +125,12 @@ Start the server without claiming the COM port yet:
 Open `http://127.0.0.1:8080/` in Chrome or Edge. The executable prints the same
 URL but does not open the browser automatically.
 
+No terminal needed: double-click the **LA UI** desktop shortcut (or
+`tools\win\la-ui-start.vbs`). It starts the server hidden and opens the page;
+a second double-click just reopens the page. Double-click **Stop LA UI** (or
+`tools\win\la-ui-stop.vbs`) when finished. The launchers use the same default
+port 8080 and the same `.venv`.
+
 In the UI:
 
 1. In **Ports**, select the `USB Serial Device` with `1209:0001`. Click

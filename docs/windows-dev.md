@@ -192,6 +192,10 @@ The unified workspace is `la-ui` (or `la-cli ui`), served on
 .venv\Scripts\la-ui.exe -t serial://COM13
 ```
 
+For a terminal-free launch, double-click the **LA UI** desktop shortcut or run
+`wscript.exe tools\win\la-ui-start.vbs` (hidden server plus browser); stop it
+with **Stop LA UI** or `wscript.exe tools\win\la-ui-stop.vbs`.
+
 It needs Chrome or Edge, the project `.venv`, and (for capture decoding) the
 native decoder DLL built by `python tools\run.py test-native`. Host tests:
 `python tools\run.py test-host`; the page checks also need Node

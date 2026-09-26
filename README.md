@@ -114,6 +114,8 @@ time-aligned timeline with per-slot control, exports (`.sr`/`.vcd`/CSV/PNG),
 offline open of saved captures, the trace timeline and the pattern generator.
 The legacy page stays available at `/legacy` on the same server; see
 `docs/using-the-analyzer.md` section 7 and `docs/unified-ui-plan.md`.
+On Windows, the **LA UI** desktop shortcut (or `tools\win\la-ui-start.vbs`)
+starts it hidden and opens the browser; **Stop LA UI** ends it.
 
 ## Known limits
 
