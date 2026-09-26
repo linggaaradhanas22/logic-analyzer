@@ -341,9 +341,10 @@ authoritative evidence ledger and phase status.
   cannot be verified without changing driver/security state; the assessment is
   recorded in `docs/sigrok-bridge.md`. P10.3 documentation is consolidated in
   the tracked `docs/` set and the `web-artifact/` portal. P10.4 tooling exists
-  (`python tools/run.py boot` plus the release packaging step) but the final
-  BOOT.BIN, the [HUMAN] SD boot and the `v1.0` tag wait for the ESP32-S3
-  transport port, per the recorded bench decision.
+  (`python tools/run.py boot` plus the release packaging step) and the
+  USB-profile SD boot with JP5 = SD was bench-verified on 2026-09-26
+  (`build/reports/sd-boot-verification.md`); the `v1.0` tag remains
+  unauthorized.
 
 ---
 

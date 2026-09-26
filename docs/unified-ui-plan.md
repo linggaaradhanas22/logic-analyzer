@@ -32,8 +32,8 @@ instruction.
   per-slot live with auto-stop, trace dump, 1M-sample capture in 1.58 s), the
   V04 regression 8/8 after the disconnect slot-cleanup fix, and a real
   headless-Chrome bench smoke with zero console errors. The **[HUMAN]**
-  visual click-through and the **[HUMAN]** SD boot of the USB BOOT.BIN remain
-  open and are not claimed as passing.
+  visual click-through remains open and is not claimed as passing; the USB
+  BOOT.BIN SD boot was bench-verified on 2026-09-26.
 
 The device-side boundary held: no firmware, PL, register-map or protocol file
 was modified by any packet.

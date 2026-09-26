@@ -23,7 +23,7 @@ measured evidence, blockers and next actions are in `docs/status.md`.
 | Host `la-cli` (capture, `.sr`/VCD/PNG export, live decode, trace) | Host-tested; burst and live used on bench |
 | Direct Zynq USB transport (CDC-ACM, 1.62 MB/s measured) | Default product transport since the 2026-09-20 V00 pivot |
 | Live web view (host bridge, V02-V04; ESP32 `la_web` for the gateway profile) | Host bridge bench-verified over USB 8/8 (V04); [HUMAN] browser smoke open; ESP32 view bench-verified (P10.1) |
-| Release packaging (profile-aware BOOT.BIN, optional ESP32 bin set, Python wheel) | Tooling present; the [HUMAN] SD boot and tag are release gates |
+| Release packaging (profile-aware BOOT.BIN, optional ESP32 bin set, Python wheel) | Tooling present; the USB-profile SD boot is bench-verified (2026-09-26); the tag is the remaining release gate |
 
 ## Specifications
 

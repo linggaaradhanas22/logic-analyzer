@@ -7,9 +7,9 @@ signals to a real target.
 
 The verified development path is **JP5 = JTAG**, J12 for board power/JTAG/
 console, J10 for analyzer data, and `python tools/run.py jtag-zynq`. The
-USB-profile SD boot remains an open `[HUMAN]` release gate; do not treat it as
-the normal known-good startup yet. The ESP32 gateway is still supported, but it
-is optional and is not a supported connection target for the unified UI.
+USB-profile SD boot (JP5 = SD) was verified on 2026-09-26 as the release
+startup path; see section 2. The ESP32 gateway is still supported, but it is
+optional and is not a supported connection target for the unified UI.
 
 All commands below run from the project root in PowerShell. Electrical details
 are in `docs/wiring.md`, current limits are in `docs/limits.md`, and development
@@ -21,7 +21,7 @@ environment setup is in `docs/windows-dev.md`.
 
 | Item | Current direct-USB setting | Why |
 |---|---|---|
-| Zybo boot jumper | **JP5 = JTAG** | This is the currently verified development boot. Power-cycle once after moving JP5. |
+| Zybo boot jumper | **JP5 = JTAG** | Development boot; **JP5 = SD** starts the verified release image from the card (section 2). Power-cycle once after moving JP5. |
 | Zybo power select | **JP6 = USB** | J12 supplies board power on the recorded bench setup. |
 | USB host jumpers | **JP1 open, JP2 open** | Required for the documented J10 device-mode setup. |
 | USB host connector | **J11 unused** | J10, not J11, is the analyzer device port. |
@@ -82,9 +82,18 @@ python tools\run.py jtag-zynq
 The J12 FTDI console may show the boot banner and periodic status lines. Its COM
 port is a debug console, **not** the analyzer data endpoint.
 
-> **SD boot is not yet a passed operating path.** `python tools/run.py boot`
-> builds a USB-profile `BOOT.BIN`, but the physical SD-card boot with JP5 = SD
-> remains unverified. Use the JTAG sequence above for the known-good workflow.
+### SD boot (release image, JP5 = SD)
+
+Verified 2026-09-26 for the USB profile:
+
+1. Build the image if needed: `python tools\run.py boot`.
+2. Copy `build\release\BOOT.BIN` to the FAT32 root of the SD card.
+3. With power removed, set **JP5 = SD** (JP6 = USB) and insert the card.
+4. Power on; J10 enumerates as `1209:0001`. Continue with section 3.
+
+JTAG (above) remains the development path; the SD boot runs the same USB
+profile and data endpoint, with no JTAG cable or `jtag-zynq` step. The gate
+evidence is recorded in `docs/status.md`.
 
 ## 3. Find the analyzer COM port
 
@@ -393,6 +402,7 @@ limitations are in `docs/wiring.md`, `docs/spi-link.md` and `docs/limits.md`.
 - Pre-trigger depth is limited to 32,768 samples.
 - The current USB development identity `1209:0001` is for in-house testing; the
   release USB identity remains an open gate.
-- The physical USB-profile SD boot and final release tag remain open.
+- The USB-profile SD boot was verified on 2026-09-26; the final release tag
+  remains open.
 - The UI is supported in Chrome/Edge. The automated browser and bench gates
   pass, but the recorded `[HUMAN]` visual click-through remains open.
