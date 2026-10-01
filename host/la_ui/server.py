@@ -48,6 +48,11 @@ STATIC_FILES = {
 }
 MAX_BODY = 64 * 1024 * 1024
 DEFAULT_CAPTURE_TIMEOUT = 30.0
+# Step modes (counter/walking/PRBS) advance once per PATGEN DIV+1 FCLK. The
+# UI targets this many samples per step so a Fit view shows real square waves
+# instead of a sub-pixel band (a DIV=0 counter toggles every sample).
+PATGEN_STEP_SAMPLES = 16
+STEP_PATGEN_MODES = ("counter", "walking", "prbs")
 
 
 class ApiError(RuntimeError):
@@ -79,6 +84,11 @@ def sample_div(rate_hz: int) -> int:
     if rate_hz <= 0 or rate_hz > FS_HZ:
         raise ValueError(f"rate must be within 1 Hz .. {FS_HZ} Hz")
     return max(0, round(FS_HZ / rate_hz) - 1)
+
+
+def patgen_div(sample_div_value: int) -> int:
+    """PATGEN_CTRL DIV so step modes advance every ``PATGEN_STEP_SAMPLES``."""
+    return PATGEN_STEP_SAMPLES * (int(sample_div_value) + 1) - 1
 
 
 def pack_slot_spec(spec: str, slot: int, sample_rate_hz: int) -> bytes:
@@ -122,7 +132,8 @@ class UiState:
         self.hub = LiveEventHub()
         self.controller: LiveSessionController | None = None
         self.rate_text = str(rate)
-        self.rate_hz = FS_HZ // (sample_div(parse_size(rate)) + 1)
+        self.sample_div = sample_div(parse_size(rate))
+        self.rate_hz = FS_HZ // (self.sample_div + 1)
         self.patgen_mode = str(patgen)
         if self.patgen_mode != "off" and self.patgen_mode not in PATGEN_MODES:
             raise ValueError(f"unknown patgen mode {patgen!r}")
@@ -227,7 +238,7 @@ class UiState:
                 slot_configs[slot] = pack_slot_spec(spec, slot, self.rate_hz)
         stream_config = p.pack_config(
             ctrl_flags=p.CTRL_STREAM,
-            sample_div=sample_div(parse_size(self.rate_text)),
+            sample_div=self.sample_div,
             mode=1,
             chan_en=0xFF,
             post_samples=0,
@@ -340,19 +351,24 @@ class UiState:
 
     def _live_prepare(self) -> None:
         if self.patgen_mode != "off":
-            self._configure_patgen(self.patgen_mode)
+            self._configure_patgen(self.patgen_mode, self.sample_div)
 
     # -- pattern generator ---------------------------------------------------
 
-    def _configure_patgen(self, mode: str) -> None:
+    def _configure_patgen(self, mode: str, sample_div_value: int = 0) -> None:
         if mode == "off":
             return
         client = self.require_client()
+        # Step modes are slowed to PATGEN_STEP_SAMPLES per step so the viewer
+        # shows square waves at Fit; protocol modes keep their nominal DIV.
+        div = (patgen_div(sample_div_value)
+               if mode in STEP_PATGEN_MODES else 0)
         # la_patgen latches mode/DIV on the EN rising edge; clear EN first so
         # a repeated session relatches instead of keeping the previous mode.
         client.configure_patgen(0)
         client.configure_patgen(p.PATGEN_EN_MASK |
-                                (PATGEN_MODES[mode] << 4))
+                                (PATGEN_MODES[mode] << p.PATGEN_MODE_SHIFT) |
+                                (div << p.PATGEN_DIV_SHIFT))
 
     def set_patgen(self, mode: str) -> dict:
         mode = str(mode or "off").strip().lower()
@@ -362,7 +378,7 @@ class UiState:
             self.require_client()
             self._require_idle("changing the pattern generator")
             if mode != "off":
-                self._configure_patgen(mode)
+                self._configure_patgen(mode, self.sample_div)
             self.patgen_mode = mode
         return {"patgen": self.patgen_mode}
 
@@ -437,7 +453,7 @@ class UiState:
             client = self.require_client()
             self._stop_live_locked()
             if meta["patgen"] != "off":
-                self._configure_patgen(meta["patgen"])
+                self._configure_patgen(meta["patgen"], meta["sample_div"])
             progress(0.05, "arming")
             try:
                 result = client.capture(config, timeout_s=timeout_s)

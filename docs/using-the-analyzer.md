@@ -171,7 +171,9 @@ Click **Capture**. A passing first capture has all of these signs:
 - The viewer title shows 4096 samples at 100,000,000 Hz.
 - Eight channel rows are present.
 - CH0 toggles fastest, CH1 at half that rate, then CH2 and the higher counter
-  bits progressively more slowly.
+  bits progressively more slowly. The UI slows the step modes to 16 samples
+  per step, so the default Fit view is a legible square-wave counter: CH0 has
+  the most cycles and CH7 runs slowest (one cycle across a 4096-word capture).
 - The bottom bar returns to `session idle`.
 - No red capture-failure toast appears. A completed capture has passed the
   host's exact-size and whole-capture CRC checks; parser counters are not shown
@@ -187,7 +189,9 @@ Use the counter capture to check the viewer before connecting a target:
 1. Scroll over the waveform to zoom around the pointer.
 2. Drag the waveform to pan; double-click it or click **Fit** to show all data.
 3. Select a channel, then use **edge left** / **edge right** to step through its
-   transitions.
+   transitions. Cursor A moves to the next or previous exact edge and the view
+   scrolls when the edge is outside the current window; pressing again steps on
+   from the cursor.
 4. Click the ruler for cursor A and Shift+click for cursor B, or use the cursor
    buttons. The Channels panel reports delta time and reciprocal frequency.
 5. Enter a `0/1/x` pattern and use **Find next** / **Find prev**. At a newly

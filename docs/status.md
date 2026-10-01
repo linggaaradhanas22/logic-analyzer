@@ -55,6 +55,47 @@ commit, and the worktree is clean.
 
 ## Snapshot
 
+### Viewer legibility fixes: step patgen, orthogonal traces, edge stepping (2026-10-01)
+
+**The counter self-test now renders square waves at Fit, logic traces are
+orthogonal, and the edge buttons step cursor A through exact transitions.**
+Three operator-reported issues from the section 5-6 walkthrough, fixed without
+firmware, RTL or wire-protocol change:
+
+- **Default view:** `la-ui` configured the step patgen modes (counter,
+  walking, PRBS) with DIV 0, so at 100 MS/s CH0 toggled every sample (50 MHz)
+  and Fit was a solid sub-pixel band. `host/la_ui/server.py` now scales the
+  step DIV with the capture/live sample rate to 16 samples per step
+  (`PATGEN_STEP_SAMPLES`, `patgen_div`) and passes it through
+  `_configure_patgen`; protocol modes keep their nominal DIV.
+  `host/la_cli/protocol.py` gains `PATGEN_DIV_SHIFT`.
+- **Triangular CH0:** `_drawDetailChannel` connected consecutive samples with
+  diagonals, turning a square wave into a sawtooth. The renderer now draws
+  horizontal runs and vertical edges.
+- **Dead edge buttons:** `findEdge` returned an envelope bucket time without
+  placing cursor A, and re-centred to the same full-capture view. It now
+  searches exact samples (existing detail or a fetched window) from cursor A,
+  places the cursor and scrolls the edge into view. The envelope candidate
+  rule also detects transitions exactly on a bucket boundary. `app.js` adds
+  the `onSamplesNeeded` fetch bridge and a re-entrancy guard, and the operator
+  guide's section 5-6 wording now states the step scaling and edge behavior.
+
+Verification: `python tools/run.py test-host` PASS 167 passed (new
+assertions: protocol modes DIV 0, step DIV 15 at 100 MS/s and 159 at 10 MS/s
+over `/api/patgen` and the capture path); `python -m compileall -q tools host
+tests` PASS; `node --check` on app.js/waveform.js/timeline.js PASS;
+`host/tests/page_check.mjs` PASS with new `edgeStep`, `edgeCursor`,
+`stepRendering`, `edgeEnvelope`, `boundaryWindow` and `edgeBoundary` checks.
+Offline browser run against the TCP mock (Playwright/Chromium via a local
+ignored harness, slowed-counter stream emulating the new DIV): the Fit and
+zoom captures show the square-wave counter, and CH2 edge stepping walks
+64/128/192/256 forward and 192/128 back with no console or page errors. No
+hardware/JTAG/bench run was performed: the real Zynq counter capture and the
+[HUMAN] visual click-through remain unverified. Next: run
+`python tools/run.py test-e2e -- --target serial://COM13 -k ui` and the
+section 5-6 walkthrough on the bench to close the visual gate, then continue
+the operator runbook.
+
 ### Windows no-terminal UI launcher (2026-09-26)
 
 **Added `tools/win/la-ui-start.vbs` and `tools/win/la-ui-stop.vbs` plus

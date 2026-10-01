@@ -194,7 +194,7 @@ try {
   waveform.zoomToCursors();
   waveform.panPixels(10);
   waveform.fit();
-  waveform.findEdge(1);
+  await waveform.findEdge(1);
   waveform.setAnnotations({
     0: [{ kind: 1, name: "BYTE", t_sample: 100, data: "41", channel: 0, flags: 0 },
         { kind: 7, name: "ADDRESS", t_sample: 300, data: "50", channel: 1, flags: 0 }],
@@ -207,6 +207,78 @@ try {
   checks.pattern = waveform.findPattern(1) === 0;
   checks.screenshot = waveform.screenshot("check") !== undefined;
   checks.measure = waveform.measure.length > 0;
+
+  // Edge stepping: cursor A walks the selected channel's exact transitions
+  // (bit 0 of 0,0,1,1,0,1,1,0 changes at samples 2, 4 and 5).
+  waveform.selectedChannel = 0;
+  waveform.cursors = { a: null, b: null };
+  waveform.view = { start: 0, span: 8 };
+  waveform.setDetail(0, new Uint8Array([0, 0, 1, 1, 0, 1, 1, 0]));
+  const firstEdge = await waveform.findEdge(1);
+  const secondEdge = await waveform.findEdge(1);
+  const backEdge = await waveform.findEdge(-1);
+  checks.edgeStep = firstEdge === 2 && secondEdge === 4 && backEdge === 2;
+  checks.edgeCursor = waveform.cursors.a === 2;
+
+  // Detail waveforms must be orthogonal steps, never diagonals: every
+  // consecutive path segment is horizontal or vertical.
+  const path = [];
+  const recordContext = new Proxy({}, {
+    get(target, property) {
+      if (property === "moveTo") return (x, y) => path.push([x, y]);
+      if (property === "lineTo") return (x, y) => path.push([x, y]);
+      return () => {};
+    },
+    set(target, property, value) { target[property] = value; return true; },
+  });
+  const savedContext = waveform.ctx;
+  waveform.ctx = recordContext;
+  waveform.view = { start: 0, span: 4 };
+  waveform.detail = { start: 0, samples: new Uint8Array([1, 0, 1, 0]) };
+  waveform._drawDetailChannel(0, 10, 20);
+  waveform.ctx = savedContext;
+  let orthogonal = path.length >= 5;
+  for (let index = 1; index < path.length; index++) {
+    const [x0, y0] = path[index - 1];
+    const [x1, y1] = path[index];
+    if (x0 !== x1 && y0 !== y1) orthogonal = false;
+  }
+  checks.stepRendering = orthogonal;
+
+  // Without a detail window the envelope locates the candidate bucket and a
+  // fetched exact window pins the edge (1 forward edge at sample 3).
+  waveform.detail = null;
+  waveform.cursors = { a: null, b: null };
+  waveform.view = { start: 0, span: 1000 };
+  waveform.onSamplesNeeded = async (start, count) => {
+    checks.edgeWindow = start === 0 && count === 11;
+    return new Uint8Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0]);
+  };
+  checks.edgeEnvelope = (await waveform.findEdge(1)) === 3;
+
+  // A transition exactly on a bucket boundary leaves both adjacent buckets
+  // constant; the envelope candidate rule must still find it (4 buckets of
+  // 4 samples each, CH0 goes high at sample 8).
+  waveform.envelope = {
+    version: 1, channels: 8, buckets: 4, total: 16, min: [], max: [],
+  };
+  for (let channel = 0; channel < 8; channel++) {
+    waveform.envelope.min.push(new Uint8Array(4));
+    waveform.envelope.max.push(new Uint8Array(4));
+  }
+  waveform.envelope.min[0] = new Uint8Array([0, 0, 1, 1]);
+  waveform.envelope.max[0] = new Uint8Array([0, 0, 1, 1]);
+  waveform.meta = { total_samples: 16, sample_rate_hz: 1000000,
+                    has_signal: true };
+  waveform.selectedChannel = 0;
+  waveform.cursors = { a: null, b: null };
+  waveform.view = { start: 0, span: 16 };
+  waveform.detail = null;
+  waveform.onSamplesNeeded = async (start, count) => {
+    checks.boundaryWindow = start === 7 && count === 6;
+    return new Uint8Array([0, 1, 1, 1, 1, 1]);
+  };
+  checks.edgeBoundary = (await waveform.findEdge(1)) === 8;
 
   const live = app.state.live[0];
   live.add([[100, 1, "41"], [200, 1, "42"], [300, 4, ""]]);

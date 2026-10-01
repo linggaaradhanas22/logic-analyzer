@@ -93,6 +93,7 @@
       this.drag = null;
       this.measure = "";
       this.onDetailNeeded = null;
+      this.onSamplesNeeded = null;
       this.onStatus = null;
       this.onMeasure = null;
       this.width = 800;
@@ -367,6 +368,7 @@
       const mask = 1 << index;
       ctx.beginPath();
       let started = false;
+      let previous = 0;
       for (let offset = 0; offset < samples.length; offset++) {
         const time = this.detail.start + offset;
         if (time < this.view.start - 1 ||
@@ -376,9 +378,15 @@
         if (!started) {
           ctx.moveTo(x, level);
           started = true;
-        } else {
-          ctx.lineTo(x, level);
+          previous = level;
+          continue;
         }
+        // Logic signals are orthogonal: run horizontally at the old level,
+        // then take the vertical edge at the sample boundary. Connecting
+        // samples diagonally turns a fast square wave into a sawtooth.
+        ctx.lineTo(x, previous);
+        ctx.lineTo(x, level);
+        previous = level;
       }
       ctx.stroke();
     }
@@ -583,28 +591,24 @@
 
     // -- search -------------------------------------------------------------
 
-    _scanDetailForEdge(index, direction) {
-      if (!this.detail) return null;
-      const samples = this.detail.samples;
+    _scanSamplesForEdge(index, direction, reference, windowStart, samples) {
+      if (!samples || samples.length < 2) return null;
       const mask = 1 << index;
-      const start = this.view.start;
-      const end = this.view.start + this.view.span;
       if (direction > 0) {
-        for (let offset = Math.max(1, Math.floor(start - this.detail.start) + 1);
-             offset < samples.length; offset++) {
-          const time = this.detail.start + offset;
-          if (time <= start) continue;
-          if (time > end + 1) return null;
+        const from = Math.max(1, Math.floor(reference - windowStart) + 1);
+        for (let offset = from; offset < samples.length; offset++) {
+          const time = windowStart + offset;
+          if (time <= reference) continue;
           if ((samples[offset] & mask) !== (samples[offset - 1] & mask)) {
             return time;
           }
         }
       } else {
-        for (let offset = Math.min(samples.length - 2,
-                                   Math.ceil(start - this.detail.start) - 1);
-             offset >= 1; offset--) {
-          const time = this.detail.start + offset;
-          if (time >= start) continue;
+        const from = Math.min(samples.length - 1,
+                              Math.ceil(reference - windowStart));
+        for (let offset = from; offset >= 1; offset--) {
+          const time = windowStart + offset;
+          if (time >= reference) continue;
           if ((samples[offset] & mask) !== (samples[offset - 1] & mask)) {
             return time;
           }
@@ -613,51 +617,120 @@
       return null;
     }
 
-    _scanEnvelopeForEdge(index, direction) {
+    _scanDetailForEdge(index, direction, reference) {
+      if (!this.detail) return null;
+      return this._scanSamplesForEdge(index, direction, reference,
+                                      this.detail.start, this.detail.samples);
+    }
+
+    _detailHasTime(time) {
+      return !!this.detail && !!this.meta &&
+        time >= this.detail.start &&
+        time < this.detail.start + this.detail.samples.length;
+    }
+
+    _detailCoversCapture() {
+      return !!this.detail && !!this.meta && this.detail.start <= 0 &&
+        this.detail.start + this.detail.samples.length >=
+          this.meta.total_samples;
+    }
+
+    _bucketOf(time) {
+      const { buckets, total } = this.envelope;
+      return Math.max(0, Math.min(buckets - 1,
+                                  Math.floor((time / total) * buckets)));
+    }
+
+    _bucketStart(bucket) {
+      const { buckets, total } = this.envelope;
+      return Math.floor(bucket * total / buckets);
+    }
+
+    _bucketEnd(bucket) {
+      const { buckets, total } = this.envelope;
+      return bucket + 1 < buckets ? this._bucketStart(bucket + 1) : total;
+    }
+
+    _candidateBuckets(index, direction, reference) {
       const envelope = this.envelope;
-      if (!envelope || !envelope.buckets) return null;
       const min = envelope.min[index];
       const max = envelope.max[index];
-      const current = direction > 0 ? this.view.start + this.view.span
-                                    : this.view.start;
-      const bucketOf = (time) => Math.max(0, Math.min(
-        envelope.buckets - 1,
-        Math.floor((time / envelope.total) * envelope.buckets)));
-      let bucket = bucketOf(current);
+      // A bucket contains a transition when it is mixed (min != max). A
+      // transition exactly on a bucket boundary makes both adjacent buckets
+      // constant, so also treat a level change between neighbours as a
+      // candidate; otherwise every boundary edge would be skipped.
+      const candidate = (bucket) => {
+        if (min[bucket] !== max[bucket]) return true;
+        return bucket > 0 &&
+          (min[bucket] !== min[bucket - 1] ||
+           max[bucket] !== max[bucket - 1]);
+      };
+      const buckets = [];
       const limit = direction > 0 ? envelope.buckets - 1 : 0;
-      while (direction > 0 ? bucket <= limit : bucket >= limit) {
-        if (min[bucket] !== max[bucket]) {
-          return (bucket / envelope.buckets) * envelope.total;
-        }
-        bucket += direction;
+      for (let bucket = this._bucketOf(reference);
+           direction > 0 ? bucket <= limit : bucket >= limit;
+           bucket += direction) {
+        if (direction > 0 && this._bucketEnd(bucket) <= reference) continue;
+        if (direction < 0 && this._bucketStart(bucket) >= reference) continue;
+        if (candidate(bucket)) buckets.push(bucket);
+        if (buckets.length >= 16) break;
       }
-      return null;
+      return buckets;
     }
 
-    findEdge(direction) {
-      if (!this.meta) return null;
-      const index = this.selectedChannel;
-      let time = null;
-      if (this._detailCoversView()) {
-        time = this._scanDetailForEdge(index, direction);
-      } else {
-        time = this._scanEnvelopeForEdge(index, direction);
-        if (time !== null) {
-          const span = Math.min(this.view.span, DETAIL_SPAN);
-          let start = time - span / 2;
-          start = Math.max(0, Math.min(this.meta.total_samples - span, start));
-          this.view = { start, span };
-          this._maybeRequestDetail();
-          this.render();
-          return time;
-        }
+    async _requestSamples(start, count) {
+      if (count <= 0) return null;
+      if (this.detail && this.detail.start <= start &&
+          this.detail.start + this.detail.samples.length >= start + count) {
+        const offset = start - this.detail.start;
+        return this.detail.samples.subarray(offset, offset + count);
       }
-      if (time === null) return null;
+      if (!this.onSamplesNeeded) return null;
+      return this.onSamplesNeeded(start, count);
+    }
+
+    _landOnEdge(time) {
       this.cursors.a = time;
-      this._updateMeasure();
+      const span = this.view.span;
+      const end = this.view.start + span;
+      if (time < this.view.start || time > end) {
+        let start = time - span / 2;
+        start = Math.max(0, Math.min(this.meta.total_samples - span, start));
+        this.view = { start, span };
+      }
       this._maybeRequestDetail();
+      this._updateMeasure();
       this.render();
       return time;
+    }
+
+    async findEdge(direction) {
+      if (!this.meta) return null;
+      const index = this.selectedChannel;
+      let reference = this.cursors.a;
+      if (reference === null || reference === undefined) {
+        reference = direction > 0 ? this.view.start
+                                  : this.view.start + this.view.span;
+      }
+      if (this._detailHasTime(reference)) {
+        const local = this._scanDetailForEdge(index, direction, reference);
+        if (local !== null) return this._landOnEdge(local);
+        if (this._detailCoversCapture()) return null;
+      }
+      if (!this.envelope || !this.envelope.buckets || !this.envelope.total) {
+        return null;
+      }
+      const candidates = this._candidateBuckets(index, direction, reference);
+      for (const bucket of candidates) {
+        const start = Math.max(0, this._bucketStart(bucket) - 1);
+        const end = Math.min(this.envelope.total, this._bucketEnd(bucket) + 1);
+        const samples = await this._requestSamples(start, end - start);
+        if (!samples) return null;
+        const time = this._scanSamplesForEdge(index, direction, reference,
+                                              start, samples);
+        if (time !== null) return this._landOnEdge(time);
+      }
+      return null;
     }
 
     findPattern(direction) {

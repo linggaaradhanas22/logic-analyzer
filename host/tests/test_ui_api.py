@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import struct
 import threading
 import time
 
@@ -333,8 +334,28 @@ def test_patgen_route(ui):
         status, payload = _json(server, "POST", "/api/patgen", {"mode": "uart"})
         assert status == 200 and payload["patgen"] == "uart"
         assert len(mock.patgen_history) == 2
+        # Protocol modes keep their nominal DIV; step modes are slowed so the
+        # viewer shows square waves (100 MS/s -> DIV 15 = 16 samples/step).
+        assert struct.unpack("<I", mock.patgen_history[0])[0] == 0
+        assert struct.unpack("<I", mock.patgen_history[1])[0] == 0x31
+        status, payload = _json(server, "POST", "/api/patgen", {"mode": "counter"})
+        assert status == 200 and payload["patgen"] == "counter"
+        assert len(mock.patgen_history) == 4
+        assert struct.unpack("<I", mock.patgen_history[3])[0] == 0x000F0001
         status, payload = _json(server, "POST", "/api/patgen", {"mode": "bogus"})
         assert status == 400
+
+
+def test_capture_configures_step_patgen(ui):
+    _state, server = ui
+    with MockAnalyzer("capture_raw") as mock:
+        assert _json(server, "POST", "/api/connect", {"target": mock.uri})[0] == 200
+        capture = _capture(server, rate="10M", words="4096", patgen="counter")
+        assert capture["total_samples"] == 3056
+        assert len(mock.patgen_history) == 2
+        assert struct.unpack("<I", mock.patgen_history[0])[0] == 0
+        # 10 MS/s -> sample_div 9 -> DIV 159 = 16 samples/step.
+        assert struct.unpack("<I", mock.patgen_history[1])[0] == 0x009F0001
 
 
 # -- trace -------------------------------------------------------------------

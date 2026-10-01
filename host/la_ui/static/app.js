@@ -38,6 +38,7 @@
     detailPending: null,
     detailKey: null,
     lastCaptureId: null,
+    edgePending: false,
   };
 
   function $(id) {
@@ -385,16 +386,8 @@
     on("btn-zoom-cursors", "click", () => state.waveform.zoomToCursors());
     on("btn-cursor-a", "click", () => state.waveform.setCursor("a"));
     on("btn-cursor-b", "click", () => state.waveform.setCursor("b"));
-    on("btn-prev-edge", "click", () => {
-      const time = state.waveform.findEdge(-1);
-      text("view-status", time === null ? "no earlier edge"
-                                        : "edge at sample " + time);
-    });
-    on("btn-next-edge", "click", () => {
-      const time = state.waveform.findEdge(1);
-      text("view-status", time === null ? "no later edge"
-                                        : "edge at sample " + time);
-    });
+    on("btn-prev-edge", "click", () => stepEdge(-1));
+    on("btn-next-edge", "click", () => stepEdge(1));
     on("btn-search-next", "click", () => searchPattern(1));
     on("btn-search-prev", "click", () => searchPattern(-1));
     window.addEventListener("resize", resizeAll);
@@ -415,6 +408,19 @@
     text("view-status", time === null
       ? "pattern not found in the current view"
       : "pattern at sample " + time);
+  }
+
+  async function stepEdge(direction) {
+    if (state.edgePending) return;
+    state.edgePending = true;
+    try {
+      const time = await state.waveform.findEdge(direction);
+      text("view-status", time === null
+        ? (direction > 0 ? "no later edge" : "no earlier edge")
+        : "edge at sample " + time);
+    } finally {
+      state.edgePending = false;
+    }
   }
 
   function resizeAll() {
@@ -894,6 +900,21 @@
 
   // -- detail windows ---------------------------------------------------------
 
+  async function fetchSamples(start, count) {
+    if (!state.capture || !state.capture.has_signal) return null;
+    const captureId = state.capture.id;
+    try {
+      const response = await fetch(
+        `/api/captures/${captureId}/samples?start=${start}&count=${count}`);
+      if (!response.ok) return null;
+      const buffer = await response.arrayBuffer();
+      if (!state.capture || state.capture.id !== captureId) return null;
+      return new Uint8Array(buffer);
+    } catch (error) {
+      return null;
+    }
+  }
+
   function requestDetail(start, count) {
     if (!state.capture || !state.capture.has_signal) return;
     const key = `${state.capture.id}:${start}:${count}`;
@@ -931,6 +952,7 @@
     state.waveform = new window.LAWaveform.WaveformView($("wave-canvas"));
     state.waveform.setChannels(state.channels);
     state.waveform.onDetailNeeded = requestDetail;
+    state.waveform.onSamplesNeeded = fetchSamples;
     state.waveform.onStatus = (message) => text("view-status", message);
     state.waveform.onMeasure = (message) =>
       text("measure-text", message || "no cursors");
