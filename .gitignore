@@ -34,10 +34,16 @@ sdkconfig.old
 .vscode/
 .idea/
 .vs/
+.obsidian/
 *.user
 *.suo
 Thumbs.db
 Desktop.ini
+
+# Generated LaTeX report outputs; rebuild with tools/build_hardwarex_latex.py.
+docs/hardwarex/latex/*.pdf
+docs/hardwarex/latex/latex_build_manifest.json
+docs/hardwarex/latex/latex_validation.json
 
 # Simulator outputs that should stay below build/ even if a tool is run manually.
 transcript

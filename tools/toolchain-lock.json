@@ -6,17 +6,17 @@
   },
   "esp_idf_source": {
     "commit": "30aaf64524299d3bde422ca9a2848090d1bc5d0f",
-    "path": "C:\\Users\\lingg\\Projects\\KCCI_technical\\Embedded\\Logic-Analyzer\\Source_Code\\.deps\\esp-idf",
+    "path": "C:\\Users\\lingg\\Projects\\Logic-Analyzer\\Source_Code\\.deps\\esp-idf",
     "version": "ESP-IDF v5.5.2"
   },
-  "generated_at": "2026-09-11T13:37:25.174159+00:00",
+  "generated_at": "2026-10-17T20:19:14.055700+00:00",
   "missing_prerequisites": [],
   "platform": {
     "python": "3.11.15",
     "release": "10",
     "system": "Windows"
   },
-  "project_root": "C:\\Users\\lingg\\Projects\\KCCI_technical\\Embedded\\Logic-Analyzer\\Source_Code",
+  "project_root": "C:\\Users\\lingg\\Projects\\Logic-Analyzer\\Source_Code",
   "python_packages": {
     "PyYAML": "6.0.2",
     "click": "8.1.8",
@@ -74,7 +74,7 @@
     },
     "idf.py": {
       "error": null,
-      "path": "C:\\Users\\lingg\\Projects\\KCCI_technical\\Embedded\\Logic-Analyzer\\Source_Code\\.deps\\esp-idf\\tools\\idf.py",
+      "path": "C:\\Users\\lingg\\Projects\\Logic-Analyzer\\Source_Code\\.deps\\esp-idf\\tools\\idf.py",
       "required_for_p0": true,
       "status": "found",
       "version": "ESP-IDF v5.5.2"
@@ -88,14 +88,14 @@
     },
     "pulseview": {
       "error": null,
-      "path": "C:\\Users\\lingg\\Projects\\KCCI_technical\\Embedded\\Logic-Analyzer\\Source_Code\\build\\pulseview\\pulseview.exe",
+      "path": "C:\\Users\\lingg\\Projects\\Logic-Analyzer\\Source_Code\\build\\pulseview\\pulseview.exe",
       "required_for_p0": true,
       "status": "found",
-      "version": "PulseView 0.4.2"
+      "version": "srd: SyntaxError: Failed to load decoder signature: import by name failed: invalid syntax (pd.py, line 138)"
     },
     "python": {
       "error": null,
-      "path": "C:\\Users\\lingg\\Projects\\KCCI_technical\\Embedded\\Logic-Analyzer\\Source_Code\\.venv\\Scripts\\python.exe",
+      "path": "C:\\Users\\lingg\\Projects\\Logic-Analyzer\\Source_Code\\.venv\\Scripts\\python.exe",
       "required_for_p0": true,
       "status": "found",
       "version": "Python 3.11.15"

@@ -55,6 +55,943 @@ commit, and the worktree is clean.
 
 ## Snapshot
 
+**Current-state entry point:** [current-handover.md](current-handover.md),
+updated 18 October 2026. The W11 SD image is installed and cold-boot verified;
+JP5=SD, firmware 0x000A0000 / UI w11. Older session entries below retain the
+state observed on their dates and do not override the current handover.
+
+### Project relocation, LaTeX report, and class deliverable variants (2026-10-18, verified; committed)
+
+User authorized: move `Logic-Analyzer` out of `KCCI_technical` to
+`C:\Users\lingg\Projects\Logic-Analyzer`; rewrite the hardwarex document as a
+LaTeX HardwareX-style class report with compiled PDF; add Alvin Hadar and Bagas
+Budhi Permana alongside Lingga for the FPGA variant; replace the PPT synthetic
+UI screenshot with the real UART demo capture; and populate both
+`Final Project Deliverables` folders. Responsibilities: Lingga remains
+responsible for all non-RTL work; Alvin has RTL capture FIFO/buffer and sample
+packing; Bagas has RTL trigger/edge detection and AXI-Stream packet framing. The
+team-name field remains blank and the scoring sheet is untouched. No report
+DOCX, presentation script or presenter notes were copied to the class folders.
+
+Move/verification PASS: the source folder moved to the new path; the `.venv`
+console scripts were repaired with `pip install -e . --no-deps`;
+`tools/check_env.py --write-lock` reported environment pass and regenerated
+`tools/toolchain-lock.json`; absolute path references in `docs/plan.md`,
+`logic-analyzer-implementation-plan-v0.4.md` and the status path table were
+updated. Native 18/18, host 180/180, `node host/tests/page_check.mjs`,
+`compileall`, and `tools/run.py gen` PASS. The old parent retains only an
+ACL-protected `build/tmp/pytest-of-lingg` temporary directory that could not be
+deleted without elevation; it is not part of or used by the relocated project.
+
+LaTeX PASS: `docs/hardwarex/latex/hardwarex-report.tex` with
+`hardwarex-embedded.tex` and `hardwarex-fpga.tex`; Tectonic 0.17.0 was
+bootstrapped with the same SHA-256-pinned workflow used by the Hackathon project.
+`tools/build_hardwarex_latex.py` and `tools/validate_hardwarex_latex.py` produce
+and validate both PDFs. Both variants are 18 pages with seven images (four
+diagrams and three real UART screenshots). Validation PASS: A4, embedded fonts,
+1.5 cm margins, correct author block, required HardwareX-style headings, no
+overfull boxes or missing glyphs, and no template instructions or journal-only
+license/repository/OSHWA fields. The class-report LaTeX keeps the weekly
+activity appendix, the BOM and the current diagrams; the report uses A4 and
+removes the journal-only rows.
+
+Presentation PASS: slide 34 now uses
+`docs/hardwarex/assets/uart-demo/uart-demo-capture.png` with updated caption and
+notes, replacing the synthetic offline illustration. The deck remains 37 slides
+with both named custom shows (22 FPGA / 25 Embedded). Embedded and FPGA variants
+were built with `DECK_AUTHORS`; the FPGA title slide lists Lingga, Alvin and
+Bagas in that order, and PPTX core metadata matches each variant. Native
+PowerPoint render and `check_delivery.py --check-only` PASS for both. The
+internal `deliverables/` PPTX/PDF/notes were refreshed with the Embedded variant;
+the comparison deck and the separate 12 October speaking script remain
+untouched.
+
+Workbook PASS: `docs/hardwarex/build_kcci_workbook.py --variant both`. The
+Embedded variant keeps Lingga as sole member. The FPGA variant adds Alvin and
+Bagas to the team table with RTL-only roles and changes each weekly log from
+"Sole member" to "Team members: Lingga Aradhana Sahadewa, Alvin Hadar, Bagas
+Budhi Permana"; the week-4 walkthrough line becomes "lead author's
+confirmation". The scoring XML remains byte-identical
+(`f8cebe3504d13fccb02fb9a27b029befd3a2e812520ac74856ae3375157f7877`) and original
+fonts/styles/media are preserved. Outputs:
+`build/reports/project-documentation/KCCI Project_Documentation_Forms_Embedded.xlsx`
+and `..._FPGA.xlsx`, with `workbook-checks.json` and `workbook-checks-fpga.json`.
+
+Class deliverables were hash-verified in
+`KCCI_technical\Embedded\Final Project Deliverables` and
+`KCCI_technical\FPGA_Proj\Final Project Deliverables`: matching LaTeX report
+PDF, `logic-analyzer-design.pptx`, `logic-analyzer-design.pdf` and
+`KCCI Project_Documentation_Forms.xlsx`. Embedded folders contain Lingga only;
+FPGA folders add Alvin and Bagas. No report DOCX, script or notes were copied.
+Source scope: relocated path documentation, LaTeX sources/scripts/assets,
+presentation source changes, workbook builder, status and current handover.
+Pre-existing W11 source WIP outside this scope remains uncommitted and is
+recorded here; no unrelated files were staged. Commit/push performed after the
+checks; see the git log for the exact commit.
+
+### UART demo UI screenshot set (2026-10-18, captured and verified; source WIP)
+
+User requested stored UI screenshots of the logic analyzer configured for the
+external UART demo, for later use in the report PDF and hardwarex document,
+with no edit to either Word document in this step. Session start inspected
+this ledger and `git status --short --branch`; earlier W11, UART/SPI/I2C demo,
+report/presentation/learning WIP is preserved. Scope: capture real analyzer UI
+views only, store reusable PNGs, and do not regenerate or modify the report,
+workbook, deck or hardware documents.
+
+Captured with a dedicated `UiServer` and headless Chromium against the running
+bench: analyzer COM13 (firmware 0x000A0000 / PL 0x4C410002), ESP32-S3 UART
+stimulus on GPIO17/CH0 at 115200 8N1, 10 MS/s, 64k raw, Pre 0, no trigger,
+Patgen off, slot 0 `uart:rx=0,baud=115200`, channels 1-7 hidden. The ESP32-S3
+was running the combined UART+SPI+I2C demo app; its UART payload and pin match
+the UART-demo stimulus. Slots 1-2 were left empty (their light text is only the
+UI placeholder hint). Real capture decoded six bytes `4C 41 2D 53 33 0A`
+(`LA-S3\n`); the live session produced 1,464 events / 1,220 real waveform
+packets with zero gaps and decoded the same frame. Zero page errors and both
+byte-sequence checks passed in `build/reports/uart-demo-ui/screenshots.json`;
+the UI was stopped and disconnected afterward. Evidence images were written to
+the ignored `build/reports/uart-demo-ui/` and copied to
+`docs/hardwarex/assets/uart-demo/`: `uart-demo-configured.png`,
+`uart-demo-controls.png`, `uart-demo-capture.png`,
+`uart-demo-capture-canvas.png`, `uart-demo-frame.png`,
+`uart-demo-live.png`, `uart-demo-live-pane.png`.
+No report/PDF/Word/workbook source or binary was edited; no commit or push was
+requested. Next: embed the selected images in the manuscript/report when the
+user authorizes the document update.
+
+### W11 SD image and handover synchronization (2026-10-18, locally verified; source WIP)
+
+User authorizes updating the SD-card image and synchronizing every active
+handover/status document with the verified waveform-first UI, live raw preview
+and Reset UI changes. Session start: ledger/plan/rules/worktree inspected,
+`git fetch origin` PASS; HEAD and origin/main remain b487413. Earlier W11,
+UART-demo, report/presentation/learning WIP is preserved. Scope: build/package
+the USB-profile BOOT.BIN from the verified W11 ELF, install with byte/hash
+verification on the user's identified card, cold-boot without JTAG, then update
+current operator/development/architecture/limits/test/plan/UI/USB handoffs and
+portal status metadata. Preserve dated historical evidence and report/deck
+content; label superseded handoffs clearly and point to the current ledger.
+Acceptance: image inputs/hash manifest, card read-back, firmware/PL identity,
+SD-boot capture/live waveform evidence, documentation link/claim consistency
+and applicable portal checks. Reports: build/reports/sd-w11/. No git commit,
+push, website deployment or report/deck regeneration requested; source WIP.
+Initial Windows volumes contain only internal OS/recovery partitions, including
+an internal FAT32 MYASUS volume; no removable card is available. Asked user to
+power down the Zybo and attach the actual microSD to a PC reader. Next: build
+the image and identify all active status/handover entry points while awaiting
+the card. Never infer an SD boot PASS from the previous JTAG test.
+
+Image/package phase PASS: `.venv\Scripts\python.exe tools/run.py boot` and
+`... tools/run.py package`. BOOT.BIN = 2,415,152 bytes, SHA-256
+`6cb120ccc53c573edf9188a82d2fe1622def58836ffa46fdc40224eca847b892`;
+staged la_fw.elf exactly matches the verified W11 ELF SHA-256
+`f46389813150988c2104b2899a2f6dd1565a6f49572023d6f29ff4d515b55699`.
+Updated host wheel 139,198 bytes and release-manifest.json generated. Previous
+release artifacts preserved in build/reports/sd-w11/baseline/.
+
+User attached the card: D: FAT32 removable, 15,923,150,848-byte volume on USB
+disk 1 (serial 000000001532; not a system/boot disk). Its old BOOT.BIN matched
+the known 0821afd9...f9619d image exactly. `build/reports/install_sd_w11.py`
+backed it up as sd-w11/card-previous-BOOT.BIN, copied/flushed the new image via
+a temporary file and atomically replaced BOOT.BIN; byte/SHA-256 read-back PASS.
+Evidence: sd-w11/{preparation,card-installation}.json, canonical boot/package
+reports and build/release/release-manifest.json. No format/partition change.
+Cold boot still pending: user must safely eject, reinstall with JP5=SD and
+power-cycle. Next: verify independent SD startup and finish document sync.
+
+Cold-boot phase PASS: user safely returned the card, set JP5=SD and power-cycled.
+No JTAG loader ran in this session. J10 enumerated on COM13 and `la-cli ping`
+reported firmware 0x000A0000 / PL 0x4C410002 at uptime 17611 ms. SD image USB UI
+suite PASS **6/6** in 11.35 s; independent browser/ESP32 verification PASS
+**10/10**, zero page errors, including capture focus/Fit, real live waveform,
+second-slot time alignment, Pause/Follow and Reset during streaming/armed
+capture plus reconnect/Ping. Reports and screenshots archived under
+build/reports/sd-w11/; sd-boot-verification.json records user-confirmed physical
+boot basis, image/card hashes and checks. JP5 now remains SD; no JTAG reload
+is needed after normal power cycling. Next: finish current-document/portal
+handover consistency and record publication/source-WIP boundaries.
+
+Documentation-sync phase PASS. Current entry point: new `docs/current-handover.md`
+(bench state, hashes, W11 behavior, evidence boundaries, source/publication
+state). Updated README, plan, operator guide, Windows guide, architecture, RTOS
+design, live-web contract, limits, test plan, unified-UI plan, USB migration/
+contract/pivot headers, historical v0.4 snapshot, report/presentation READMEs and
+the historical web-artifact docs with current-status pointers. Synced portal
+source: snapshot dates/baseline b487413 WIP notice, home/using status, roadmap,
+verification runner/evidence rows, protocol frame bounds plus
+WAVE_CFG/EVT_WAVEFORM, unified-UI component record and system diagram. Added
+current JP5=SD/ESP32-demo bench notes to wiring. Preserved the dated 12 October
+report/workbook/deck binaries and their claims; their READMEs explicitly
+separate those deliverables from W11.
+Checks: `.venv\Scripts\python.exe` local-link scan **LINKS OK**; portal
+`validate-docs` PASS (7 subsystems, 79 components, 21 registers, **26 protocol
+messages**, 11 roadmap phases, 55 glossary terms, 186 coverage entries);
+`npm run build` PASS (all routes, client/RSC/SSR environments); targeted oxlint
+PASS; touched portal source files normalized with the project's oxfmt formatter
+(hence a wider formatting-only diff in those docs data files);
+`git diff --check` PASS (existing line-ending notices only). No website deployment
+or git commit/push was requested; `origin/main` remains b487413 and all
+W11/demo/doc source is explicit WIP. Next: user uses the SD image/UI; publication or commit requires a separate
+instruction. No further hardware rerun after the documented 6/6 + 10/10 gates.
+
+### Combined UART+SPI+I²C demo and parallelism verification (2026-10-18, passed; source WIP)
+
+User requests I²C and SPI demo code while keeping every demo pin on the same
+DevKitC-1 J1 header row as GPIO17, and asks whether capture/live decoding can run
+in parallel. Added `fw-esp32/demo-protocols/` (standalone ESP-IDF app) and the
+`demo-esp32-protocols` runner target with isolated `build/esp32-protocols-demo/`
+workspace. Pin map: UART GPIO17; SPI SCK/MOSI/CS GPIO12/11/10; I²C master
+SCL/SDA GPIO9/8; I²C slave SCL/SDA GPIO4/5 with external 9↔4 and 8↔5 jumpers;
+ground on J1/J3 to JC-5/11. All are 3.3 V J1-header pins. I²C uses two on-chip
+controllers (master address target and slave at 0x50) so no sensor is required.
+SPI 10 kHz mode 0 payload `4C 41`; I²C write `4C 41` then read `41 33`; UART
+115200 `LA-S3\n`. Rates are deliberately conservative (UART 10 ms gap, SPI 5 ms,
+I²C write/read 10 ms) to keep three live panes clean.
+
+Build/flash: `.venv\Scripts\python.exe tools/run.py demo-esp32-protocols` PASS
+(S3 image 0x404a0 bytes, 75% app partition free) and
+`... demo-esp32-protocols -- -p COM10 flash` PASS with bootloader/app/partition
+hash verification. ESP32 console confirms I²C loopback (`ok` increasing, write
+`4C 41`, read `41 33`). The user powered both boards down, wired SPI/I²C and the
+two I²C jumpers, then powered them back on.
+
+Verification PASS (`build/reports/demo-protocols/verify_parallel.py`,
+`verification.json`): one 10 MS/s 256k raw capture decoded all three slots:
+UART 14 bytes beginning `4C 41 2D 53 33 0A`; SPI 20 events with CS assert/release
+and repeated `4C 41`; I²C 21 events including START/ADDRESS(0x50)/ACK/BYTE/STOP
+and read bytes `41 33`. Then all three live slots started together for four
+seconds: **2,322 UART + 3,100 SPI + 3,121 I²C events**, 1,937 real waveform
+packets and **zero** ring/client/format drops and zero preview omissions. The
+hub was cleared before the live test so replay history could not be mistaken for
+current loss. Parallelism limits recorded: all eight channels sample together;
+up to three live decoder slots run concurrently; capture and live are mutually
+exclusive; one capture job at a time; shared USB/UI throughput can still be
+overloaded at higher rates. UI connection restored to idle/disconnected after
+the test; source remains local WIP over b487413 with no commit/push requested.
+Reports: `build/reports/demo-protocols/`; docs: `fw-esp32/demo-protocols/README.md`,
+`docs/current-handover.md`.
+Checks: `py_compile tools/run.py`, Markdown **LINKS OK**, and
+`git diff --check` PASS (existing line-ending notices only). The analyzer UI was
+left idle/disconnected after verification; source remains local WIP over
+b487413 with no commit/push requested.
+
+### Live pane blank / multi-tab feed fix (2026-10-18, passed; source WIP)
+
+User reports live streaming counters increasing but no waveform in the pane.
+Reproduced safely with a fresh temporary UI server: a single slot showed real
+runs/events. Root cause is the unified UI's original single-client SSE policy
+combined with `/api/state` polling: a stale or second browser tab could hold the
+only `/events` feed while the visible tab still displayed HTTP-polled counters,
+so the live panes received no data. This was not an FPGA/firmware waveform
+failure.
+
+Fix: `UiState` now allows up to four live browser tabs with fan-out
+(`LiveEventHub(max_clients=4, client_queue=512)`), `hub.attach()` replays only
+the newest queue-sized history instead of overfilling and counting replay as
+loss, and `hub.begin_session()` clears stale event/waveform replay plus queued
+frames and resets per-session counters at each live start. Legacy `la-web`
+remains single-client by contract. The page now raises a warning if its SSE feed
+disconnects. Tests added for newest-history replay, begin-session clearing,
+multi-client fan-out, and legacy single-client 409 behavior.
+
+Verification PASS: `.venv\Scripts\python.exe tools/run.py test-host` **180/180**
+(41.88 s; existing warnings/pytest temp-link cleanup notice),
+`node host\tests\page_check.mjs` PASS, JS/py compile checks PASS. Two independent
+SSE readers against the restarted UI server each received **296 event messages
+and 925 waveform messages** from the same live session:
+`build/reports/demo-protocols/verify_two_feeds.py`. UI server restarted with the
+fix; it is idle/disconnected for the user to reconnect. Source remains local WIP
+over b487413, no commit/push requested.
+
+### Waveform-first UI and reset (2026-10-17, locally verified; source WIP)
+
+User authorizes readable initial captured waveforms, real live waveforms aligned
+with decoding, and a Reset UI button restoring defaults. Session inspected
+ledger/worktree and fetched origin; baseline remains b487413. Preserve earlier
+demo/tooling and documentation WIP. Scope: renderer/default activity view,
+non-overlapping annotations, bounded opt-in DMA-transition preview over direct
+USB, host/SSE/browser integration, reset lifecycle, tests and operator docs.
+Live preview will carry actual transition words with absolute sample indices;
+missing/truncated preview ranges remain visibly unknown. Decode retains its
+existing continuous pipeline. Reset stops acquisition, clears session memory
+and browser settings, restores channel/form/view defaults and disconnects.
+Acceptance: test-native/test-host, JS/real-browser checks and available USB
+bench evidence, with unavailable hardware/tool steps recorded honestly.
+Reports under build/reports/ui-waveform/. Source remains explicit WIP until
+commit/push is requested. Next: implement capture/reset, then live transport.
+
+Implementation phase WIP: captured view now has activity-focused startup,
+connected high/low overview rails, higher rows and collision-free byte labels.
+Reset endpoint/button stop work and clear store/hub/settings/view state. Added
+opt-in WAVE_CFG 0x1C and EVT_WAVEFORM 0x25: bounded copies of DMA transition
+words with sample rate, absolute start and omission count, reserved pool/queue
+capacity for decoders, no ISR/SG mode changes. Host routes these separately
+from decoded-event counts; per-slot live waveform rows share the decoder time
+axis, retain bounded history and expose Pause/Follow/Fit/zoom and gaps. Native
+and host regression additions cover payload validation, configuration guards,
+callback routing, bounded fanout and reset. Initial JS syntax/page harness PASS.
+Next: preserve the old in-memory capture/firmware, stop old UI to release the
+native DLL, run canonical tests and rebuild firmware for actual bench checking.
+
+First checks PASS: native 18/18, host 176/176 (existing matplotlib deprecation
+warnings and a pytest temp-link cleanup PermissionError after the passing run),
+USB firmware build PASS. Preserved prior capture + annotations and baseline
+ELF/BOOT image in `build/reports/ui-waveform/baseline/`. Initial JTAG load blocked
+by JP5=SD; user moved JP5 to JTAG and power-cycled, then jtag-zynq PASS. New
+firmware 0x000A0000 loaded. First browser run found all-high input; after user
+reseated/confirmed GPIO17/JC-1 + ground, real external browser run PASS: 18
+capture bytes `LA-S3\n`, activity view span 5220/64000 samples, exact Fit, real
+live run words + matching decoded bytes, Pause/Follow, reset while streaming,
+zero page errors. Reports/screenshots: `build/reports/ui-waveform/browser-checks.json`
+and capture-focus/capture-fit/live-waveform/reset-defaults PNGs.
+
+Visual QA found excessive empty unconfigured live panes and stale event/status
+labels under a continuously busy SSE feed. Hide unconfigured panes and also
+refresh statistics from `/api/state`. Additional correctness hardening gives
+each DMA segment an absolute acquisition timestamp so slots enabled mid-stream
+or recovering from a dropped segment remain aligned; added native epoch/gap
+tests and browser-model real-run/bounds checks. Reset now rejects an incomplete
+stop, and disconnect disables the opt-in preview. Next: rerun affected checks,
+reload final firmware and inspect final screenshots, including multi-slot live.
+
+Final firmware native checks PASS 18/18 (including absolute-epoch/gap test),
+USB build/reload PASS and canonical UI bench suite PASS 6/6 in 11.31 s
+(`test-e2e -- --target serial://COM13 -k ui`, waveform SSE assertion included).
+Final real-browser test at default 100 MS/s live PASS: capture activity/fit,
+real signal and annotations, live status counters, Pause/Follow, matching
+timestamps when a second UART slot starts mid-stream, and Reset while streaming;
+zero page errors, zero client/format drops, 1322 waveform packets with no
+omissions/gaps in the recorded observation. Inspected capture/live screenshots.
+
+Reset hardening: capture cancellation now leaves serial reads in the capture
+worker, which observes the cancel event then sends ABORT itself; avoids the
+HTTP thread racing a second parser against capture. Added a cancellation +
+post-cancel ping regression. Reset also clears job history; stale browser
+upload/capture/decode/connect responses are generation-guarded. Pause now
+freezes a bounded snapshot rather than drifting when rolling history expires.
+Updated protocol contract and operator guide for W11, preview limits, actual
+live rate, focus controls and Reset effects. Next: affected host/JS/cancellation
+checks, final UI restart and runbook handoff; no source commit/push requested.
+
+Close-out: final `python tools/run.py test-host` PASS **177/177** (41.86 s;
+same pre-existing warnings/pytest temp-link cleanup issue). JS syntax checks
+and `node host/tests/page_check.mjs` PASS, including real runs, gap boundaries,
+frozen pause, reset clearing and long-idle two-second retention. `python -m
+compileall -q host tools` and `git diff --check` PASS (line-ending notices only).
+Final browser/real ESP32 trial PASS **10/10 checks**, including Reset while
+armed waiting for a trigger and successful reconnect/Ping afterward; no page
+errors. Observed 1312 waveform packets/7872 events with zero client/format
+drops, preview omissions or gaps in that trial. Screenshots inspected at full
+resolution. No new SPI/I2C external-preview or overload qualification claimed.
+
+Changed scope: common/la_proto header/implementation; fw-zynq app context,
+Acq/Cmd/decoder/Tx adapters and pure decoder core; host client/protocol,
+live hub/session, UI server/render documentation and static app/index/timeline/
+waveform; native protocol/dispatch/live tests, host client/API/live-waveform/page
+tests and UI E2E assertions; docs/protocol.md, using-the-analyzer.md and ledger.
+Prior UART-demo runner/source and report/presentation/learning WIP preserved.
+
+Archived canonical native/host/build/load/UI-E2E reports plus browser screenshots
+under `build/reports/ui-waveform/`; `finalize_checks.py` PASS and `summary.json`
+records all canonical targets passing and running firmware 0x000A0000 / PL
+0x4C410002. Loaded ELF SHA-256
+`f46389813150988c2104b2899a2f6dd1565a6f49572023d6f29ff4d515b55699`.
+Restarted the normal UI server on 127.0.0.1:8080 with current source, left it
+idle/disconnected and released COM13 after identity verification. User should
+hard-refresh the browser, select COM13 and Connect; Capture opens activity at
+a readable scale, Apply live config -> Start shows waveform + bytes, Reset UI
+restores defaults. **JP5 remains JTAG; this firmware is volatile.** SD BOOT.BIN
+was not changed; after power loss reload via `python tools/run.py jtag-zynq`.
+Functionality is ready locally. Tracked changes remain explicit WIP,
+uncommitted/unpushed because publication was not requested. Next: user tries
+the updated UI; future SD adoption/publication requires its own recorded step.
+
+### External capture ARM acknowledgement failure (2026-10-17, recovered; WIP)
+
+User reports UI `capture failed: DATA_END without an ARM acknowledgement` after
+the external UART setup. Session start inspected ledger/worktree, fetched
+origin and confirmed baseline `b487413`; earlier demo and documentation WIP are
+preserved. UI `/api/state` confirms serial://COM13, matching firmware/PL IDs,
+idle session and no captures. Scope: capture protocol diagnosis, bounded real
+USB reproduction, evidence-backed recovery/fix and regression checks as needed.
+Potential source files: host capture client/tests or firmware TX ordering only
+if wire evidence justifies it. Diagnostic artifacts stay in `build/reports/`.
+Current source shows host requires ARM ACK before DATA_END; firmware queues
+the ACK before acquisition but TxTask starts jobs before draining control
+frames, a possible ordering race, not yet established as the observed cause.
+Next: temporarily release the UI port, trace a bounded capture, then reconnect
+the UI. No commit/push requested; any tracked changes remain explicit WIP.
+
+Diagnostic captures PASS after releasing/reopening COM13: 64,000 samples and
+4,096 samples at 10 MS/s, external raw source, exact size/whole-capture CRC,
+zero parser CRC/format/dropped-byte counts. Wire traces show CONFIG ACK then
+the matching ARM ACK before DATA_BEGIN/chunks/DATA_END on both runs. Evidence:
+`.venv\Scripts\python.exe build/reports/diagnose_capture_ack.py` and
+`build/reports/capture-arm-diagnosis.json`. Restored UI serial://COM13 ownership.
+Original error is not reproduced on these fresh connections; a stale-session/
+lost-ACK explanation remains a hypothesis. No source fix is justified yet.
+Next: verify repeated captures through the existing UI server and inspect CH0.
+
+UI recovery verification PASS: three consecutive 64k raw external captures at
+10 MS/s completed via `/api/capture`, exact 64,000 samples and no CRC/format/
+dropped-byte errors. Evidence:
+`.venv\Scripts\python.exe build/reports/verify_ui_capture_recovery.py` and
+`build/reports/ui-capture-recovery.json`. First observer invocation had a local
+job-response parsing KeyError (API returns the job directly); corrected the
+ignored observer and reran, no product edit. Analyzer remains connected in UI
+on COM13 and idle. Original missing-ACK cause remains unproven; reopening the
+connection recovered the observed failure, with no protocol/firmware change.
+No native/host regression required for this diagnosis-only session.
+
+Separate physical-input finding: all three records contain 64,000 high CH0
+samples and zero CH0 edges. Read-only COM10 console observation confirms the
+S3 demo is still running: batches 107000/107500/108000, TX=GPIO17, 115200 baud.
+Closed COM10 afterward. Thus UART stimulus software runs but the external
+GPIO17-to-JC-1 signal is not observed; wiring/pin identification/common ground
+and electrical output remain unverified. `git diff --check` PASS (existing
+ledger line-ending notice). Only the ledger changed in tracked product scope;
+earlier source WIP is preserved and no commit/push requested. Next: user refreshes
+UI and retries Capture with Patgen off, then powers down to verify GPIO17/IO17
+-> actual JC-1 (not JE/JD) and shared JC-5/11 ground if CH0 stays flat.
+
+### External ESP32-S3 UART demonstration (2026-10-17, flashed and running; source WIP)
+
+User authorizes programming the connected ESP32-S3 as the external signal source
+before personally trying capture/live decode. Inspected this ledger, AGENTS.md,
+plan and worktree; `git fetch origin` PASS and recent log confirms `b487413`
+matches `origin/main`. Preserve the pre-existing modified ledger and untracked
+hardwarex/learning/presentation work. Intended files: standalone ESP-IDF app
+under `fw-esp32/demo-uart/`, canonical `demo-esp32-uart` runner target, and this
+ledger. Build/configuration/artifacts stay under `build/esp32-uart-demo/`;
+reports use `build/reports/demo-esp32-uart.{json,log}`. Acceptance: native S3
+build, identified ESP32 programming port, flash hash verification and runtime
+console showing the configured GPIO17/115200/8N1 repeated `LA-S3\n` workload.
+Actual external waveform and capture/live decoding remain the user's bench
+step, not an inferred PASS. No commit/push requested; source explicitly WIP.
+Initial ports: ESP32 native gateway COM11 (`303A:4001`, `LA-GW-S3-01`), analyzer
+COM13 (`1209:0001`), FTDI COM15 (`0403:6010`); no CH343/CP210x programming bridge.
+Asked user to connect the UART-labelled port while the app is prepared. Next:
+build the isolated source app and rescan for the programming bridge.
+
+Implementation phase: added the standalone CMake/IDF app, SDK defaults, UART1
+GPIO17 stimulus with a one-second UART0 heartbeat, README and canonical runner
+target. The runner imports the installed IDF environment and places this app's
+SDK configuration/build separately from the existing gateway workspace. No
+protocol, decoder, RTL or Zynq behavior changed. Verification pending native
+build/flash; source remains WIP.
+
+Native build PASS: `.venv\Scripts\python.exe tools/run.py demo-esp32-uart`
+(233.641 s, ESP-IDF 5.5.2, S3 image 0x328c0 bytes, 80% app partition free).
+Evidence: `build/reports/demo-esp32-uart.{json,log}` and
+`build/esp32-uart-demo/la_uart_demo.bin`. `git diff --check` PASS (existing
+ledger line-ending notice). Repeated pyserial and present-device scans still
+show COM11/COM13/COM15 only, no ESP32 UART bridge; no present PnP errors.
+Flash/runtime verification BLOCKED awaiting the programming connection or
+manual ROM-download entry. COM11 still advertises the existing gateway app;
+no flash has been attempted and no runtime or GPIO waveform PASS is claimed.
+Next: identify the ESP32 UART bridge after user connects it, then flash through
+the canonical target and capture the boot/heartbeat. Source remains WIP.
+
+User connected the UART cable, but pyserial still found no bridge. User then
+performed BOOT/RESET on request: native gateway COM11 disappeared and S3 ROM
+USB Serial/JTAG enumerated on COM10 (`303A:1001`, MAC E8:F6:0A:88:E1:B4).
+Selected this positively identified S3 programming endpoint. Enabled IDF's
+secondary USB Serial/JTAG console in demo defaults and the local SDK config so
+runtime heartbeat can be verified over this working connection. README records
+both programming paths. First combined flash invocation failed before hardware
+access: IDF rejected `-p` after the `build` action. Fixed the new target to put
+forwarded IDF global options/actions before its build action. Next: rerun
+`.venv\Scripts\python.exe tools/run.py demo-esp32-uart -- -p COM10 flash`
+and inspect runtime. Source remains WIP.
+
+Flash PASS on COM10: the canonical command above rebuilt the USB-console image
+(0x33400 = 209,920 bytes), identified ESP32-S3 revision v0.2 with 8 MB embedded
+PSRAM and MAC e8:f6:0a:88:e1:b4, wrote bootloader/application/partition table,
+verified all three hashes and issued hard reset. Evidence:
+`build/reports/demo-esp32-uart.{json,log}`. Added an ignored bounded console
+observer `build/reports/verify_esp32_uart_demo.py`; next: run it to check
+increasing heartbeat counts and archive console/image hash evidence. Source WIP.
+
+Runtime verification PASS after user pressed RESET/EN without BOOT. Initial
+six-second observation had no output (unverified); after physical reset,
+`.venv\Scripts\python.exe build/reports/verify_esp32_uart_demo.py` captured six
+successive `LA_UART_DEMO: RUNNING` heartbeats, batches 26000/26500/27000/27500/
+28000/28500 with TX=GPIO17 and baud=115200. Evidence:
+`build/reports/esp32-uart-demo-{console.log,runtime.json}`. Final application
+SHA-256 `6130151550383890055597fe74400d6376f868f26fe0d89b032f8893be971af2`;
+flash target PASS in 114.203 s. `.venv\Scripts\python.exe -m py_compile
+tools/run.py` PASS; `git diff --check` PASS with the existing ledger line-ending
+notice. No new decoder/protocol/native-test gate required for this standalone
+stimulus. Serial observer closed COM10; analyzer COM13 and the browser session
+were not acquired or changed. Firmware is ready for the user's physical
+capture: JC-1/CH0, 10 MS/s, 64k raw, Pre 0, no edge trigger, Patgen off;
+`uart:rx=0,baud=115200`, expected `4C 41 2D 53 33 0A`. External waveform and
+capture/live decoding remain unverified until the user performs them. The UART
+bridge still does not enumerate; native USB programming/runtime worked. Source
+and ledger remain explicit WIP, uncommitted/unpushed (not requested); preserve
+all earlier work. Next: user Capture -> Decode capture, then Apply live config
+-> Start in Slot 0 and observe the Live pane.
+
+### Project report and KCCI workbook refresh (2026-10-12, published and verified; source WIP)
+
+User authorizes completing the parent project PDF/Word report and KCCI Excel
+forms, using the existing Markdown where appropriate and explicitly explaining
+the RTOS from implementation evidence. Unknown personal, administrative,
+authorship, cost and outcome entries require user confirmation; no invented
+answers. Diagrams use the draw.io skill when needed. Session start: inspected
+this ledger and `git status --short --branch`; `git fetch origin` PASS and
+`git log --oneline --decorate -5` confirms `b487413` matches `origin/main`.
+Pre-existing modified ledger and untracked `docs/hardwarex/`, `docs/learning/`
+and `docs/presentation/` are preserved. Intended scope: refreshed report source,
+document/workbook export tooling, source-backed RTOS explanation, deliverables
+and this ledger. Generated working files remain beneath `build/`. Acceptance:
+report/source cross-check, workbook field/formula/style preservation, PDF and
+Word rendering, updated diagram inspection and explicit unknown-entry review.
+No new bench results or commit/push requested; source remains explicit WIP.
+Next: inspect the actual Word/PDF and all workbook sheets, compare historical
+wireless manuscript with current USB implementation, then ask targeted questions.
+
+Discovery completed locally. The original PDF has 15 pages; the matching Word
+file has 142 paragraphs, three tables and one embedded diagram, with substantial
+unfilled template instructions. `docs/hardwarex/manuscript.md` supplies most
+technical sections but describes the historical wireless-first baseline and
+still has author/license/affiliation/funding placeholders. The workbook has
+three sheets: Project Implementation Plan, Project Log and Project Scoring
+Sheet. All project-entry fields are blank; scoring/comment/signature fields
+require evaluator information or an explicit instruction to leave them blank.
+
+Read actual initialization, task constants/adapters, generated BSP scheduling
+configuration and USB interrupt enable/service code. Authored the independent
+technical draft `docs/hardwarex/rtos-implementation.md`: eight default-profile
+application tasks, actual priorities/stacks, configurable decoder slots,
+static allocation, handle/refcount ownership, queue-full behavior, burst buffer
+lifetime, cached-DMA invalidation, USB semaphore/staging, tracing and honest
+measurement scope. Corrects stale planning claims about task stacks, five-second
+status cadence, a full-control-queue NAK guarantee, all-task watermark coverage,
+CPU statistics and notification-only USB RX callbacks. Original documents,
+historical manuscript and diagrams have not yet been modified.
+
+Inspection command PASS: `.venv\Scripts\python.exe -X utf8
+build\reports\inspect_project_documents.py`; reports under
+`build/reports/project-documentation/{input-manifest.json,original-word.txt,
+original-pdf.txt,original-workbook.json}`. The read-only Office/PDF parser
+records original SHA-256 hashes. Installed `openpyxl 3.1.5` and `pymupdf 1.28.2`
+in the existing project `.venv` for structured Office/PDF inspection/export.
+`git diff --check` PASS (existing line-ending notice). PDF preview tool BLOCKED:
+`ENOENT: uv_spawn 'pdftoppm'`; PyMuPDF is available for the rendering fallback.
+No firmware, RTL, protocol, decoder or hardware test run for this documentation
+draft. Scope remains WIP, uncommitted/unpushed. Next: obtain official duration,
+team/member/adviser/institution details, author/contact/contribution/funding
+information, log granularity/hours, evaluator-field policy, license/deposit
+status and BOM price basis; then update the manuscript/diagrams and generate
+verified Word/PDF/Excel deliverables.
+
+User clarifications received 2026-10-12: one individual project serves both
+Embedded system and FPGA classes; sole member/author/contributor Lingga Aradhana
+Sahadewa, email `linggaaradhanas@gmail.com`. Official class-project duration
+15 September–12 October 2026. Four separate weekly activity sheets, five hours
+each (20 total, not doubled for the two classes). Leave team/adviser/institution
+and other unrequested administrative fields blank. **Do not touch the Project
+Scoring Sheet**, including its package XML/assets. KCCI funded the project;
+retain the 17 September 2026 IDR price estimates. Omit optional license/deposit/
+certification sections; do not claim a license or DOI. User confirms the visual
+walkthrough is already complete; report this as user-confirmed on 12 October,
+without inventing its execution date, detailed results or a machine report.
+Next: author the USB-first report with class-specific contributions, weekly logs
+from dated ledger evidence and current draw.io figures; preserve originals in
+an ignored backup before replacing the user-requested Word/PDF/workbook files.
+
+Report authoring phase WIP: preserved the earlier manuscript as
+`docs/hardwarex/manuscript-wireless-2026-09.md`, authored the current
+`manuscript.md` with both class responsibilities, confirmed author/funding/dates,
+the implemented RTOS, current USB/UI/SD status, evidence boundaries and the
+reclassified retained-price BOM (required USB subtotal Rp 13,954,700; all listed
+items Rp 14,408,550). Added `build_report_diagrams.py`,
+`build_project_report.py`, `build_kcci_workbook.py` and
+`render_documents.ps1`. The workbook builder edits only authorized OOXML
+parts, preserves scoring XML and original media/relationships verbatim, and
+appends styles without changing existing font/style records. Four draw.io
+pages generated as `diagrams/project-report_v2.drawio`; skill validation PASS
+(0 errors, 0 warnings, score 0), using draw.io 31.4.5 at the resolved installed
+path. First four PNGs inspected: found a return-command label overlapping the
+USB lane and several overwide labels; shortened labels and moved the return
+label into a clear corridor. Next: regenerate/inspect corrected figures, build
+the workbook/report, use Word/Excel native PDF rendering and verify all pages
+before publishing. No fresh hardware test or scoring-sheet edit.
+
+Current report/weekly workbook staging PASS: `build_project_report.py`
+generated a 183-word abstract, 149 Word paragraphs, 11 tables and four figures;
+`build_kcci_workbook.py` generated six sheets (plan, original scoring and four
+weekly logs), verified twenty total hours and byte-identical scoring XML
+(SHA-256 `f8cebe35...f7877`). All other original package parts except the
+explicit worksheet/workbook/style metadata allowlist are byte-identical;
+original style/font records are retained. Corrected diagram rerender/inspection
+PASS for all four native draw.io pages. Original binary backups are in
+`build/reports/project-documentation/originals/`.
+
+Office rendering: `& docs\hardwarex\render_documents.ps1 -SkipWord` PASS,
+five authorized sheets each exported to one-page native Excel PDF; the scoring
+sheet was skipped and the workbook closed without saving. Native Word
+ExportAsFixedFormat timed out at 240 s, a diagnostic retry at 120 s, and SaveAs2
+at 120 s; no native Word PDF success claimed. Only the hidden Word processes
+created by those attempts were closed after checking PID/name/start time;
+pre-existing Excel user instances were preserved. Word opening/repagination
+verification later PASS with `-SkipExcel -WordOpenOnly` (15 pages). Added
+`render_report_pdf.mjs`: Chromium/Edge PDF PASS (16 pages, four loaded figures,
+zero page errors) from the same Markdown-derived content. Added PDF preview/
+page-bound inspection and source/content/package verification/publication
+tooling plus `docs/hardwarex/README.md`.
+
+First visual QA: all report pages and five workbook pages inspected on contact
+sheets; page-bound checks PASS. Found a too-narrow Hours column in the report's
+weekly summary and lost weekly title styling. Fixed report column widths,
+preserved explicit numbered lists and restored the weekly template title style.
+Next: regenerate the affected artifacts, rerun native Office/open/render and
+content checks, inspect final key pages, then atomically replace the requested
+parent documents and verify hashes. Source/ledger remain explicit WIP; no
+commit/push or new hardware run requested. The author's 12 October confirmation
+closes the previously outstanding human visual walkthrough observation, with
+execution date and extra detailed results left unspecified.
+
+Final regeneration and publication PASS. Commands:
+`.venv\Scripts\python.exe -X utf8 docs\hardwarex\build_project_report.py`,
+`node docs\hardwarex\render_report_pdf.mjs`,
+`.venv\Scripts\python.exe -X utf8 docs\hardwarex\build_kcci_workbook.py`,
+`& docs\hardwarex\render_documents.ps1` (Word open/pagination and five native
+Excel PDFs, no Word PDF-export attempt),
+`.venv\Scripts\python.exe -X utf8 docs\hardwarex\inspect_rendered_documents.py`
+and `.venv\Scripts\python.exe -X utf8
+docs\hardwarex\verify_project_documents.py --publish`.
+
+Deliverables replaced atomically at the original requested parent paths:
+`../Logic Analyzer with Live Protocol Decoding_Lingga Aradhana Sahadewa.docx`
+(1,275,756 bytes, Word opened/repaginated as 15 pages), matching-content PDF
+(1,331,971 bytes, 16 Chromium A4 pages), and
+`../KCCI Project_Documentation_Forms.xlsx` (67,598 bytes, six sheets: plan,
+four weekly logs and unchanged scoring). SHA-256-verified publication is in
+`build/reports/project-documentation/publication.json`. Verification PASS:
+all 467 source blocks/table cells are present in both Word/PDF; every filled
+workbook entry is present in its native Excel PDF; all printed text is within
+page bounds; four weeks at five hours = twenty hours; independent BOM arithmetic
+matches; scoring XML/assets and original styles/fonts remain preserved.
+Inspected all sixteen final PDF pages on three contact sheets, the corrected
+weekly table at full resolution, all five workbook pages and the restored
+week-one title at full resolution. Four final draw.io figures also inspected.
+Reports: `document-checks.json`, `workbook-checks.json`, `report-build.json`,
+`render-checks.json` and previews alongside the publication report. Original
+binary backups remain in that report directory's `originals/` folder.
+
+`.venv\Scripts\python.exe -m py_compile` on the five Python report/workbook/
+diagram/verification scripts PASS; `git diff --check` PASS with the pre-existing
+line-ending notice. No firmware, RTL, protocol or hardware test was added/run.
+Native Word PDF export remains a local tooling blocker documented in the README;
+the delivered Chromium PDF passed content and full visual verification.
+**Deliverable files are ready locally; documentation source/ledger remain
+explicit WIP, uncommitted/unpushed because commit/push was not requested.**
+Pre-existing learning/presentation work remains intact. Next: user reopens the
+updated report/workbook; future document edits use the reproducible source and
+preservation checks. The human visual walkthrough is author-confirmed complete;
+no new latency numbers or detailed walkthrough pass counts are invented.
+
+### Complete presentation speaking script (2026-10-12, published and verified; source WIP)
+
+User requests understandable spoken explanations of every item in the current
+37-slide presentation. Read the complete published PDF, all presenter notes,
+the slide storyline and interface specifications. Intended files:
+`docs/presentation/presentation-script.md`, script export/coverage tooling,
+presentation README and this ledger. Publish stable Markdown, editable Word
+and printable PDF script files in `../deliverables/`, preserving both
+subsystem routes and the existing comparison. The script will explain every
+diagram/table, acronym, calculation, result and operating limit; speaking
+paragraphs are separate from pointing cues and deeper explanations.
+Acceptance: 37 matched slide sections, route/term/numeric coverage checks,
+document rendering and plain-English/factual review. No hardware test,
+presentation content change or commit/push requested; source remains WIP.
+Next: author the complete speaking script and its document exports.
+
+Authored `docs/presentation/presentation-script.md` (about 9,600 words):
+slide-by-slide spoken paragraphs for all 37 slides, pointing cues, likely
+questions, route tags with skipped-slide notes, and a plain-language term
+sheet. Built `build_script.py` (validated Markdown-to-HTML and DOCX export),
+`render_script_pdf.mjs` (Chromium A4 PDF with page numbers) and
+`publish_script.py` (stable-name publication). Validation PASS: exactly 37
+slide sections numbered 1-37, both route names present, 27 key measured numbers
+present, no forbidden text; readability statistics: 531 spoken sentences,
+average 13.34 words, longest 37 words, five sentences over 30 words. DOCX
+reopened in build and by Microsoft Word (40 pages, 9,606 words). Chromium PDF:
+40 pages, 213,791 bytes; preview screenshots confirmed clean heading, quote and
+table rendering. Published to `../deliverables/presentation-script.{md,docx,pdf}`
+with SHA-256-verified copies and staging cleanup; report
+`build/reports/presentation-delivery/script-publication.json`. One factual
+correction was caught by validation and fixed: the exact 67,108,864 bytes and
+41.4-41.5 s figures were added to the slide-32 script, and 12/12 was made
+explicit on slide 16.
+
+### Presentation arrow alignment and author (2026-10-12, published and verified; source WIP)
+
+User requests a minor alignment fix to the USB + SSE arrow on the UART result
+slide (PowerPoint slide 33 / body page 32), plus their name on the title slide.
+Use **Lingga Aradhana Sahadewa**, confirmed by the parent project-document
+filename. Intended files: presentation content/CSS, PowerPoint author metadata
+and this ledger. Align the arrow with the two event counts, rebuild the stable
+PPTX/PDF, visually inspect slides 1/33 and run the existing delivery checks.
+Original comparison files remain hash-protected. No hardware change or
+commit/push requested; source remains explicit WIP. Next: apply the edits and
+regenerate the outputs.
+
+Moved the USB + SSE arrow from (335,145)→(455,145) to (300,105)→(420,105)
+in the diagram viewBox, aligning it with the event-count figures. Added the
+full name as a bold title-slide author line and as PowerPoint author metadata.
+Regeneration commands PASS: `capture_ui.py`, `create_deck.py`,
+`render_deck.mjs`, `export_pptx.py`, `render_powerpoint.ps1` and
+`check_delivery.py --check-only`. Native PowerPoint renders of slides 1 and 33
+were inspected at full resolution; the name fits and the arrow/label are
+aligned between the figures. The 37-slide deck and both native custom shows
+(22/25 slides) remain valid; comparison hashes match; geometry/layout checks
+have zero failures (HTML 0 FAIL / 1 WARN; PPTX 0 FAIL / 3 WARN).
+`publish_deck.py` PASS: overwrote the stable PPTX/PDF/notes, verified hashes and
+removed staging. PPTX size: 1,732,165 bytes. Reports remain under
+`build/reports/presentation-delivery/`. Source/ledger remain explicitly WIP,
+uncommitted/unpushed; no commit/push requested. No new hardware/firmware/RTL
+test. Next: user opens the updated default deliverables.
+
+### Dual-subsystem presentation restructure (2026-10-12, published and verified; source WIP)
+
+User authorizes a shared deck with independent FPGA-class and embedded-system
+sections, treating the other subsystem as a black box after the overview.
+Preserve the current 24-slide PPTX/PDF/notes under `../deliverables/comparison/`
+before publishing the new default deck. The parent output location remains
+user-authorized; later default updates still overwrite the stable filenames.
+Intended files: `docs/presentation/` content/section assembly, preservation,
+PowerPoint export/navigation, checks/publishing, README and review, plus this
+ledger. Acceptance: verified original-file hashes, clear class boundaries,
+independent routes, source-backed FPGA/firmware detail, one fresh-eye review,
+zero-failure slide/layout checks and native PowerPoint rendering. Existing
+status/presentation WIP and untracked hardwarex/learning folders are preserved.
+No new hardware test or commit/push requested. Next: preserve comparison files,
+then build the class-specific sections.
+
+Comparison preservation PASS: the previous 24-slide PPTX/PDF/notes are saved
+unchanged under `../deliverables/comparison/`; hashes are in
+`build/reports/presentation-delivery/comparison.json`. The new assembly has
+37 slides, with a shared overview, independent hardware/firmware sections and
+shared close. Initial HTML render: zero page errors / geometry issues.
+Follow-up naming instruction: visible section/menu/custom-show labels are
+**FPGA system** and **Embedded system**, not class names. Next: render the new
+PowerPoint, verify both routes, review the black-box boundaries and publish.
+
+Native route verification PASS: PowerPoint recognizes **FPGA system** (22
+slides) and **Embedded system** (25 slides), with exact slide-ID sequences.
+PowerShell's COM SlideIDs array includes a leading zero sentinel; the verifier
+now ignores only that non-slide slot and checks all positive IDs. First
+check-only run: HTML/PPTX zero FAIL, layout OK, internal navigation and both
+independent routes pass, comparison hashes unchanged. One fresh-eye review of
+all 37 slides and notes completed; draft scored 59/70 and both routes were
+understandable. Adopted all twelve findings: repaired connected boundary/control
+arrows, made the embedded run-word/timeline contract explicit, clarified the
+shared throughput scope and buffered acquisition, exposed priority/trigger
+conventions, expanded local interface terms and decoder mechanisms, and focused
+the offline UI illustration on CH0 with cursor A. Next: re-render adopted
+corrections, visually inspect all slides and publish after final checks.
+
+Published new default `../deliverables/logic-analyzer-design.pptx` (37 slides,
+1,732,071 bytes), native-rendered PDF (1,623,761 bytes) and notes (29,699 bytes).
+The original 24-slide PPTX/PDF/notes remain unchanged in
+`../deliverables/comparison/`, verified against the preservation hashes. Routes:
+shared overview 1–6; FPGA system 7–18; embedded system 19–33; shared results /
+close 34–37. Native PowerPoint custom shows contain exactly the intended 22
+FPGA-route and 25 embedded-route slides. Menu/recap slide jumps also pass.
+
+Final local commands PASS: `capture_ui.py` (CH0 only, eight decoded synthetic
+events, cursor A at sample 3672, zero page errors); `create_deck.py` (37 slides /
+35 printed body pages); `render_deck.mjs` (zero geometry errors);
+`export_pptx.py` (editable text, notes, 2 named custom shows);
+`render_powerpoint.ps1` (both native route names/counts/IDs, native PDF and all
+37 slide PNGs); `check_delivery.py --check-only` (HTML 0 FAIL / 1 WARN, PPTX 0
+FAIL / 3 WARN, layout OK, requested visible removals and comparison hashes
+verified); and `publish_deck.py` (SHA-256-verified final files, stable names,
+staging cleanup). Commands used `.venv\Scripts\python.exe -X utf8` for Python,
+`node` for the renderer, and `&` for PowerShell. Full native-slide visual QA:
+all seven contact sheets inspected, with the final embedded boundary checked
+at full resolution after shortening its inbound command-arrow label.
+
+Evidence: `build/reports/presentation-delivery/{publication.json,
+delivery-checks.json,routes.json,storyline.md,comparison.json,check-html.txt,
+check-pptx.txt,check-layout.txt,render-report.json,ui-screenshot-evidence.json}`;
+review dispositions in `docs/presentation/subsystem-review.md`. Remaining
+checker warnings are the reviewed English-label/cover/back-cover heuristics.
+`Test-Path -LiteralPath "build\presentation"` is False and `git diff --check`
+PASS with the existing line-ending notice. No new FPGA, firmware or hardware
+verification was run; all bench results are dated existing evidence. Source
+and this ledger are explicitly WIP, uncommitted/unpushed because commit/push
+was not requested. Next: user selects a subsystem custom show and rehearses;
+future default updates overwrite stable files while preserving comparison.
+
+### Presentation delivery folder cleanup (2026-10-12, published and verified; source WIP)
+
+User explicitly requests final presentation outputs in the parent directory's
+`deliverables/` folder and overwrite-in-place for later updates. This is a
+user-authorized exception to the usual project-root artifact location rule.
+Inspected `../` and `build/presentation/`; the parent has no `deliverables/`
+folder yet, and the presentation staging folder contains this session's
+generated outputs/previews. Intended source files: presentation publisher,
+checker, screenshot setup, README and this ledger. Publish the latest verified
+PPTX, native PowerPoint PDF and presenter notes under stable names; preserve
+small verification reports under `build/reports/presentation-delivery/`, then
+remove the presentation staging folder. Acceptance: actual PPTX checks, byte
+hash equality after publishing, clean staging removal and a repeat update to
+the same filenames. Source remains WIP; no commit/push requested. Next: update
+the publication step and move the current deliverables. First publication:
+`.venv\Scripts\python.exe -X utf8 docs\presentation\check_delivery.py` PASS;
+PPTX/native PDF/notes published to `../deliverables/` with matching SHA-256
+hashes, small check reports archived, and `build/presentation/` removed.
+`check_delivery.py` now runs this publisher automatically; the screenshot setup
+recreates staging on the next update. No revision-suffixed output aliases are
+created. Next: run one update from cleaned staging to verify the same output
+files are replaced and staging is cleaned again.
+
+Final verification: ran the complete documented sequence from removed staging
+(`capture_ui.py`, `create_deck.py`, `render_deck.mjs`, `export_pptx.py`,
+`render_powerpoint.ps1`, `check_delivery.py`) PASS. Screenshot setup recreated
+the working folder; the native 24-slide PowerPoint rendered; HTML/PPTX checks
+had zero FAIL and layout was OK. The final publication replaced all three
+existing filenames, verified their SHA-256 hashes and removed staging again.
+`../deliverables/` contains exactly `logic-analyzer-design.pptx` (1,069,062
+bytes), `logic-analyzer-design.pdf` (992,313 bytes, native PowerPoint render),
+and `presenter-notes.md` (18,159 bytes). `Test-Path -LiteralPath
+"build\presentation"` returned False. Evidence:
+`build/reports/presentation-delivery/publication.json` records all three
+`replacedExistingFiles`, matching hashes and `stagingRemoved: true`; the other
+small checks are alongside it. `git diff --check` PASS with the existing
+line-ending notice. Source/ledger remain explicitly WIP, uncommitted and
+unpushed; no commit/push requested. No hardware/RTL/firmware changes or new
+bench evidence. Next: subsequent presentation updates use the documented
+pipeline and overwrite the same parent deliverables automatically.
+
+### Presentation visual and wording cleanup (2026-10-12, artifacts verified; source WIP)
+
+User-requested revisions: remove the consulting-skill attribution, remove the
+repeated `FINAL DIRECT-USB DESIGN` footer label, and remove visible slide source
+lines. Follow-up steering also requests natural, easy-to-read English on every
+slide; rewrite headings, explanations and table wording without changing the
+design or measured results. Intended files: `docs/presentation/create_deck.py`,
+`docs/presentation/check_delivery.py`, presentation README and this ledger.
+Regenerate the existing 24-slide PPTX, HTML, PDFs and previews beneath
+`build/presentation/`; retain page numbering. Acceptance: absence checks on
+actual slide text, zero-failure mechanical/layout checks and native PowerPoint
+render inspection. Session-start `git status --short --branch` shows the earlier
+presentation/status WIP and pre-existing untracked `docs/hardwarex/` and
+`docs/learning/`. No commit/push requested; source remains explicitly WIP.
+Visible attribution/source/footer labels are removed in the template. Rewrote
+all body-slide headings, explanatory bullets and tables in plain English;
+technical identifiers and measured results are retained. Next: regenerate the
+presentation, inspect the revised wording/layout and check the requested
+removals in the actual PPTX. First rewritten export opened/rendered in
+PowerPoint, but the layout checker found three footer collisions on the
+six-row task table (slide 14). Reduced that table's vertical cell padding,
+keeping the readable font size. Next: regenerate and recheck the corrected
+layout.
+
+Revision delivered locally: `build/presentation/logic-analyzer-design-revised.pptx`
+and `logic-analyzer-design-revised.pdf`. The canonical PPTX/HTML/Chromium PDF,
+native PowerPoint PDF, notes and all slide previews were also regenerated.
+All 24 slides retain the ESP32-free architecture and original measured results.
+The visible skill attribution, source lines and repeated footer label are
+absent; body-page numbers remain. Headings, bullets and table descriptions use
+plain English. Full-slide native-render inspection covered all 24 slides and
+the final cover was checked at full resolution.
+
+Verification: `.venv\Scripts\python.exe -X utf8
+docs\presentation\create_deck.py` PASS; `node
+docs\presentation\render_deck.mjs` PASS (zero page errors / geometry issues);
+`.venv\Scripts\python.exe -X utf8 docs\presentation\export_pptx.py` PASS
+(24 slides, editable text, notes; 1,069,062 bytes); `&
+docs\presentation\render_powerpoint.ps1` PASS (native PDF + 24 slide renders);
+`.venv\Scripts\python.exe -X utf8 docs\presentation\check_delivery.py` PASS
+(requested-text absence assertions on actual slide shapes; HTML 0 FAIL / 1
+WARN, PPTX 0 FAIL / 3 WARN, layout OK). Reports remain under
+`build/presentation/{render-report.json,delivery-checks.json,check-html.txt,
+check-pptx.txt,check-layout.txt}`. The remaining PPTX warnings are English cover
+width heuristics and the intentional unnumbered back cover; native rendering
+shows intact text. `git diff --check` PASS with the existing line-ending notice.
+The source files and ledger are explicitly WIP, uncommitted and unpushed;
+commit/push was not requested. No new hardware, firmware or RTL verification.
+Next: user reviews or presents the revised deck.
+
+### Final project presentation (2026-10-12, artifacts verified; source WIP)
+
+**User-requested English final-project PowerPoint for the ESP32-free,
+direct-Zynq-USB design; deliverable files are ready locally.** Baseline
+`b487413` on `main` matches
+`origin/main` after `git fetch origin`; the pre-existing untracked
+`docs/hardwarex/` and `docs/learning/` are preserved. Intended authored files:
+`docs/presentation/` (storyline, HTML, speaker notes, export tooling and review).
+Generated PPTX, PDF, previews and check reports stay under
+`build/presentation/`. Acceptance: source/evidence cross-check, consulting
+slide-rule checks, rendered layout checks, full-slide visual inspection and
+one independent content review. Results cite existing dated reports; no new
+board, firmware or RTL verification is claimed. Commit/push was not requested,
+so this documentation change is explicitly WIP until authorized. Discovery is
+complete: the current local September 20 routed report supersedes older P9
+figures (LUT 6,675 / 17,600; BRAM 37 / 60; WNS +0.576 ns; WHS +0.022 ns).
+The 64 MiB throughput trial is an aggregate of sixteen 4 MiB captures, not a
+64 MiB capture buffer. Authored 24-slide content plus HTML/PDF/PPTX export
+scripts in `docs/presentation/`; local project `.venv` gained `python-pptx
+1.0.2` for the export. First generator invocation hit Windows cp1252 console
+encoding; the child now explicitly uses Python UTF-8 mode. Next: render, check
+geometry/content, export PowerPoint and inspect every slide. First full build:
+24-slide HTML/PDF/PPTX generated; browser geometry report has zero issues;
+consulting HTML/PPTX checks have zero FAIL; licensed PowerPoint COM opened the
+actual PPTX and exported all 24 slides and a PDF successfully. Visual review
+found and fixed inherited small right-column text and theme shadows. One
+independent review completed (15 findings, including optional improvements);
+adopted clarification work is in progress, with an offline archived-capture UI
+screenshot planned. No new hardware check is implied by screenshot rendering.
+
+Final output: `build/presentation/logic-analyzer-design.pptx` (24 slides,
+1,071,174 bytes, editable text and per-slide presenter notes),
+`logic-analyzer-design-powerpoint.pdf` (native PowerPoint PDF), HTML/Chromium
+PDF companion, `presenter-notes.md`, `storyline.md`, and all slide previews.
+Authored files are the nine files in `docs/presentation/` (README, content
+adaptation/export/render/check scripts and `review.md`) plus this ledger.
+Fourteen of the independent review's fifteen findings were adopted fully or
+partially; the optional reduction of architecture detail was declined because
+the user requested depth. The actual UI screenshot uses declared synthetic
+115200-baud UART data at 10 MS/s, opened offline; eight decoded events and zero
+page errors were observed. It is explicitly not new bench evidence.
+
+Final verification commands (all local, 2026-10-12):
+
+- `.venv\Scripts\python.exe -X utf8 docs\presentation\capture_ui.py` PASS;
+  `build/presentation/ui-screenshot-evidence.json` (offline synthetic data).
+- `.venv\Scripts\python.exe -X utf8 docs\presentation\create_deck.py` PASS;
+  reused the consulting skill's parts generator, 24 slides / 22 body pages.
+- `node docs\presentation\render_deck.mjs` PASS; `render-report.json` records
+  zero browser errors and zero text/SVG geometry issues.
+- `.venv\Scripts\python.exe -X utf8 docs\presentation\export_pptx.py` PASS;
+  saved/reopened 24-slide 16:9 package with editable text and notes.
+- `& docs\presentation\render_powerpoint.ps1` PASS; Microsoft PowerPoint
+  opened the actual PPTX, exported its PDF and all 24 1920x1080 slide images.
+- `.venv\Scripts\python.exe -X utf8 docs\presentation\check_delivery.py`
+  PASS; reports: `build/presentation/{check-html.txt,check-pptx.txt,
+  check-layout.txt,delivery-checks.json}`. HTML 0 FAIL / 1 WARN; PPTX 0 FAIL /
+  4 WARN; layout OK. HTML warning applies a Japanese uppercase-kicker rule to
+  this English deck; PPTX warnings are three cover-line width heuristics
+  (native renders show intact text) and an intentional unnumbered back cover.
+- Visual QA: inspected all 24 actual PowerPoint slides on four native-render
+  contact sheets; full-resolution checks included architecture/task/results
+  slides and the final UI screenshot. Sources, page references, sample versus
+  transfer rates and aggregate-versus-single-capture capacity were reviewed.
+- `git diff --check` PASS (only the repository's existing line-ending notice).
+
+No new FPGA, firmware, licensed synthesis/simulation or hardware test was run;
+the results slides cite existing dated evidence. Remaining product gates are
+the human browser/real-board visual check, public USB identity and authorized
+release tag/publication. **Tracked source remains explicitly WIP, uncommitted
+and unpushed because the user did not request commit/push.** The pre-existing
+untracked directories remain intact. Next: user rehearses the deck; a further
+content-review round or repository commit/push requires a follow-up request.
+
 ### Viewer legibility fixes: step patgen, orthogonal traces, edge stepping (2026-10-01)
 
 **The counter self-test now renders square waves at Fit, logic traces are
@@ -1286,22 +2223,27 @@ boot of the USB BOOT.BIN remain open; no `v1.0` tag was created. Evidence:
 
 | Item | Current value |
 |---|---|
-| Observed date | 2026-09-14 |
-| Project root | `C:\Users\lingg\Projects\KCCI_technical\Embedded\Logic-Analyzer\Source_Code` |
+| Observed date | 2026-10-18; use docs/current-handover.md for the operational snapshot |
+| Project root | `C:\Users\lingg\Projects\Logic-Analyzer\Source_Code` |
 | Plan source | `docs/plan.md` is normative; the root `logic-analyzer-implementation-plan-v0.4.md` is the historical v0.4 snapshot. The 2026-09-17 USB planning addendum is in `docs/plan.md` only. |
 | Branch | `main` |
-| Last implementation change | `2e08ea3 P10: add the release packaging step`; session commits: docs `7a9df09`, portal `10660e9`, packaging `2e08ea3`, snapshot sync `4a74a08`, package-target docs `0b32655`, plus status-only follow-ups (run `git log --oneline -8` for the exact tip) |
+| Last implementation change | Local W11 waveform-first UI, actual transition preview, reset/cancellation and external S3 UART demo; committed baseline remains b487413; source WIP is not at that SHA |
 | Remote | `origin` -> `https://github.com/linggaaradhanas22/logic-analyzer.git` |
-| Remote state | `origin/main` contained `748d966` at session start; this session's commits through `0b32655` were pushed and verified against `git ls-remote` (status-only follow-ups were pushed after that verification); annotated tags `v0.1-burst` and `v0.2-live` pushed |
-| Current pending work | **P10.2 deferred, P10.3 docs consolidated and its `web-artifact/` portal publicly published on 2026-09-14, P10.4 tooling verified; no `v1.0` tag.** P10.2: no compatible signed virtual-COM pair driver is installed, so the plan's condition for the optional SUMP bridge is not met; the assessment is recorded in `docs/sigrok-bridge.md` and `host/la_sigrok_bridge/` stays a documented placeholder. P10.3: `README.md`, `docs/architecture.md`, `docs/wiring.md`, `docs/plan.md`, `docs/test-plan.md`, `docs/limits.md` and `docs/sigrok-bridge.md` are current, and the `web-artifact/` portal implements the three-level contract (7 subsystems, 78 components, all reference pages, coverage validation, production build and route review PASS); the public Site deploy is verified and wiring photos remain a [HUMAN] item. P10.4: `python tools/run.py boot` builds the profile-aware BOOT.BIN and `python tools/run.py package` stages the artifact set with a SHA-256 manifest; the USB-profile SD boot with JP5=SD was verified on 2026-09-26 (`build/reports/sd-boot-verification.md`), so only the `v1.0` tag remains unauthorized. **P9.1 update 2026-09-17 (bench):** the S3 CDC host transport works on a direct PC port (`serial://COMx`; a USB hub breaks every usbser.sys CDC device, so the native-USB cable must go straight into the PC) and a UART+CDC burst capture is bit-exact; the S3 needs **both USB cables** connected (one cable browns out under Wi-Fi TX peaks). The **SPI bulk link is open**: the S3 receives every other payload byte despite a passing SPI loopback, continuity-checked wiring and a Zynq slave that was bit-exact with the classic ESP32. Remaining: P9.1 SPI root cause (needs signal-level instrumentation), P9.3 200 MS/s decision, P9.4 Wi-Fi tuning, P10.4 `v1.0` tag. |
+| Remote state | `git fetch origin` PASS on 2026-10-18; HEAD and origin/main at b487413. W11/demo/doc sources remain local WIP; no commit/push/tag requested in this session |
+| Current pending work | W11 SD boot and waveform/reset features pass locally. Source commit/push, portal deployment, public USB identity/release tag, optional gateway SPI fault/tuning, SUMP deferral, 200 MS/s and new external SPI/I2C preview qualification remain separate. See docs/current-handover.md; do not resume old USB bring-up. |
 | Workflow | Native Windows only; use `python tools/run.py <target>` |
-| Phase | P0/P1 complete; P2 complete locally (12/12 Questa gates); P3/P4/P5 complete on bench; P6 complete on bench (P6.2/P6.3 8-channel matrices, PulseView export, `v0.1-burst`); P7 complete on bench at 2 Mbps with UART/SPI/I2C live decoders and the P7.7 decoded-pattern stop; P8 complete (P8.6 documented skip); P9 in progress (P9.2 complete; the ESP32 gateway degradation is fixed as of 2026-09-13; P9.1 link firmware is bench-clean for framed bursts at 5/10/18 MHz with the runtime clock; the S3 USB CDC host transport is implemented locally and awaits the bench drain measurement (the S3 USB-OTG full-speed ceiling is ~1.2 MB/s, below the plan's 1.5 MB/s target); P9.3 open; P10 complete except the release tag: P10.1 bench-verified 2026-09-14, P10.2 deferred with the recorded driver assessment, P10.3 docs + portal complete, P10.4 tooling verified and the USB-profile SD boot verified 2026-09-26, with only the `v1.0` tag waiting) |
+| Phase | P0-P8 historical close-out evidence retained below; P9 optional/stretch boundaries remain. USB-first UI through W11 is implemented/verified locally. W11 SD installation/cold boot PASS on 2026-10-18 (E2E 6/6, browser/ESP32 10/10); repository and portal publication remain WIP, not a release. |
 
 Generated environments, reports, logs and build outputs are intentionally
 ignored by Git. The reports described below are local evidence and must be
 recreated after a clean checkout.
 
 ## Phase Matrix
+
+This is the **historical P0-P10 close-out matrix**. Dated measurements and
+then-open entry work are preserved; they are not the current next-action list.
+W11 and the 18 October SD refresh are summarized at the top and in
+`docs/current-handover.md`. Do not resume completed bring-up from old cells.
 
 | Phase | Status | What exists | Remaining entry work |
 |---|---|---|---|
@@ -1323,7 +2265,11 @@ phase requires the command or bench evidence named by the plan.
 ## Verified Gates
 
 These results were observed at the fixed project root using the project
-`.venv`; dates and reports are recorded per row.
+`.venv`; dates and reports are recorded per row. This is retained phase history;
+unqualified older counts below are not W11 counts. Latest: native 18/18, host
+177/177, SD USB UI E2E 6/6 and SD browser/external UART 10/10. Archived W11
+reports are in `build/reports/ui-waveform/` and `build/reports/sd-w11/`;
+root-level report filenames may be overwritten by later canonical runs.
 
 | Command or check | Result | Evidence or note |
 |---|---|---|
@@ -1525,6 +2471,33 @@ the implementation is not present.
 
 ## Next Session Checklist
 
+1. Read `AGENTS.md`, `docs/current-handover.md`, `docs/plan.md` and the latest
+   entry at the top of this ledger; inspect `git status --short --branch`.
+2. Preserve all local W11, UART-demo and earlier documentation WIP. Baseline is
+   b487413; do not claim the new implementation is already committed/pushed.
+3. Normal startup: JP5=SD, JP6=USB, J12 power, J10 data. The installed W11
+   BOOT.BIN SHA-256 begins 6cb120cc; expected firmware/PL are 0x000A0000 /
+   0x4C410002. Enumerate COM ports instead of assuming the number forever.
+4. ESP32-S3 is the external GPIO17 UART stimulus (COM10 console), not the
+   gateway. Analyzer endpoint is COM13 on this bench. Keep common ground and
+   GPIO17 -> JC-1; no JE-to-JC loopback on an externally driven input.
+5. UI w11: hard-refresh one browser tab, Connect, Capture/Decode or Apply live
+   config -> Start. Reset UI clears in-memory work and disconnects. Use exports
+   for records to retain. See the operator guide for preview limits.
+6. Checks follow the new task: protocol/decoder changes require test-native;
+   host/UI changes require affected host/page/browser checks; hardware gates
+   need actual bench evidence. Do not rerun unrelated licensed tools by habit.
+7. SD image and current UI behavior passed on 18 October (6/6 + 10/10). Public
+   USB identity, release tag/publication, optional gateway faults, stretch work
+   and new external SPI/I2C preview qualification remain separate.
+8. Follow the user's next instruction; commit/push or website publication only
+   when requested, otherwise record WIP with evidence and next action.
+
+### Historical continuation checklist — superseded
+
+The following dated USB/gateway instructions are retained for provenance only.
+They do not describe the current boot mode, default transport or pending work.
+
 **USB execution handoff (2026-09-18):** U00-U02 are complete - baseline
 preserved at `b611390`, feasibility recorded in
 `build/reports/usb-u01-feasibility.md`, and the integration contract frozen in
@@ -1557,8 +2530,9 @@ publish.
 |---|---|
 | Normative requirements | `docs/plan.md` |
 | Session state and blockers | `docs/status.md` |
-| Direct USB execution sequence | `docs/usb-migration-implementation-instructions.md` (U00-U02 complete; U03 WIP: HS enumerates, `usbser.sys` binds, EP1 bulk OUT loses every other packet - J10 hardware cleared 2026-09-18 by the stock AMD mass-storage control, so the remaining fault is firmware/driver configuration) |
-| Proposed direct USB interface and feasibility evidence | `docs/usb-link.md` |
+| Current boot/image/wiring and continuation | `docs/current-handover.md`; SD W11 verified, not U03 bring-up |
+| Direct USB execution history | `docs/usb-migration-implementation-instructions.md` (U00-U09 historical; USB adopted/default) |
+| Implemented direct USB interface and W11 additions | `docs/usb-link.md`, `docs/protocol.md`, `docs/unified-ui-plan.md` |
 | Canonical commands and environment import | `tools/run.py` |
 | Tool versions and smoke state | `tools/toolchain-lock.json` |
 | Board part and source commit | `tools/board-lock.json` |
@@ -1573,6 +2547,7 @@ publish.
 
 | Date | Work completed | Result |
 |---|---|---|
+| 2026-10-18 | W11 USB SD image refreshed, previous image backed up, FAT32 card BOOT.BIN atomically replaced and hash-verified; user cold-booted with JP5=SD. Current handover/status docs synchronized. | PASS: BOOT.BIN 2,415,152 bytes / SHA-256 6cb120ccc53c573edf9188a82d2fe1622def58836ffa46fdc40224eca847b892; firmware 0x000A0000 / PL 0x4C410002; SD USB UI E2E 6/6 and browser/ESP32 10/10. Reports build/reports/sd-w11/. Source/doc work remains WIP; no remote publication requested. |
 | 2026-09-26 | Windows no-terminal UI launcher. Added `tools/win/la-ui-start.vbs` (hidden `.venv\Scripts\la-ui.exe`, port-8080 wait, browser open, error dialogs) and `tools/win/la-ui-stop.vbs` (terminates the Python listener on 8080, reports other owners), created the machine-local **LA UI** and **Stop LA UI** desktop shortcuts, and documented the launcher in `docs/using-the-analyzer.md` section 4, `docs/windows-dev.md` and `README.md`. | PASS (local smoke): `cscript tools\win\la-ui-start.vbs nobrowser` returned 0 with `127.0.0.1:8080` LISTENING and the page served HTTP 200 (7,194 bytes); a second start reused the listener (same PID); `cscript tools\win\la-ui-stop.vbs quiet` reported stopped and freed the port; the not-running and port-in-use paths were exercised. No firmware, RTL, protocol or UI change. |
 | 2026-09-26 | USB-profile SD boot verification (bench). Regenerated `BOOT.BIN` with `boot` (2,413,488 B, SHA-256 `0821AFD9...F9619D`, matching the release manifest), wrote it to the FAT32 root of the bench microSD, and cold-booted the Zybo with JP5=SD and no JTAG load. J10 enumerated `USB\VID_1209&PID_0001\LA-USB-TEST-0001` (COM13), `la-cli ping` returned `fw 0x00090000 pl 0x4C410002`, `status` reported IDLE, and `test-e2e -k ui` passed 6/6 (12.89 s) on the SD image. The first attempt scored 4/6 because the external JE-1 -> JC-1 patgen loopback was absent (live reads the real input; captures use the internal selftest mux); a `CTRL_STREAM \| CTRL_SELFTEST_EN` session proved the live datapath (10 UART events) and reconnecting JE-1 -> JC-1 produced the 6/6 run. Docs updated to mark the P10.4 SD gate verified. | PASS (bench): `build/reports/sd-boot-verification.md`, `build/reports/test-e2e.json`. No firmware, RTL or protocol change. Open: `[HUMAN]` browser click-through, `v1.0` tag, portal SD-boot labels. |
 | 2026-09-18 | U03 J10 hardware control (bench-only stock example). Added a `--profile example` path that builds AMD's unmodified `usbps_v2_9` mass-storage example (`xusbps_intr_example.c` + Chapter 9 + storage class, copied verbatim into `fw-zynq/example/`) against the existing `lap` platform, plus `fw-zynq/example/la_freertos_trace_stubs.c` for the BSP P8.3 trace hooks and the `example` mappings in `fw-zynq/scripts/la_platform.py`, `fw-zynq/scripts/jtag_load.tcl` and `tools/run.py`. The example keeps the vendor's `while (NumReceivedFrames < 1)` spin (counter never incremented, so it serves forever) and vendor endpoint sequence (`XUsbPs_EpEnable`, EPCR1 `TXT_BULK|RXT_BULK|TXR|RXR`, `XUsbPs_EpPrime` OUT). Bench on J10 direct to the PC: Windows enumerated `USB\VID_0D7D&PID_0100` as a mass-storage device (`Xilinx PS USB VirtDisk`, 1,048,576 bytes), a 10 s COM7 trace showed a continuous SCSI command stream (TEST UNIT READY / MODE SENSE / READCAP / READ at 0x0/0x400/0x8000) with no stalls, and an elevated raw test wrote 65,536 bytes and read them back with 0 mismatches; the device `VirtFlash` JTAG readback matched the host pattern exactly (`18110A03 342D261F` at offset 0x40000). | PASS (hardware control): J10/PHY/USB0 cleared for control, bulk IN and multi-packet bulk OUT; the U03 alternating loss is project firmware/driver configuration. Evidence `build/reports/usb-migration/U03/example-write-test.txt`, `fw-zynq -- --profile example` PASS (`la_usb_example.elf` text 78,598 / data 3,084 / bss 1,210,640), `jtag-zynq -- --profile example` PASS. The example profile is not part of the product build; the board runs the example until the next `jtag-zynq -- --profile usb`. No product firmware fix claimed. Committed and pushed as `cf1320f U03: clear J10 hardware with the stock mass-storage example`; `git ls-remote origin refs/heads/main` matched `git rev-parse HEAD`. |

@@ -1,0 +1,918 @@
+% Logic Analyzer with Live Protocol Decoding
+% Class report formatted with the HardwareX article template (Version 2, June 2021).
+% Build variants:
+%   hardwarex-embedded.tex  Lingga Aradhana Sahadewa only
+%   hardwarex-fpga.tex      Lingga Aradhana Sahadewa, Alvin Hadar, Bagas Budhi Permana
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1.5cm]{geometry}
+\usepackage{titlesec}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{amssymb}
+\usepackage{xcolor}
+\usepackage{lmodern}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{textcomp}
+\usepackage{hyperref}
+\usepackage{xurl}
+% Break paths and URLs at natural separators only.
+\def\UrlBreaks{\do\/\do\.\do\-\do\_}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=blue,
+}
+\urlstyle{same}
+
+\titleformat{\section}[block]{\hspace{1em}\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}[block]{\hspace{1em}}{\thesubsection}{0.5em}{}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{8pt}
+\setlength{\emergencystretch}{3em}
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.15}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+
+% \code detokenizes identifiers so underscores and paths need no manual escaping.
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\iu}{I\textsuperscript{2}C}
+
+\providecommand{\ReportAuthorNames}{Lingga Aradhana Sahadewa, Alvin Hadar, Bagas Budhi Permana}
+\newif\ifFPGA
+\ifdefined\ReportFpgaVariant
+  \FPGAtrue
+\else
+  \FPGAfalse
+\fi
+
+\begin{document}
+
+\begin{flushleft}
+{\LARGE\bfseries Logic Analyzer with Live Protocol Decoding}\\[0.35cm]
+\textbf{Authors}\\
+\ReportAuthorNames\\[0.25cm]
+\textbf{Corresponding author email address}\\
+\href{mailto:linggaaradhanas@gmail.com}{linggaaradhanas@gmail.com}\\[0.25cm]
+\textbf{Class project}\\
+Embedded system and FPGA, 15 September--12 October 2026. Funded by the Korea
+Chamber of Commerce and Industry (KCCI).
+\end{flushleft}
+
+\vspace{0.2cm}
+\textbf{Abstract}\\
+This project implements an eight-channel logic analyzer for 3.3~V digital signals
+on a Zybo Z7-10 development board. The FPGA samples at up to 100~MS/s, evaluates
+level and edge triggers, retains pre-trigger history, and packs raw samples or
+transition records. Ordinary scatter-gather DMA transfers the data into DDR
+memory. FreeRTOS on the Zynq Cortex-A9 processor manages acquisition, commands,
+three configurable live decoder slots, transmission and USB servicing. UART, SPI
+and \iu{} decoding is available on the device for live operation and on the host
+for recorded captures. The current default connects the Zynq directly to a
+Windows computer through USB CDC-ACM. A host-served browser interface provides
+waveform viewing, live events, decoding, exports and task traces. Recorded USB
+trials transferred 64~MiB as sixteen 4~MiB captures at 1.62~MB/s, with byte-exact
+results in three trials. A 60-second UART/SSE test delivered 606,411 events
+without client or segment loss. SD boot was verified on 26 September 2026, and
+the author confirmed completion of the visual walkthrough. The report
+distinguishes FPGA timing, RTOS coordination and transport capacity,
+demonstrating the two classes through one integrated instrument.
+
+\vspace{0.2cm}
+\textbf{Keywords}\\
+Logic analyzer; FPGA; FreeRTOS; protocol decoding; USB; embedded systems
+
+\newpage
+\textbf{Specifications table}\\
+\vskip 0.2cm
+\begin{tabularx}{\linewidth}{|>{\raggedright\arraybackslash}p{4.5cm}|>{\raggedright\arraybackslash}X|}
+\hline
+\textbf{Hardware name} & Logic Analyzer with Live Protocol Decoding \\ \hline
+\textbf{Subject area} & Engineering and material science; educational tools and
+open-source alternatives to existing infrastructure \\ \hline
+\textbf{Hardware type} & Electrical engineering and computer science; measuring
+physical properties and in-lab sensors \\ \hline
+\textbf{Closest commercial analog} & Saleae Logic family and Digilent Digital
+Discovery, both eight-channel USB logic analyzers \\ \hline
+\textbf{Cost of hardware} & Rp 13,954,700 for the required USB build, using
+retained 17 September 2026 IDR estimates \\ \hline
+\textbf{Input channels} & Eight 3.3~V LVCMOS33 channels on Pmod JC (CH0--CH7),
+plus common ground \\ \hline
+\textbf{Sample rate} & Up to 100~MS/s; rate = 100~MHz / (\code{SAMPLE_DIV} + 1) \\ \hline
+\textbf{Trigger} & Level and edge conditions, pre/post-trigger capture, timeout
+and abort \\ \hline
+\textbf{Pre-trigger configuration} & Up to 32,768 samples; the internal ring has
+65,536 entries \\ \hline
+\textbf{Encoding} & Four eight-bit raw samples per 32-bit word, or 24-bit run
+plus eight-bit sample \\ \hline
+\textbf{Capture storage} & 8~MiB burst pool; live mode reuses the first 4~MiB as
+16 $\times$ 256~KiB segments \\ \hline
+\textbf{DMA} & AXI DMA S2MM, ordinary scatter-gather descriptors; hardware cyclic
+mode disabled \\ \hline
+\textbf{RTOS} & FreeRTOS on CPU0, 1~kHz tick, statically allocated application
+objects \\ \hline
+\textbf{Default connection} & Direct Zynq PS USB0 CDC-ACM through J10; Windows
+\texttt{usbser.sys} \\ \hline
+\textbf{Protocol decoders} & UART, SPI and \iu{}; three independently
+configurable live slots \\ \hline
+\textbf{Host applications} & \code{la-ui} browser workspace and \code{la-cli}
+scripted interface \\ \hline
+\textbf{Exports} & PulseView \code{.sr}, VCD, sample/event CSV, PNG and text
+through the applicable host tools \\ \hline
+\textbf{Data integrity} & CRC16 per protocol frame; CRC32 and size/order checks
+per completed capture \\ \hline
+\end{tabularx}
+
+\section{Hardware in context}
+
+Embedded communication faults are difficult to diagnose from software messages
+alone. A UART byte can be wrong because of timing or baud configuration; an SPI
+transfer can fail because of clock polarity or chip-select timing; an \iu{}
+transaction can fail because an address was not acknowledged. A logic analyzer
+records the digital waveforms and associates protocol events with their sample
+positions, allowing the signal behavior to be compared with the intended
+transaction.
+
+The educational purpose is to combine FPGA design with real-time embedded
+software in a working measurement instrument. Commercial instruments such as the
+Saleae Logic family and Digilent Digital Discovery provide a useful point of
+comparison, while sigrok/PulseView provides a compatible capture-file ecosystem.
+This project emphasizes inspectable implementation: custom RTL, register
+interfaces, DMA descriptors, RTOS ownership, framed transport and shared
+protocol-decoder code.
+
+The earlier project configuration used an ESP32 Wi-Fi gateway. Performance
+investigation led to a direct Zynq USB path, which became the default in
+September. The gateway remains an optional profile, but it is not needed for the
+current instrument or its unified browser interface. The browser runs on the PC
+and obtains live events from a PC-hosted bridge.
+
+\subsection{How the project serves both classes}
+
+\begin{longtable}{|>{\raggedright\arraybackslash}p{2.4cm}|>{\raggedright\arraybackslash}p{7.0cm}|>{\raggedright\arraybackslash}p{7.4cm}|}
+\hline
+\textbf{Class} & \textbf{Work demonstrated by the project} & \textbf{Main implementation evidence} \\ \hline
+\endhead
+FPGA & Input synchronization, sample-rate division, level/edge triggering,
+pre-trigger ring, raw/transition packing, packet closure, pattern generation,
+AXI-Lite registers, simulation and routed timing/resource analysis &
+\path{fpga/rtl/}, \path{fpga/tb/}, \path{fpga/scripts/},
+\path{docs/regmap.yaml}, Vivado reports \\ \hline
+Embedded system & FreeRTOS tasks and scheduling, queues/notifications, DMA-buffer
+ownership, USB CDC-ACM service, UART/SPI/\iu{} decoders, framed integrity checks,
+overload/recovery, host integration and operating documentation &
+\path{fw-zynq/app/src/}, \path{common/la_decode/}, \path{common/la_proto/},
+\path{host/}, RTOS and bench reports \\ \hline
+Shared integration & Hardware-to-software register contract, ordinary SG DMA,
+capture verification, live-event delivery, SD startup and visual operation &
+\path{docs/architecture.md}, \path{docs/rtos-design.md}, \path{docs/status.md}
+and the operator runbook \\ \hline
+\end{longtable}
+
+Both classes use the same individual project. FPGA logic is responsible for
+sample-time behavior; embedded software is responsible for controlled ownership,
+decoding, commands and delivery. The two sets of responsibilities are evaluated
+through their interface and recorded evidence.
+
+\ifFPGA
+Alvin Hadar and Bagas Budhi Permana contributed the RTL design roles recorded in
+the accompanying KCCI workbook: capture FIFO/buffer design and sample packing,
+and trigger/edge detection with AXI-Stream packet framing. Lingga Aradhana
+Sahadewa remains responsible for all other design, integration, validation and
+documentation.
+\fi
+
+\section{Hardware description}
+
+The analyzer combines custom FPGA capture logic, ordinary scatter-gather DMA,
+Zynq FreeRTOS firmware and a PC-side browser workspace. Figure~\ref{fig:system}
+shows the current USB-first signal and control path.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{../assets/figures/01-system.png}
+\caption{The current default path is JC inputs to FPGA capture, ordinary SG
+DMA/DDR, Zynq FreeRTOS, J10 USB and PC tools. Configuration/status travels
+through AXI4-Lite. The browser exchanges HTTP control and server-sent events
+(SSE) with the host server; it does not connect directly to the FPGA.}
+\label{fig:system}
+\end{figure}
+
+\subsection{FPGA subsystem}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{../assets/figures/02-fpga.png}
+\caption{The custom capture logic shares the 100~MHz fabric clock. Sample-rate
+division changes the sampling enable. Packing produces 32-bit words, and the
+AXI-stream packet boundary tells the DMA when the captured packet is complete.}
+\label{fig:fpga}
+\end{figure}
+
+\code{la_input_sync} synchronizes the asynchronous input lines before sampling.
+The self-test mux selects the internal pattern generator when requested.
+\code{la_sampler} implements the configured divider. \code{la_trigger}
+evaluates masks and edges, while \code{la_pretrig_ring} preserves samples before
+the trigger. The capture controller manages the pre/post window, abort and
+overflow response. The raw packer stores four sample bytes in each word; the
+transition encoder stores a run count and value. The AXI-stream FIFO accepts
+downstream backpressure, and the output marks the final packet beat with TLAST.
+
+The pattern generator provides counter, walking-one, PRBS8, UART, SPI and \iu{}
+stimulus. Internal self-test exercises the acquisition pipeline; JE-to-JC
+external loopback additionally exercises the physical pads and input
+synchronizers. These are distinct validation paths.
+
+The AXI-Lite register source is \path{docs/regmap.yaml}. Its C, SystemVerilog and
+Markdown views are generated rather than hand-maintained. The control block is
+mapped at 0x40000000 and DMA control at 0x40400000 in the integrated design.
+
+\subsection{DMA, DDR and operating modes}
+
+In burst mode, AcqTask creates a finite descriptor chain, completes the capture
+and hands its buffer to the transmitter. The host drains the completed data
+after acquisition. In live mode, the FPGA sends transition packets into sixteen
+256~KiB segments; completed segments are decoded and returned for reuse. The
+default live flush interval is two milliseconds or the configured packet-size
+limit, whichever closes the current packet first. Short actual lengths are valid
+and are tracked separately from the allocated segment capacity.
+
+Both modes use ordinary scatter-gather descriptors. Live operation reposts
+released buffers under software ownership; it does not enable the DMA core's
+hardware cyclic mode. DMA descriptors stay non-cacheable. The live payload
+region is cacheable in the current build, with explicit invalidation before CPU
+readers access memory newly written by DMA.
+
+At 100~MS/s, raw acquisition is 100~MB/s because each sample is one byte. That is
+not the sustained PC transfer rate. The current USB drain measurement is
+1.62~MB/s, so full-rate acquisition uses finite buffers. Transition encoding
+reduces low-transition captures, but its worst case can expand to four bytes per
+sample. Loss-free continuous operation is bounded by both decoding and transport
+capacity.
+
+\subsection{USB and host subsystem}
+
+The Zynq PS USB0 controller uses the onboard USB PHY and J10 device connector.
+CDC-ACM allows Windows to expose the analyzer as a COM endpoint through
+\texttt{usbser.sys}. The USB-profile image does not initialize the gateway UART0
+link or the PL SPI-bulk service. J12 supplies the documented board
+power/JTAG/console path; J10 carries analyzer data.
+
+\code{la-ui} supplies connection controls, captures, waveform viewing, cursors
+and edge stepping, host-side recorded-capture decoding, per-slot live control,
+exports, offline opening, traces and pattern-generator controls. \code{la-cli}
+provides the corresponding scripted operations. Live events come from the
+device decoder tasks; decoding an existing capture uses the host native decoder
+library. The browser receives events through SSE. One host connection owner
+prevents competing operations from claiming the same COM port.
+
+\subsection{Explicit RTOS implementation}
+
+\subsubsection{Why FreeRTOS is used}
+
+FreeRTOS schedules the software pipeline on Zynq CPU0 while the FPGA captures
+signals independently. Acquisition management must respond promptly to DMA
+completions; decoder tasks must process completed data; the transmitter and USB
+task must drain results; command handling must remain responsive to Stop, Abort
+and configuration requests. Splitting these activities into tasks makes their
+ownership and scheduling explicit rather than combining them in one unbounded
+polling loop.
+
+The operating-system tick is one millisecond, not the input sample period. The
+FPGA generates sample timing at up to 100~MS/s. FreeRTOS coordinates chunks of
+already sampled data, and DMA performs bulk memory writes without requiring the
+CPU to copy each input sample.
+
+\code{main.c} checks the reserved memory geometry, applies MMU/cache attributes,
+checks the register interface, calls \code{la_app_init()} and starts
+\code{vTaskStartScheduler()}. \code{la_app.c} constructs static task control
+blocks, stacks, queues and stream buffers. The BSP enables preemption and time
+slicing; the project override sets \code{configTICK_RATE_HZ} to 1000. Larger
+priority numbers mean greater urgency.
+
+\subsubsection{Actual application tasks and scheduling}
+
+\begin{longtable}{|>{\raggedright\arraybackslash}p{3.0cm}|>{\raggedright\arraybackslash}p{1.3cm}|>{\raggedright\arraybackslash}p{1.3cm}|>{\raggedright\arraybackslash}p{10.8cm}|}
+\hline
+\textbf{Task} & \textbf{Prio.} & \textbf{Stack} & \textbf{Responsibility and wait mechanism} \\ \hline
+\endhead
+AcqTask / \code{la_acq} & 6 & 4~KiB & Own acquisition state, SG descriptors and
+buffer publication/repost; wait for control and PL/DMA/release notifications \\ \hline
+CmdTask / \code{la_cmd} & 5 & 4~KiB & Parse/validate received frames, route
+commands and acknowledgements, process lifecycle notices; consume RX stream
+buffer \\ \hline
+TxTask / \code{la_tx} & 5 & 12~KiB & Pack burst/live frames, manage
+ACK/retransmission state, recycle event blocks and enqueue USB transmission \\ \hline
+Decoder slot 0 / \code{la_dec0} & 5 & 4~KiB & Consume its configuration/segment
+queues, run the configured decoder and publish event blocks \\ \hline
+Decoder slot 1 / \code{la_dec1} & 5 & 4~KiB & Same independently configurable
+role for slot 1 \\ \hline
+Decoder slot 2 / \code{la_dec2} & 5 & 4~KiB & Same independently configurable
+role for slot 2 \\ \hline
+UsbTask / \code{la_usb} & 5 & 12~KiB & Process USB setup/session work, staged RX
+and ordered TX; wake by notification or a 1~ms service timeout \\ \hline
+StatusTask / \code{la_status} & 1 & 4~KiB & Maintain the monitored
+stack-watermark summary on a five-second loop \\ \hline
+\end{longtable}
+
+There are eight application tasks in the default USB build, plus FreeRTOS idle
+and timer tasks. The three decoder slots are not hard-wired one each to UART, SPI
+and \iu{}: any supported configuration can be assigned to a slot, or that slot
+can be disabled. Stack constants in \code{la_app.h} count 32-bit stack elements:
+1024 elements are 4~KiB, and 3072 elements are 12~KiB. Idle and timer stacks are
+separately 2~KiB each.
+
+AcqTask runs at priority 6 to service acquisition before the priority-5 software
+consumers. Equal-priority decoder, command, transmitter and USB tasks share
+processor time. TxTask was raised from priority 4 to 5 after sustained decoder
+production starved the lower-priority consumer. The code also bounds decoder
+work to four segments per turn and USB live-event drain to four blocks per turn,
+preserving opportunities to process stop and control work.
+
+\subsubsection{Live task-to-task data flow}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{../assets/figures/03-rtos.png}
+\caption{AcqTask publishes segment handles to configurable decoder slots.
+Decoders publish static event-block pointers to TxTask. USB reception reaches
+CmdTask through the RX stream buffer. StatusTask is background monitoring; the
+figure does not imply that it receives the live payload.}
+\label{fig:rtos}
+\end{figure}
+
+The processing sequence is:
+\begin{enumerate}[leftmargin=1.4em,itemsep=2pt,topsep=2pt]
+\item UsbTask feeds incoming bytes to the RX stream buffer. CmdTask parses and
+validates each command and sends the acquisition/configuration work to AcqTask
+through \code{ctrl_q}.
+\item AcqTask starts the live SG chain. The FPGA emits transition words
+containing a 24-bit run count and an eight-bit sample value.
+\item The DMA interrupt acknowledges completion and notifies AcqTask. AcqTask
+collects completed descriptors, checks their actual lengths and invalidates the
+DMA-written cache range before a decoder reads it.
+\item AcqTask publishes a handle, slot, length and sequence to each enabled
+decoder's \code{seg_q}. The large sample payload stays in DDR; the queue does not
+copy the entire segment.
+\item Each decoder consumes its borrowed segment, feeds the shared C decoding
+core and packs output into a static event block. A full block or the
+two-millisecond flush check publishes its pointer to \code{ev_q}.
+\item TxTask encodes the event frame, places it in the USB TX pool and returns
+the event block to \code{block_q}. UsbTask submits ready TX slots in FIFO order;
+endpoint completion returns the slot to the pool.
+\item After processing the segment, a decoder releases its reference and
+notifies AcqTask. Only after all consumer references are released may AcqTask
+repost that segment to DMA.
+\end{enumerate}
+
+\subsubsection{Ownership, synchronization and queue policies}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{../assets/figures/04-ownership.png}
+\caption{Hardware ownership and consumer ownership are exclusive. A buffer is
+not returned to DMA while any enabled decoder still holds a reference.}
+\label{fig:ownership}
+\end{figure}
+
+The segment lifecycle is \code{FREE} $\rightarrow$ \code{DMA_OWNED} $\rightarrow$
+\code{CPU_OWNED} $\rightarrow$ \code{FREE}. Each segment has generation/sequence
+information to reject stale use and detect gaps. AcqTask is the sole descriptor
+owner. Consumer release and repost operations use short critical sections to
+maintain the live-ring state. Sequence gaps reset a decoder and produce a
+discontinuity indication, preventing missing samples from being interpreted as a
+continuous bus transaction.
+
+\begin{longtable}{|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}p{3.1cm}|>{\raggedright\arraybackslash}p{10.4cm}|}
+\hline
+\textbf{Shared object} & \textbf{Capacity} & \textbf{Full/unavailable policy in the code} \\ \hline
+\endhead
+\code{ctrl_q} & 4 messages & Zero-wait forwarding; CmdTask logs a full queue. The
+USB-session abort send does not check its result. \\ \hline
+\code{notice_q} & 8 messages & Zero-wait lifecycle publication; a failed send
+does not block acquisition. \\ \hline
+\code{tx_q} & 16 small frames & Up to 20~ms wait, then count a TX drop. \\ \hline
+\code{ack_q} & 32 messages & Zero-wait send; failure counts a TX drop. \\ \hline
+\code{job_q} & 1 burst job & Buffer-busy gate limits the capture buffer to one
+job in flight. \\ \hline
+\code{cfg_q} per slot & 2 messages & Bounded/zero-wait configuration
+publication; no unbounded configuration wait. \\ \hline
+\code{seg_q} per slot & 8 handles & Drop only that decoder's attempted reference
+and count the drop; expose later sequence gaps. \\ \hline
+\code{block_q} & 12 static block pointers & No free block drops/counts the new
+event. \\ \hline
+\code{ev_q} & 8 filled block pointers & Drop/count the complete new batch and
+recycle its block. \\ \hline
+USB RX stream buffer & 8~KiB & Retain the current staged input and retry when
+the stream buffer is full. \\ \hline
+USB RX staging & 16 entries, up to 512 bytes each & Drop the new staging entry
+and count overflow when full. \\ \hline
+USB TX pool & 16 $\times$ 4160-byte slots & Static counting semaphore reserves
+slots; default wait 500~ms, live event/overrun wait 10~ms; failures counted. \\ \hline
+\end{longtable}
+
+A FreeRTOS queue safely accepts the three decoder producers. A counting
+semaphore represents free USB TX slots, short critical sections reserve slots
+atomically, and a ready-index FIFO preserves frame order. The shared frame
+sequence counter uses atomic fetch-and-add. Zero-copy describes acquisition
+payload handoff to decoders; event packing, transport framing and USB staging
+still make bounded copies.
+
+For a burst, AcqTask hands a \code{la_tx_job_t} with the buffer address and
+length to TxTask. The buffer-busy gate remains set until the JOB\_DONE
+notification. TxTask manages DATA\_BEGIN, DATA\_CHUNK and DATA\_END, the ACK
+window, retransmissions and whole-capture CRC. A two-second no-progress timeout
+can abandon a stalled transfer and release the job instead of retaining the
+capture buffer indefinitely.
+
+\subsubsection{Interrupt work, cache handling and diagnostics}
+
+The PL/DMA handlers in \path{drivers/la_irq.c} acknowledge pending conditions,
+record bounded instrumentation and call \code{xTaskNotifyFromISR()}.
+\code{portYIELD_FROM_ISR()} requests a context switch when necessary. They do not
+perform protocol decoding or CRC processing.
+
+The USB vendor driver has an important bounded-work exception to a simplistic
+``all ISRs only notify'' description. Its active endpoint RX callback pops the
+completed vendor buffer, copies at most 512 bytes into the sixteen-entry staging
+ring, releases that buffer and notifies UsbTask. This matches the vendor
+descriptor-cursor requirements. UsbTask performs class/session processing,
+stream-buffer delivery, missed-completion sweeps and TX submission. USB IN
+completion gives the free-slot semaphore with \code{xSemaphoreGiveFromISR()}.
+
+The application objects are allocated statically with \code{xTaskCreateStatic()},
+\code{xQueueCreateStatic()} and related APIs. BSP dynamic-allocation support
+remains enabled for its kernel build, but the application task pipeline uses
+static storage. The idle/timer memory hooks also supply static stacks.
+Stack-overflow and malloc-failure hooks print a fatal diagnostic and halt.
+
+DMA descriptors are non-cacheable. The default live-payload prefix is write-back
+cacheable, so AcqTask invalidates each written segment before publication and
+TxTask invalidates a completed burst before reading it. The CPU reads these
+payloads without writing them. This prevents stale cached samples from being
+interpreted as new acquisition data.
+
+StatusTask currently summarizes the watermarks of acquisition, command,
+transmission and status tasks, in stack words. It does not include every
+decoder/USB watermark. Kernel runtime-statistics generation is disabled; a
+CPU-load field alone is not evidence of measured per-task utilization. Custom
+trace hooks provide task-switch, queue/stream and DMA/decode/TX markers through a
+bounded trace ring that is enabled on request.
+
+\subsubsection{RTOS code reference map}
+
+\begin{longtable}{|>{\raggedright\arraybackslash}p{6.6cm}|>{\raggedright\arraybackslash}p{10.6cm}|}
+\hline
+\textbf{Explanation} & \textbf{Source file or group} \\ \hline
+\endhead
+Scheduler startup, memory checks, static kernel hooks & \path{fw-zynq/app/src/main.c} \\ \hline
+Task creation and static queues/buffers & \path{fw-zynq/app/src/la_app.c} \\ \hline
+Priorities, stack lengths, queue depths & \path{fw-zynq/app/src/la_app.h} \\ \hline
+Tick, static allocation, overflow hooks and trace hooks & \path{fw-zynq/FreeRTOSConfig.h} \\ \hline
+Descriptor ownership, live publication/repost and cache invalidation & \path{fw-zynq/app/src/tasks/la_acq_task.c} \\ \hline
+Segment consumption, event batching, reference release & \path{fw-zynq/app/src/tasks/la_decoder_task.c} \\ \hline
+Protocol dispatch and control routing & \path{fw-zynq/app/src/tasks/la_cmd_task.c} \\ \hline
+Burst ACK window, frame packing and bounded live drain & \path{fw-zynq/app/src/tasks/la_tx_task.c} \\ \hline
+USB class/session service and 1~ms wait & \path{fw-zynq/app/src/tasks/la_usb_task.c} \\ \hline
+IRQ notification and USB staging/semaphore operations & \path{fw-zynq/app/src/drivers/la_irq.c}; \path{drivers/la_usb_dev.c} \\ \hline
+Pool/ring lifecycle and protocol state & \path{fw-zynq/app/src/live/}; \path{common/la_decode/} \\ \hline
+Five-second monitoring loop & \path{fw-zynq/app/src/tasks/la_status_task.c} \\ \hline
+\end{longtable}
+
+An expanded implementation review is maintained in
+\path{docs/hardwarex/rtos-implementation.md}. The explanation here follows
+active code rather than outdated comments or initial stack/queue proposals.
+
+\section{Design files summary}
+
+The editable project sources are organized as follows. The public code
+repository is \url{https://github.com/linggaaradhanas22/logic-analyzer}.
+
+\begin{longtable}{|>{\raggedright\arraybackslash}p{5.9cm}|>{\raggedright\arraybackslash}p{11.3cm}|}
+\hline
+\textbf{File group} & \textbf{Purpose} \\ \hline
+\endhead
+\path{fpga/rtl/}, \path{fpga/tb/}, \path{fpga/constraints/}, \path{fpga/scripts/} &
+Editable RTL, self-checking testbenches, pin constraints and Vivado scripts \\ \hline
+\path{docs/regmap.yaml}; \path{tools/gen_regmap.py} & Register-map source and
+generated interface views \\ \hline
+\path{fw-zynq/} & Vitis/FreeRTOS application, drivers, task adapters, memory
+layout and build/load scripts \\ \hline
+\path{common/la_proto/}; \path{common/la_decode/} & Shared C framing/integrity
+code and protocol decoders \\ \hline
+\path{host/la_cli/}; \path{host/la_ui/}; \path{host/la_live_web/} & CLI,
+browser workspace, file handling and live-event bridge \\ \hline
+\path{tests/}; \path{host/tests/}; \path{fw-zynq/tests/} & Portable, host,
+integration and bench test layers \\ \hline
+\path{docs/hardwarex/diagrams/}\allowbreak\code{project-report_v2.drawio} & Four
+editable current system/FPGA/RTOS/ownership figures \\ \hline
+\path{docs/architecture.md}; \path{docs/rtos-design.md};
+\path{docs/using-the-analyzer.md}; \path{docs/status.md} & Architecture, ownership
+contract, operating sequence and dated verification ledger \\ \hline
+\path{fw-esp32/} & Retained optional gateway-profile implementation \\ \hline
+\end{longtable}
+
+The project sources and local build reports distinguish implemented behavior from
+measured evidence. Local generated reports are not automatically available in a
+clean checkout and must be regenerated for independent reproduction. The older
+wireless-first manuscript and its diagrams are preserved separately as
+historical material.
+
+\section{Bill of materials summary}
+
+The prices below retain the existing Indonesian-marketplace estimates dated
+17 September 2026. They are reference estimates, not newly quoted prices or
+confirmed purchase invoices. The default USB build uses two USB A-to-micro-B
+data cables: one for J12 power/JTAG/console and one for J10 analyzer data. The
+computer is existing laboratory infrastructure and excluded from the cost.
+
+\begin{longtable}{|>{\raggedright\arraybackslash}p{1.0cm}|>{\raggedright\arraybackslash}p{8.3cm}|>{\raggedright\arraybackslash}p{1.1cm}|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{2.5cm}|}
+\hline
+\textbf{ID} & \textbf{Component and current role} & \textbf{Qty} &
+\textbf{Unit estimate (IDR)} & \textbf{Total (IDR)} \\ \hline
+\endhead
+A1 & Zybo Z7-10 development board, required & 1 & 13,800,000 & 13,800,000 \\ \hline
+W1 & USB A-to-micro-B data cable, J12 power/JTAG/console & 1 & 25,750 & 25,750 \\ \hline
+W2 & USB A-to-micro-B data cable, J10 analyzer data & 1 & 25,750 & 25,750 \\ \hline
+W3 & Female-female jumper-wire pack, target leads and optional external
+loopback & 1 & 20,700 & 20,700 \\ \hline
+M1 & 16~GB class-10 microSD, standalone SD startup & 1 & 82,500 & 82,500 \\ \hline
+PC1 & Existing Windows host computer, excluded infrastructure & 1 & 0 & 0 \\ \hline
+PS1 & Optional 5~V supply; documented bench uses J12 USB power & 1 & 37,050 & 37,050 \\ \hline
+A2 & Optional classic ESP32-WROOM gateway board & 1 & 45,000 & 45,000 \\ \hline
+AP1 & Optional Wi-Fi access point for gateway profile & 1 & 218,000 & 218,000 \\ \hline
+A3 & Optional ESP32-S3 board; historical gateway transport work & 1 & 115,000 & 115,000 \\ \hline
+A4 & Optional 3.3~V USB-UART diagnostic adapter & 1 & 25,000 & 25,000 \\ \hline
+BB1 & Optional solderless breakout breadboard & 1 & 13,800 & 13,800 \\ \hline
+\end{longtable}
+
+\textbf{Required USB-build subtotal: Rp 13,954,700.} This includes A1, W1, W2,
+W3 and M1. Optional items total Rp 453,850; all listed items total Rp 14,408,550.
+The optional power supply is not included in the required subtotal. KCCI funded
+the project; these figures describe the retained estimate basis rather than
+asserting how much funding was paid.
+
+\subsection{Retained material-source references}
+
+The original supplier references are retained for traceability:
+\begin{sloppypar}
+\begin{itemize}[leftmargin=1.2em,itemsep=1pt,topsep=2pt]
+\item A1: \url{https://www.tokopedia.com/invoklab/digilent-zybo-z7-zynq-7000-arm-fpga-soc-development-board-zybo-z7-10-0f6d6}
+\item W1/W2: \url{https://www.tokopedia.com/robot-indonesia/robot-rdm100xs-kabel-data-micro-usb-kabel-charger-handphone-2a-panjang-1-meter-garansi-resmi-1-tahun-bisa-cod-1736307162016286082-1736307173264033154}
+\item W3: \url{https://www.tokopedia.com/reinid/dupont-jumper-wire-female-to-female-kabel-40pcs-20cm-rainbow-cable-1729850275615311272}
+\item M1: \url{https://www.tokopedia.com/v-genindonesia/memory-hp-maestro-microsd-16gb-maestro-class-10-chip-only}
+\end{itemize}
+\end{sloppypar}
+
+Optional-item supplier references remain in the preserved September manuscript.
+No custom PCB or enclosure is needed for the documented build. The Zybo Pmod
+series resistors are part of the board, not separately purchased components.
+
+\section{Build instructions}
+
+The supported development workflow is native Windows. The main tools are
+Vivado/Vitis 2026.1, Questa for procedural RTL simulation, Python 3.11 and
+MSVC/CMake/Ninja for portable C checks. The optional gateway uses the pinned
+native ESP-IDF installation. \code{python tools/run.py <target>} is the canonical
+runner; it resolves the project root from its own script location.
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt,topsep=2pt]
+\item Clone the repository, create its \path{.venv} and install the project
+package using the setup steps in \path{docs/windows-dev.md}.
+\item Check the environment with
+\code{python tools/run.py check-env -- --write-lock}.
+\item Generate the interfaces with \code{python tools/run.py gen}.
+\item Check the software with \code{python tools/run.py test-native} and
+\code{python tools/run.py test-host}.
+\item Simulate the RTL with \code{python tools/run.py sim} and build the
+bitstream/XSA with \code{python tools/run.py bit}.
+\item Build the default USB firmware with \code{python tools/run.py fw-zynq}.
+\item With the documented power/jumper setup, load the design with
+\code{python tools/run.py jtag-zynq}.
+\item For SD startup, run \code{python tools/run.py boot}, copy BOOT.BIN to the
+FAT32 card root, remove power, set JP5 to SD and power-cycle. \code{package}
+stages the profile-aware firmware/host artifacts and hash manifest.
+\end{enumerate}
+
+These are reproduction instructions, not a claim that new FPGA/firmware builds
+were run during this documentation refresh. The default firmware is USB;
+\code{--profile gateway} selects the retained gateway application where
+supported.
+
+\section{Operation instructions}
+
+\subsection{Connections and startup}
+
+\begin{tabularx}{\linewidth}{|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}X|}
+\hline
+\textbf{Connection or setting} & \textbf{Current direct-USB configuration} \\ \hline
+J12 & PC USB connection for board power/JTAG/FTDI console \\ \hline
+J10 & PC USB data connection to the analyzer CDC-ACM endpoint \\ \hline
+J11 & Unused in device mode \\ \hline
+JP6 & USB power selection for the documented bench arrangement \\ \hline
+JP1 / JP2 & Open for the documented J10 device-mode arrangement \\ \hline
+JP5 & JTAG for development load, or SD for the verified standalone image \\ \hline
+JC & Eight acquisition inputs, CH0--CH7, plus common ground to the target \\ \hline
+JE & Pattern-generator outputs for optional external loopback \\ \hline
+\end{tabularx}
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt,topsep=2pt]
+\item Remove power before changing jumpers or wiring. Check the board revision,
+target logic voltage and shared ground. Do not connect target VCC.
+\item Connect J12 for power and J10 for analyzer data. Load the USB image over
+JTAG, or boot the prepared SD card with JP5 set to SD.
+\item Identify J10's USB Serial Device COM port. The recorded bench used COM13;
+another PC can assign a different number. Do not select J12's FTDI console.
+\item Start \code{la-ui} from the project environment, or use
+\path{tools/win/la-ui-start.vbs}. Open \url{http://127.0.0.1:8080/} in the
+browser.
+\item Rescan/select the analyzer port and Connect. Ping should report firmware
+0x000A0000 and PL ID 0x4C410002 for the current W11 image.
+\item Begin with the internal counter self-test before connecting target signals.
+Use the UI runbook's 100~MS/s, raw, zero-pre-trigger configuration. The UI scales
+step-pattern timing so the Fit view shows readable square waves.
+\end{enumerate}
+
+\subsection{Capture, decode and inspect}
+
+Use zoom/pan/Fit, channel selection, cursors A/B, edge stepping and pattern
+search to inspect recorded waveforms. Capture decoding uses the host native DLL,
+built by \code{test-native}. At 10~MS/s, the pattern-generator recipes are:
+
+\begin{tabularx}{\linewidth}{|>{\raggedright\arraybackslash}p{1.8cm}|>{\raggedright\arraybackslash}p{2.2cm}|>{\raggedright\arraybackslash}p{4.6cm}|>{\raggedright\arraybackslash}X|}
+\hline
+\textbf{Protocol} & \textbf{Generator mode} & \textbf{Decoder configuration} &
+\textbf{Expected stimulus} \\ \hline
+UART & \code{uart} & \code{uart:rx=0,baud=115200} & Repeating LA-TEST followed by
+newline \\ \hline
+SPI & \code{spi} & \code{spi:sck=0,mosi=1,cs=2} & Frames containing 4C 41; the
+first can be partial \\ \hline
+\iu{} & \code{i2c} & \code{i2c:scl=3,sda=4} & START, address/write, ACK, 4C 41,
+STOP \\ \hline
+\end{tabularx}
+
+For a real target, replace generator input with appropriately wired 3.3~V
+signals, keep common ground and choose a rate that resolves the signal edges.
+Configure trigger/pre/post settings for the region of interest. In live mode,
+configure the desired decoder slots and use Start/Stop; each enabled slot has
+independent configuration. Decoded-pattern stop acts after the decoder has
+processed the relevant segment, not exactly at the physical edge.
+
+\subsection{UART demonstration}
+
+The following screenshots were captured on 18 October 2026 from the current W11
+image (firmware 0x000A0000, PL 0x4C410002) with the analyzer connected to an
+ESP32-S3 UART demonstration on CH0. The capture used 10~MS/s, 64k raw, Pre 0, no
+edge trigger, Patgen off, CH0 only, and slot 0 configured as
+\code{uart:rx=0,baud=115200}. The decoded bytes are
+\texttt{4C 41 2D 53 33 0A} (\texttt{LA-S3\textbackslash n}). The live session
+reported 1,464 events and 1,220 real waveform packets with zero gaps.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{../assets/uart-demo/uart-demo-capture.png}
+\caption{Logic analyzer UI connected to the UART demonstration. The capture
+panel is configured for 10~MS/s, 64k raw words, pre-trigger zero, no edge
+trigger and pattern generator off. Slot 0 decodes UART RX on CH0 at 115200 baud,
+and the waveform shows the UART frame annotations.}
+\label{fig:uart-ui}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{../assets/uart-demo/uart-demo-frame.png}
+\caption{Close-up of the decoded UART frame. The eight data bits of each byte are
+visible on CH0, and the annotations show \texttt{4C 41 2D 53 33 0A}, the bytes
+for \texttt{LA-S3} followed by a newline.}
+\label{fig:uart-frame}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{../assets/uart-demo/uart-demo-live-pane.png}
+\caption{Live UART decoding in slot 0. The real waveform and decoded bytes share
+one timeline; the status line reports the run count and zero gaps for the
+recorded live session.}
+\label{fig:uart-live}
+\end{figure}
+
+\subsection{Export and shutdown}
+
+Export \code{.sr} for exact sample-count reopening in PulseView or the UI. VCD
+stores transitions and may not preserve a trailing constant run's exact sample
+count; the host reports this limitation. Sample CSV contains waveforms, while
+event CSV contains decoded annotations. PNG captures the visible waveform region.
+Trace controls retrieve the RTOS timeline. Stop live operation, finish/cancel
+jobs, disconnect the UI, stop its host server and remove power before rewiring.
+
+All acquisition inputs are 3.3~V only and have no project-added over-voltage
+protection. Use an appropriate external level shifter for 5~V logic. Short leads
+and common ground are important; synchronization does not guarantee capture of
+pulses shorter than the configured sample period.
+
+\section{Validation and characterization}
+
+\subsection{Recorded verification evidence}
+
+The table summarizes existing reports. Counts and dates belong to their recorded
+runs; they are not fresh hardware measurements from writing this report.
+Historical baseline tests are identified separately from the current USB results.
+The current W11 image reports firmware 0x000A0000 and PL 0x4C410002; the UART
+screenshots in Section 6.3 were captured on that image, while the table retains
+the dates of the original evidence.
+
+\begin{longtable}{|>{\raggedright\arraybackslash}p{3.9cm}|>{\raggedright\arraybackslash}p{7.0cm}|>{\raggedright\arraybackslash}p{5.9cm}|}
+\hline
+\textbf{Check} & \textbf{Recorded outcome} & \textbf{Evidence/date} \\ \hline
+\endhead
+Procedural RTL regression & 12/12 self-checking Questa cases passed in the
+recorded regressions & \path{fpga/tb/testlist.json}; \path{docs/status.md} and
+simulation reports \\ \hline
+Routed FPGA resources & 6,675/17,600 LUTs (37.93\%); 9,198/35,200 registers
+(26.13\%); 37/60 BRAM tiles (61.67\%) & \path{build/release/utilization.rpt},
+20 September 2026 \\ \hline
+Routed timing & Setup WNS +0.576~ns; hold WHS +0.022~ns; no failing constrained
+endpoints & Routed timing summary, 20 September 2026 \\ \hline
+Capture matrix & Six generator modes at 1, 10 and 100~MS/s, three captures each;
+internal and full eight-channel external matrices recorded as 18/18 & Historical
+P6/P7 matrix entries in \path{docs/status.md} \\ \hline
+USB aggregate drain & Three trials, each 67,108,864 bytes as 16 $\times$ 4~MiB
+captures; 41.4--41.5~s; 1.62~MB/s; byte-exact/CRC-clean &
+\path{build/reports/usb-u06-performance.md}, 19 September 2026 \\ \hline
+USB UART + SSE live gate & 606,411 device events and feed events in 60~s;
+606,405 decoded bytes; 124.7~kB/s wire; zero client/format drops, overrun events
+or dropped segments & \path{build/reports/usb-v04-live-web.md} and V04 ledger
+entry, 20 September 2026 \\ \hline
+USB live protocols/recovery & UART, 10~kHz SPI/\iu{}, stop-on-pattern, compact
+events, overload recovery and close/reopen gates; 8/8 suite & V04/V06 recorded
+USB live suites, 20 September 2026 \\ \hline
+UI real-device integration & 6/6 API/E2E cases; million-sample capture, decoding,
+per-slot live/SSE, trace/export/offline open & W09 entry, 20 September; SD-boot
+re-run, 26 September 2026 \\ \hline
+Cached decoder comparison & Approximately 1.28--1.29~M transition words/s, about
+28\% faster than non-cached under deliberate SPI overload &
+\path{docs/rtos-design.md} P8.5, 12 September 2026 \\ \hline
+Historical isolated-byte latency & 428 microseconds worst over 20 single-shot
+sessions against a 25~ms budget & P7.6/P8.2 evidence; earlier Zynq/link scope \\ \hline
+Historical capture soak & 500 back-to-back 4096-sample captures, exact results
+and no FIFO overflow, 232~s & P8.4 recorded soak evidence \\ \hline
+Software regression & Release precheck 22/22; latest recorded host regression 167
+passed & Release/W09 evidence and 1 October 2026 viewer-fix entry \\ \hline
+USB-profile SD boot & BOOT.BIN cold boot, USB enumeration, ping/status and 6/6 UI
+E2E cases & \path{build/reports/sd-boot-verification.md}, 26 September 2026 \\ \hline
+Human visual walkthrough & Completed, confirmed directly by the author during
+this documentation update & Author confirmation received 12 October 2026;
+execution date and additional measurements not specified \\ \hline
+\end{longtable}
+
+The routed FPGA report meets its user-specified internal constraints. It still
+lists methodology/external-I/O delay warnings, so timing closure is not a general
+guarantee of external signal integrity or every possible probe setup. The sample
+rate, decoder processing rate and host transfer rate have different units and
+measure different stages.
+
+The 64~MiB figure is aggregate transferred data, not capture-buffer capacity.
+The cached SPI comparison intentionally overloads the decoder and drops segments
+in both variants; it is not a loss-free 1~MHz live-decoding claim. The historical
+428-microsecond result is not a newly measured USB-to-browser end-to-end latency.
+Replay-ring eviction removes old history; the zero-client-drop result refers to
+the active SSE consumer.
+
+\subsection{Visual walkthrough status}
+
+The author has confirmed that the visual walkthrough is complete. This closes the
+previously outstanding human observation item for the project report. The
+confirmation is recorded separately from automated browser/API testing; no extra
+pass counts, timings, screenshots or individual interaction results are inferred
+from it. It was received on 12 October 2026, rather than presented as an
+assertion that the walkthrough itself happened on that date.
+
+\subsection{Capabilities and remaining limitations}
+
+\begin{itemize}[leftmargin=1.4em,itemsep=2pt,topsep=2pt]
+\item Eight-channel, 3.3~V acquisition is qualified at up to 100~MS/s. The
+200~MS/s stretch is unverified and is not part of the current class-project
+claim.
+\item Burst capacity is bounded by the 8~MiB pool and finite descriptor chain;
+oversized captures are rejected rather than silently shortened.
+\item UART 115200 and 10~kHz SPI/\iu{} have recorded live gates. High-rate live
+workloads can overload decoder/event/transport stages and generate explicit
+discontinuity/overrun information.
+\item Full-rate raw capture is buffered acquisition, not a 100~MB/s continuous
+USB stream. The default host drain measurement is 1.62~MB/s.
+\item The optional gateway retains historical Wi-Fi/SPI limitations; its
+remaining ESP32-S3 SPI issue and optional tuning are not declared fixed by USB
+adoption.
+\item The signed-driver-dependent SUMP bridge is deferred. The final v1.0 tag and
+public release authorization remain separate from demonstrated operation.
+\item The development USB identity is retained for the current in-house setup;
+no public product identity or certification is asserted.
+\end{itemize}
+
+\section{Conclusion}
+
+The project demonstrates an integrated FPGA and embedded-system instrument: the
+FPGA supplies deterministic sampling/trigger/packing, while FreeRTOS provides
+explicit scheduling, ownership, live decoding and transport service. The default
+USB path replaces the older headline Wi-Fi limitation with a recorded 1.62~MB/s
+aggregate drain result. Device live events, host waveform analysis, independent
+decoder-slot control, exports, SD startup and the author-confirmed visual
+walkthrough complete the documented operating path.
+
+The principal lesson is that sample rate alone does not define an analyzer's
+end-to-end capacity. Buffers, descriptor lifetime, decoder throughput, transport
+pacing and honest overload reporting must also be designed and verified. The
+report shows both classes' contributions through this shared hardware/software
+contract while retaining the limits of the measured evidence.
+
+\section*{Author contributions}
+
+\ifFPGA
+Lingga Aradhana Sahadewa is the lead author and contributor for both classes:
+project design, FPGA and embedded implementation, integration, validation,
+visualization and documentation. Alvin Hadar contributed RTL design for the
+capture FIFO/buffer and sample packing. Bagas Budhi Permana contributed RTL
+design for trigger/edge detection and AXI-Stream packet framing.
+\else
+Lingga Aradhana Sahadewa is the sole author and contributor for both classes:
+project design, FPGA and embedded implementation, integration, validation,
+visualization and documentation.
+\fi
+
+\section*{Acknowledgements}
+
+This project was funded by the Korea Chamber of Commerce and Industry (KCCI).
+\ifFPGA
+The authors acknowledge KCCI's support for the project used in the Embedded
+system and FPGA classes.
+\else
+The author acknowledges KCCI's support for the project used in the Embedded
+system and FPGA classes.
+\fi
+
+\section*{References}
+
+\begin{enumerate}[leftmargin=1.5em,itemsep=2pt,topsep=2pt]
+\item Project code, specifications and dated execution ledger:
+\url{https://github.com/linggaaradhanas22/logic-analyzer};
+\path{docs/status.md}, \path{docs/architecture.md},
+\path{docs/rtos-design.md} and \path{docs/using-the-analyzer.md}.
+\item Digilent, Zybo Z7 reference documentation:
+\url{https://digilent.com/reference/programmable-logic/zybo-z7/start}.
+\item AMD, Vivado/Vitis and AXI DMA documentation: \url{https://docs.amd.com/};
+the actual routed utilization/timing reports dated 20 September 2026.
+\item FreeRTOS kernel and scheduling documentation: \url{https://www.freertos.org/};
+the project's configuration and source files listed in Section 2.4.6.
+\item sigrok/PulseView signal-analysis ecosystem: \url{https://sigrok.org/}.
+\item Saleae logic analyzers: \url{https://www.saleae.com/}; Digilent Digital
+Discovery: \url{https://digilent.com/shop/digital-discovery-portable-logic-analyzer-and-pattern-generator/}.
+\end{enumerate}
+
+External links identify reference material. Technical implementation and
+performance statements in this report are grounded in the local source and dated
+evidence listed above.
+
+\appendix
+\section{Weekly project activity summary}
+
+The official class-project period is 15 September--12 October 2026. Some
+underlying technical validation predates this period; it is cited as existing
+evidence rather than reassigned to a later week. Weekly entries below summarize
+dated activity within the period. Five hours per week is the author's instructed
+log allocation, not a duration calculated from test-running times.
+
+\begin{longtable}{|>{\raggedright\arraybackslash}p{1.3cm}|>{\raggedright\arraybackslash}p{3.2cm}|>{\raggedright\arraybackslash}p{10.4cm}|>{\raggedright\arraybackslash}p{1.3cm}|}
+\hline
+\textbf{Week} & \textbf{Period} & \textbf{Activity and outcome summary} &
+\textbf{Hours} \\ \hline
+\endhead
+1 & 15--21 September 2026 & Investigated gateway/S3 transport limitations;
+planned and implemented direct Zynq USB; corrected endpoint toggle/ownership/order
+handling; measured three 64~MiB USB drain trials; adopted USB default; integrated
+live/SSE, independent decoder slots and the unified UI with recorded bench gates.
+& 5 \\ \hline
+2 & 22--28 September 2026 & Updated the UI-first operator runbook and
+wiring/startup instructions; added hidden Windows start/stop launchers; verified
+USB-profile cold SD boot and the 6/6 UI E2E suite. & 5 \\ \hline
+3 & 29 September--5 October 2026 & Corrected counter Fit legibility, orthogonal
+waveform rendering and exact cursor edge stepping; ran the recorded 167-test host
+regression and offline browser checks. & 5 \\ \hline
+4 & 6--12 October 2026 & Prepared class-specific presentation routes and a
+complete speaking script; reconciled current project/RTOS report content and
+weekly KCCI forms; recorded the author's confirmation of the completed visual
+walkthrough. & 5 \\ \hline
+Total & Shared individual project for both classes & Four weekly logs; one
+twenty-hour allocation & 20 \\ \hline
+\end{longtable}
+
+Detailed weekly activity logs are provided on four separate sheets in the
+accompanying KCCI workbook. Unrequested administrative fields are left blank, and
+the original Project Scoring Sheet is preserved without modification.
+
+\end{document}

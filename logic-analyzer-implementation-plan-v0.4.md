@@ -1,4 +1,10 @@
 # RTOS Logic Analyzer — Zybo Z7-10 + ESP32
+
+> Historical September 2026 snapshot; not the current execution handover.
+> See [docs/plan.md](docs/plan.md), [docs/current-handover.md](docs/current-handover.md)
+> and [docs/status.md](docs/status.md) for the USB-first W11 implementation and
+> SD boot verified on 18 October 2026. The original text below is preserved.
+
 ## Agent-Executable Implementation Plan — v0.4
 
 2026-09-05. Supersedes v0.3. Location clarification: all project-owned files live in the existing `Logic-Analyzer\Source_Code` folder (§2/§2A). Development, simulation, firmware builds, flashing, host tests and release packaging run **natively on Windows**. This revision incorporates the Windows feasibility review and the associated DMA, ownership, latency and throughput corrections. The original v0.3 remains a historical reference; execute this version.
@@ -14,7 +20,7 @@ This document specifies future deliverables; filenames and commands below do not
 | Use installed AMD 2026.1 tools | Vivado Tcl and Vitis Python scripts; verify platform generation and an Arm FreeRTOS build in P0/P3/P4. |
 | Native C tests | MSVC + CMake + Ninja; Python calls a stable C ABI DLL; Windows threading adapter replaces pthreads. |
 | ESP-IDF testing split | Mocked portable logic on Windows; Unity/FreeRTOS/peripheral tests on the actual ESP32. No ESP-IDF `linux` target. |
-| All project files inside the existing folder | Project root is `C:\Users\lingg\Projects\KCCI_technical\Embedded\Logic-Analyzer\Source_Code`; source, environments, dependencies, generated workspaces and outputs stay beneath it. |
+| All project files inside the existing folder | Project root is `C:\Users\lingg\Projects\Logic-Analyzer\Source_Code`; source, environments, dependencies, generated workspaces and outputs stay beneath it. |
 | Ordinary scatter-gather DMA for burst and live | No simple-transfer calls on an SG core; cyclic hardware mode disabled; descriptor reuse follows ownership. |
 | Time-bounded live packets | Flush the current run and close a partial DMA packet on a 2 ms timer as well as the size limit. |
 | Safe multi-producer event transport | FreeRTOS queue of static event-buffer handles; no unprotected shared MessageBuffer. |
@@ -118,7 +124,7 @@ The 4 MiB live pool is only about 41.9 ms of raw buffering at 100 MB/s (10.5 ms 
 
 ## 2. Repository Layout
 
-The existing folder containing this plan is the project root: `C:\Users\lingg\Projects\KCCI_technical\Embedded\Logic-Analyzer\Source_Code`. Create the following entries directly inside it; do not create another enclosing project directory. Relative paths throughout this document resolve from this root.
+The existing folder containing this plan is the project root: `C:\Users\lingg\Projects\Logic-Analyzer\Source_Code`. Create the following entries directly inside it; do not create another enclosing project directory. Relative paths throughout this document resolve from this root.
 
 ```
 Source_Code/
@@ -178,7 +184,7 @@ The decoders live in `common/la_decode/` on purpose: the same C runs on the Zynq
 | CLI, export, HIL | Dedicated 64-bit Windows CPython, pyserial/TCP, pytest, PulseView |
 | Recipes | Python is the canonical runner; PowerShell and optional `just` wrappers call it |
 
-**Project location is fixed by the user:** use `C:\Users\lingg\Projects\KCCI_technical\Embedded\Logic-Analyzer\Source_Code` as the single repository and development root. This is the folder already containing this plan. Initialize Git here if needed. Keep source, documentation, firmware, board files, captures, local dependencies, Python environments, generated workspaces, logs, test results and release packages inside this folder. Do not relocate the project or use a separate checkout/build tree elsewhere.
+**Project location:** `C:\Users\lingg\Projects\Logic-Analyzer\Source_Code` is the single repository and development root. The project was relocated there by explicit user instruction on 18 October 2026. This is the folder containing this plan. Keep source, documentation, firmware, board files, captures, local dependencies, Python environments, generated workspaces, logs, test results and release packages inside this folder. Do not relocate it again or use a separate checkout/build tree elsewhere without explicit instruction.
 
 **Path resolution:** derive `PROJECT_ROOT` from the runner's own location (for example, `Path(__file__).resolve().parents[1]` in `tools/run.py`), not the shell's current directory. Pass that root to Tcl/Vitis scripts explicitly and construct child paths with `pathlib` or `file join`. Use ignored `build/{questa,native,vivado,vitis,esp32,release,reports,tmp,cache}` directories. Run simulators with a working directory beneath `build/questa` so transcript/WLF/work libraries remain local. Configure CMake, Vitis, Vivado and ESP-IDF output/workspace directories explicitly; host captures default to `build/captures`.
 
@@ -495,7 +501,7 @@ Native mock tests are logic checks, not evidence of FreeRTOS preemption, DMA/cac
 
 ## 8. Kick-off Prompt for a Coding Agent
 
-> Implement this v0.4 plan using fully native Windows entirely inside `C:\Users\lingg\Projects\KCCI_technical\Embedded\Logic-Analyzer\Source_Code`. This existing folder is PROJECT_ROOT; keep all project sources, dependencies, environments, generated workspaces, tests, captures and releases beneath it. Do not create an external checkout or build tree. Derive paths from the runner and validate tool path limits at this root. First inspect the actual repository and applicable AGENTS.md. If the repository is only this plan, start P0 scaffolding and make docs/plan.md the implementation source of truth; do not assume generated documentation or runners already exist. Use installed Vivado/Vitis 2026.1, native Questa SystemVerilog tests driven by Python, MSVC/CMake/Ninja native tests, and native ESP-IDF. No WSL, Linux containers, Make or ESP-IDF linux host target is required or authorized as a replacement workflow. Verify exact tool versions and the Questa feature/license smoke in P0. Use ordinary SG DMA for both modes with cyclic mode disabled, explicit buffer ownership, timed live packet flushing and a multi-producer event queue. Apply the corrected full-record throughput gates. Execute phases in order; run relevant verification, record evidence and update status per task. Perform human bench steps only when hardware/access is available and authorized. Do not mark unperformed target tests as passing. Keep the DDR3 PHY project unchanged. If a baseline change becomes necessary, explain the concrete reason before dependent implementation.
+> Implement this v0.4 plan using fully native Windows entirely inside `C:\Users\lingg\Projects\Logic-Analyzer\Source_Code`. This existing folder is PROJECT_ROOT; keep all project sources, dependencies, environments, generated workspaces, tests, captures and releases beneath it. Do not create an external checkout or build tree. Derive paths from the runner and validate tool path limits at this root. First inspect the actual repository and applicable AGENTS.md. If the repository is only this plan, start P0 scaffolding and make docs/plan.md the implementation source of truth; do not assume generated documentation or runners already exist. Use installed Vivado/Vitis 2026.1, native Questa SystemVerilog tests driven by Python, MSVC/CMake/Ninja native tests, and native ESP-IDF. No WSL, Linux containers, Make or ESP-IDF linux host target is required or authorized as a replacement workflow. Verify exact tool versions and the Questa feature/license smoke in P0. Use ordinary SG DMA for both modes with cyclic mode disabled, explicit buffer ownership, timed live packet flushing and a multi-producer event queue. Apply the corrected full-record throughput gates. Execute phases in order; run relevant verification, record evidence and update status per task. Perform human bench steps only when hardware/access is available and authorized. Do not mark unperformed target tests as passing. Keep the DDR3 PHY project unchanged. If a baseline change becomes necessary, explain the concrete reason before dependent implementation.
 
 ## 9. Reference evidence for the revision
 
