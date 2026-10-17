@@ -126,8 +126,10 @@ FPGA folders add Alvin and Bagas. No report DOCX, script or notes were copied.
 Source scope: relocated path documentation, LaTeX sources/scripts/assets,
 presentation source changes, workbook builder, status and current handover.
 Pre-existing W11 source WIP outside this scope remains uncommitted and is
-recorded here; no unrelated files were staged. Commit/push performed after the
-checks; see the git log for the exact commit.
+recorded here; no unrelated files were staged. Commit/push PASS: `1132e93`
+(`docs: move project and add LaTeX report variants`) is on `origin/main`. The
+remaining modified tracked files are the earlier W11/UI/demo source WIP and were
+not part of this task's commit.
 
 ### UART demo UI screenshot set (2026-10-18, captured and verified; source WIP)
 
