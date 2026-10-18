@@ -125,6 +125,14 @@ PDF, `logic-analyzer-design.pptx`, `logic-analyzer-design.pdf` and
 FPGA folders add Alvin and Bagas. No report DOCX, script or notes were copied.
 Source scope: relocated path documentation, LaTeX sources/scripts/assets,
 presentation source changes, workbook builder, status and current handover.
+Shortcut cleanup PASS: updated the OneDrive Desktop `LA UI.lnk` and
+`Stop LA UI.lnk` arguments and working directory to the new project path, plus
+the seven PulseView Start Menu shortcuts that pointed into the moved
+`build/pulseview/` directory. All targets exist; the start/stop VBS launchers
+resolve the project root from their own location. The UI was restarted
+idle/disconnected on `127.0.0.1:8080` after the shortcut test. This shortcut and
+status update is in a follow-up commit.
+
 Pre-existing W11 source WIP outside this scope remains uncommitted and is
 recorded here; no unrelated files were staged. Commit/push PASS: `1132e93`
 (`docs: move project and add LaTeX report variants`) is on `origin/main`. The
