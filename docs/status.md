@@ -55,7 +55,12 @@ commit, and the worktree is clean.
 
 ## Snapshot
 
-### Project completion and source publication (2026-10-18, in progress)
+### Project completion and source publication (2026-10-18, Complete)
+
+**Project status: COMPLETE.** The delivered USB-first instrument and both
+Embedded/FPGA class submissions are finished. All pending intended source was
+committed and pushed as `b933946`; final publication evidence is below. Earlier
+WIP entries retain their historical context and do not describe current status.
 
 User authorizes committing and pushing all pending project work to origin/main
 and marking the project done. Scope: W11 firmware/protocol/UI, ESP32 UART and
@@ -108,6 +113,24 @@ dependencies. Package manifests/lockfile are unchanged. `npm run build`, targete
 generated-artifact or credential-pattern findings. No new RTL/bench measurement,
 website deployment or release tag is claimed. Next: commit/push the full source
 set, then pin the portal to that published source revision and close the ledger.
+
+Source publication PASS: reviewed/staged exactly 83 intended files, with no
+environment, build, log, capture or credential files. Commit **`b933946`**
+(`W11: finalize waveform UI, demos and class deliverables`) pushed successfully
+with `git push origin main`. `git ls-remote origin refs/heads/main` and
+`git rev-parse HEAD` both returned
+`b933946d3a139bff0feca849b5a688b66f1a72ba`; `git status --short --branch`
+showed a clean synchronized main, and the decorated log confirmed origin/main.
+This closeout metadata follow-up records that result and pins portal source
+links to the published source commit. The handover and presentation README now
+identify the published revision. No implementation work remains in class-project
+scope; optional extensions/public product publication remain deferred as listed.
+
+Closeout follow-up verification PASS: portal `npm run validate`, `npm run build`,
+`npm run lint -- lib/docs/snapshot.ts`, and `git diff --check` after pinning
+`b933946`. This follow-up contains only the ledger, handover, presentation README,
+and portal snapshot. Push and clean-worktree/remote equality are checked again
+after this commit; no further implementation or deliverable change is pending.
 
 ### Specifications-table video navigation (2026-10-18, verified and delivered; source WIP)
 

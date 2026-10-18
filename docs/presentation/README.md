@@ -19,8 +19,10 @@ subsystem route plus Q&A.
 
 The product described here is Zybo Z7-10 -> direct Zynq USB -> Windows host ->
 local browser UI. The ESP32 is not part of this presentation's final system.
-Evidence is pinned to repository baseline `b487413` and dated bench/build
-reports, through the October 1 UI correction. No new hardware test is implied.
+Presentation source is published in `b933946`. Evidence comes from dated
+bench/build reports and the 18 October UART capture. The hardware photo and
+demonstration link are included in both class versions. No new hardware test
+is implied by the source publication.
 
 The consulting-pptx-skill parts generator supplies the HTML foundation. The
 content-adapted HTML is the layout source; PowerPoint/PDF are exported from the
