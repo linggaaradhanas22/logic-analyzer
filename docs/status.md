@@ -191,9 +191,14 @@ Reports: `build/reports/check_md_links.py`,
 `build/presentation/{delivery-checks,render-report}.json`,
 `build/presentation/variants/{embedded,fpga}/`,
 `build/reports/presentation-delivery/script-publication.json`, and
-`docs/hardwarex/latex/latex_validation.json`. No blockers remain. Next: commit
-and push this documentation/consistency correction and verify origin/main and
-the worktree.
+`docs/hardwarex/latex/latex_validation.json`. No blockers remain.
+
+Audit publication PASS: commit **`9de0d9c`** (`docs: align all documentation
+with the completed 38-slide release`) contains the 33 intended documentation and
+portal corrections. It was pushed to `origin/main`; the remote SHA and worktree
+checks are recorded here after this follow-up. The class report, presentation,
+presenter-notes, and script copies outside the repository match the verified
+generated sources. No implementation or measured result changed.
 
 ### Specifications-table video navigation (2026-10-18, verified and delivered; historical phase record)
 
