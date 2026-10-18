@@ -61,6 +61,9 @@ commit, and the worktree is clean.
 Embedded/FPGA class submissions are finished. All pending intended source was
 committed and pushed as `b933946`; final publication evidence is below. Earlier
 WIP entries retain their historical context and do not describe current status.
+Dated values below the completion record (for example 37 slides, 177 host tests,
+18-page reports, or baseline `b487413`) describe the state on their entry date;
+the current counts and revision are at the top.
 
 User authorizes committing and pushing all pending project work to origin/main
 and marking the project done. Scope: W11 firmware/protocol/UI, ESP32 UART and
@@ -132,7 +135,67 @@ Closeout follow-up verification PASS: portal `npm run validate`, `npm run build`
 and portal snapshot. Push and clean-worktree/remote equality are checked again
 after this commit; no further implementation or deliverable change is pending.
 
-### Specifications-table video navigation (2026-10-18, verified and delivered; source WIP)
+### Repository-wide documentation consistency audit (2026-10-18, Complete)
+
+User requested a check of every Markdown file and explanation for misalignment,
+with all mismatches corrected. Scope: all tracked Markdown, presentation source
+and generated script/deck deliverables, portal documentation text, and the
+already-delivered class report/presentation copies. No RTL, firmware, protocol,
+or measured-result change.
+
+Corrections: aligned the speaking script with the 38-slide deck (added slide 35,
+renumbered the close, updated shared-result ranges and the 180-test suite);
+aligned deck slide 31 to 180 host tests and replaced the stale visual-check row
+with completed verification and deferred product-release wording; corrected
+`docs/hardwarex/README.md` to 19 pages/eight images and labeled `manuscript.md`
+as the preserved 12 October Markdown manuscript; corrected host-test counts in
+`docs/rtos-design.md` and `docs/test-plan.md`; corrected the P6.3 full
+eight-channel status and completed visual-walkthrough statements; clarified the
+legacy `la-web` single-client limit versus the four-tab unified UI in
+`docs/live-web.md`, `docs/plan.md`, `docs/unified-ui-plan.md`, and the README;
+aligned `docs/using-the-analyzer.md`, `docs/wiring.md`, `docs/windows-dev.md`,
+and `docs/limits.md` with the combined ESP32 UART/SPI/I²C demo; updated portal
+host-test counts and physical-I/O evidence text; replaced remaining
+source/publication wording with publication state; recorded that dated ledger
+values describe their entry date. Historical reviews retain their quoted 167
+count with an explicit scope note.
+
+Verification PASS: `build/reports/check_md_links.py` reports **0 broken relative
+links** and only the intentionally quoted historical test count in
+`docs/presentation/review.md`. Presentation script build/validation: **38
+slides**, 27 key numbers, no forbidden text. Both deck variants rebuilt and
+checked: 38 slides, 23/26-slide custom shows, zero browser errors/geometry
+issues, native PowerPoint renders, photo and exact video URI verified. Script
+Markdown/DOCX/PDF regenerated and hash-verified. Both report PDFs revalidated:
+19 A4 pages, eight images, correct authors, both video links, no overfull text
+or missing glyphs. Portal `npm run validate` PASS (7 subsystems, 79 components,
+21 registers, 26 messages, 186 coverage), production build PASS, changed-file
+lint PASS. Workbook variants remain PASS from the closeout checks: four
+one-page logs, five hours/week, scoring last. `git diff --check` PASS.
+
+Updated deliverable hashes after this audit: Embedded PPTX
+`c721d9997a15c6c41efea033a70d708d97bbeace2e3f37c197d2e4b69eeb0c57`,
+presentation PDF
+`d3c3e6a2d7a748a4b10ff7f3bcaf1914461b93c025518bc6bbb6efb634b223fe`;
+FPGA PPTX
+`4a65512c8c9d1046f803f85e2b8dfd3050e88911ef267f7217a40f58c5ac918f`,
+presentation PDF
+`cca3556b35f92d0fd590b18dc7d94af3f7ce8fbcb11fb3addc058d3b9287b5f1`;
+script DOCX
+`66f2c18a45e1b2b3400a6d61c1fc92bf84f29e91b78acdc97c3720b4f603c92e`,
+script PDF
+`a6afc7c67bab17f232f340c152ae73c42a802279a815635a5d2d33987667d53b`,
+script Markdown
+`a04ca1bf3af7bcea6816e0e4e66bc322831f68f91ee1aa3466f5ef7e2af52e3d`.
+Reports: `build/reports/check_md_links.py`,
+`build/presentation/{delivery-checks,render-report}.json`,
+`build/presentation/variants/{embedded,fpga}/`,
+`build/reports/presentation-delivery/script-publication.json`, and
+`docs/hardwarex/latex/latex_validation.json`. No blockers remain. Next: commit
+and push this documentation/consistency correction and verify origin/main and
+the worktree.
+
+### Specifications-table video navigation (2026-10-18, verified and delivered; historical phase record)
 
 User requests a new YouTube-link row in both report specifications tables for
 quick navigation. Added "Video demonstration" immediately after Hardware name
@@ -2923,9 +2986,10 @@ the implementation is not present.
 4. ESP32-S3 runs the combined UART/SPI/I²C stimulus (COM10 console), not the
    gateway. Analyzer endpoint is COM13 on this bench. Keep common ground and
    GPIO17 -> JC-1; no JE-to-JC loopback on an externally driven input.
-5. UI w11: hard-refresh one browser tab, Connect, Capture/Decode or Apply live
-   config -> Start. Reset UI clears in-memory work and disconnects. Use exports
-   for records to retain. See the operator guide for preview limits.
+5. UI w11: hard-refresh a browser tab (up to four tabs are supported), Connect,
+   Capture/Decode or Apply live config -> Start. Reset UI clears in-memory work
+   and disconnects. Use exports for records to retain. See the operator guide
+   for preview limits.
 6. Checks follow the new task: protocol/decoder changes require test-native;
    host/UI changes require affected host/page/browser checks; hardware gates
    need actual bench evidence. Do not rerun unrelated licensed tools by habit.

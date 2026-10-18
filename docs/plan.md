@@ -83,7 +83,9 @@ executable, not only planned:
   host page uses a small `EventSource` listener.
 - **Settled client policy: single client first**, with the hub built so a
   multi-client fan-out can be enabled later (bounded replay ring, drop
-  accounting, one serial owner).
+  accounting, one serial owner). *Superseded 18 October 2026:* the unified
+  `la-ui` now allows four live browser tabs; the legacy `la-web` path remains
+  single-client.
 - **P9.4, P10.1 and the ESP32-S3 transport port** are gateway-profile
   features, retained and optional/deferred for the USB-first default. P9.1's
   SPI findings and the U00-U09 evidence stay valid and are not rewritten.

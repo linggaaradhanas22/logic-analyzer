@@ -17,8 +17,9 @@ align with the waveform. TxTask returns every preview block through block_q.
 The host capture worker is the sole serial reader during cancellation; Reset
 requests cancellation, waits for the worker's ABORT/cleanup and then clears
 state/disconnects. See protocol.md for wire/preview bounds. These changes passed
-native 18/18, host 177/177 and the SD tests recorded in the current handover;
-old latency/throughput figures below were not remeasured by this update.
+native 18/18, host 180/180 and the SD tests recorded in the current handover;
+old latency/throughput figures below were not remeasured by this update. The
+USB-first class project is complete as of 18 October 2026.
 
 This document is the P1 ownership contract for the Zynq FreeRTOS application
 and the ESP-IDF bridge. It describes static storage and queue policies before

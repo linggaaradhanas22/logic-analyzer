@@ -323,11 +323,11 @@ def build(d, original):
     add('Firmware tests check parsing, buffer reuse, overload and recovery',
         table(['Test area','Recorded result','What the result supports'],[
             ['Portable C code','18/18 native tests; 2026-09-20','Commands, decoders, buffer rules, USB session and trace logic'],
-            ['Release / PC tools','22/22 release prechecks; 167 host tests by 2026-10-01','Generated definitions and host protocol/UI behavior'],
+            ['Release / PC tools','22/22 release prechecks; 180 host tests by 2026-10-18','Generated definitions and host protocol/UI behavior'],
             ['Repeated captures','500 captures passed over USB; 2026-09-19','Exact capture lengths and clean parser/checksum results'],
             ['USB recovery','Split/coalesced frames, garbage/CRC recovery and close during capture','Bounded resynchronization; close during capture returns to IDLE'],
-        ],[25,36,39]),3,'docs/status.md U04/U05/W09/W10; usb-u04-protocol.md; usb-u05-regression.md',
-        'These are dated snapshots from different runs, not one new final-version regression. Native tests run the portable C logic on Windows; they cannot prove ISR timing or physical USB behavior. Bench tests exercise the driver/hardware path. A corrupted frame length can require bounded flush traffic before resynchronization; do not call it instantaneous recovery. The 500-capture soak ran for about 527.8 seconds and checked each capture. Physical unplug/replug and suspend/resume remain separately documented human gates. FPGA simulation is evidence for the FPGA route, not firmware scheduling.')
+        ],[25,36,39]),3,'docs/status.md U04/U05/W09/W11; usb-u04-protocol.md; usb-u05-regression.md',
+        'These are recorded snapshots from different runs; the 180-test host suite is the final 18 October closeout run. Native tests run the portable C logic on Windows; they cannot prove ISR timing or physical USB behavior. Bench tests exercise the driver/hardware path. A corrupted frame length can require bounded flush traffic before resynchronization; do not call it instantaneous recovery. The 500-capture soak ran for about 527.8 seconds and checked each capture. Physical unplug/replug and suspend/resume remain separately documented human gates. FPGA simulation is evidence for the FPGA route, not firmware scheduling.')
     reuse(18,3,'Embedded-class result: this is application acquire/transfer/verify throughput, not a raw USB bus rate. The actual capture pool is 8 MiB; each trial uses sixteen 4 MiB captures.')
     reuse(19,3,'This closes the embedded-specific route with qualified live behavior. The following pages are shared user results and conclusion; no RTL detail is needed.')
 

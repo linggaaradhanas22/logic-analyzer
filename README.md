@@ -5,9 +5,9 @@ timing and communication. This project builds one from a Zybo Z7-10
 (Zynq-7010), an optional ESP32 Wi-Fi gateway and a native-Windows Python host
 tool. Eight 3.3 V channels are sampled in the FPGA at up to 100 MS/s, captured
 around a trigger into DDR through ordinary AXI DMA scatter-gather descriptors,
-relayed over a CRC-protected link, and exported or live-decoded by the host.
-Direct Zynq USB is the default host transport; the ESP32 Wi-Fi gateway is a
-supported optional profile.
+and transferred over a CRC-protected link for export or live decoding by the
+host. Direct Zynq USB is the default host transport; the ESP32 Wi-Fi gateway is
+a supported optional profile.
 
 The implementation source of truth is `docs/plan.md`. The execution ledger,
 measured evidence, blockers and next actions are in `docs/status.md`.
@@ -35,7 +35,8 @@ the completed class-project scope.
 | Host `la-cli` (capture, `.sr`/VCD/PNG export, live decode, trace) | Host-tested; burst and live used on bench |
 | Direct Zynq USB transport (CDC-ACM, 1.62 MB/s measured) | Default product transport since the 2026-09-20 V00 pivot |
 | Live UI | W11 real FPGA waveform + aligned decode, Pause/Follow and Reset; external ESP32 UART browser checks 10/10 on SD (2026-10-18); legacy event-only page retained |
-| Release packaging (BOOT.BIN, optional gateway bin set, Python wheel) | W11 image installed/read-back verified and cold-booted from SD (2026-10-18); public USB identity and release publication/tag remain open |
+| External stimulus demos | ESP32-S3 combined UART/SPI/I²C firmware (`demo-protocols`) verified on the bench; single-UART `demo-uart` retained as a simpler alternative |
+| Release packaging (BOOT.BIN, optional gateway bin set, Python wheel) | W11 image installed/read-back verified and cold-booted from SD (2026-10-18); public USB identity and tagged product release remain deferred |
 
 ## Specifications
 
@@ -85,7 +86,7 @@ not-run, not pass.
 |---|---|
 | `docs/plan.md` | Normative implementation plan and design requirements |
 | `docs/status.md` | Execution ledger: phase state, verified gates, blockers |
-| `docs/current-handover.md` | Current SD image, bench wiring, W11 features, evidence and source/publication state |
+| `docs/current-handover.md` | Current SD image, bench wiring, W11 features, evidence and publication state |
 | `docs/using-the-analyzer.md` | Operating guide: load, verify, capture, live decode, web view, trace |
 | `docs/architecture.md` | Zynq/PL integration, constraints, resource use |
 | `docs/rtos-design.md` | Tasks, queues, ownership, cache contract, measurements |
@@ -94,8 +95,8 @@ not-run, not pass.
 | `docs/decoders.md` | UART/SPI/I²C transition-decoder specification |
 | `docs/wiring.md` | JC/JE/JD pin maps, loopback wiring, power rules |
 | `docs/spi-link.md` | P9.1 SPI bulk-link contract and measured results |
-| `docs/live-web.md` | V01 host live-web bridge contract (SSE, single client, bounded replay ring) |
-| [`docs/unified-ui-plan.md`](docs/unified-ui-plan.md) | W00-W09 unified UI package: one browser workspace for capture, waveform viewing, live decode, exports and trace |
+| `docs/live-web.md` | Host live-web bridge contract (SSE, bounded replay ring); legacy `la-web` is single-client, unified `la-ui` supports four tabs |
+| [`docs/unified-ui-plan.md`](docs/unified-ui-plan.md) | W00-W11 unified UI package: one browser workspace for capture, waveform viewing, live decode, exports and trace |
 | [`docs/usb-migration-implementation-instructions.md`](docs/usb-migration-implementation-instructions.md) | Historical U00-U09 execution package; USB is implemented/adopted, with current continuation linked at the top |
 | [`docs/usb-link.md`](docs/usb-link.md) | Implemented USB CDC-ACM contract and dated integration evidence |
 | `docs/test-plan.md` | Acceptance matrices per phase |

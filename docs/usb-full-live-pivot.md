@@ -5,7 +5,7 @@ profile is the product default. W11 firmware 0x000A0000 / UI w11 add real live
 waveforms + decode, activity focus and Reset UI; the updated SD image passed
 cold boot, UI E2E 6/6 and external UART browser checks 10/10. Use
 [current-handover.md](current-handover.md) for current boot/wiring, hashes,
-evidence and source/publication state. The ordered pivot packets below are
+evidence and publication state. The ordered pivot packets below are
 historical, not instructions to restart implementation.
 
 User-directed scope change (2026-09-19): the analyzer becomes **USB-first**.

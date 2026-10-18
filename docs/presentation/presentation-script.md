@@ -2,14 +2,14 @@
 
 This script explains every slide of the presentation in plain English. Read the text after **Say:** out loud. Text in square brackets is a pointing cue for you, not something to read aloud. Text after **If someone asks:** is extra material for questions.
 
-The deck has 37 slides. There are two independent routes:
+The deck has 38 slides. There are two independent routes:
 
 | Route | Slides to show | Slides you skip |
 |---|---|---|
-| FPGA system | 1–18, then 34–37 | 19–33 |
-| Embedded system | 1–6, then 19–37 | 7–18 |
+| FPGA system | 1–18, then 34–38 | 19–33 |
+| Embedded system | 1–6, then 19–38 | 7–18 |
 
-Slides 1–6 are shared. Slides 7–18 are the FPGA system. Slides 19–33 are the embedded system. Slides 34–37 are the shared results and conclusion. In PowerPoint, open **Slide Show → Custom Slide Show** and choose the route; PowerPoint skips the other subsystem automatically.
+Slides 1–6 are shared. Slides 7–18 are the FPGA system. Slides 19–33 are the embedded system. Slides 34–38 are the shared results and close: the UI screenshot, the decoded-frame close-up, the limits, the conclusion, and the back cover. In PowerPoint, open **Slide Show → Custom Slide Show** and choose the route; PowerPoint skips the other subsystem automatically.
 
 A short term sheet is at the end of this document. Look there first if any acronym is unclear.
 
@@ -49,7 +49,7 @@ A short term sheet is at the end of this document. Look there first if any acron
 >
 > The two sections are independent on purpose. In each section, the other subsystem is treated as a black box, which simply means we agree on its interface and do not look inside it.
 >
-> The deck finishes with shared results and conclusions on slides 34 to 37.
+> The deck finishes with shared results and conclusions on slides 34 to 38.
 >
 > [Point at the table rows.] Pick the row for the subsystem you are presenting, and follow that numbering through the deck.
 
@@ -81,19 +81,19 @@ A short term sheet is at the end of this document. Look there first if any acron
 
 **Route:** Shared.
 
-**On the slide:** A physical wiring diagram. A target board connects to the Zybo through the JC connector. The Zybo connects to a Windows PC through J10 USB. A separate J12 box shows power, JTAG, and console.
+**On the slide:** A photograph of the assembled analyzer on the left, and a board-connection list on the right. The photograph shows the powered Zybo Z7-10 with its USB cables and acquisition leads.
 
 **Say:**
 
 > Here is the final physical system.
 >
-> [Point at the left box.] The target board is the device we want to debug. Its signals come into the analyzer through the JC connector. The signals must be 3.3 volts, and the boards must share a common ground. This design never connects 5-volt signals directly.
+> [Point at the photograph.] This is the assembled analyzer on the bench: the Zybo Z7-10 board, its USB connections, and the jumper leads that carry signals from the target.
 >
-> [Point at the center box.] The analyzer itself is a Zybo Z7-10 board. It contains a Zynq chip with two parts: an FPGA for hardware logic and an ARM processor for software.
+> [Point at the connection list.] The target signals enter the JC header. They must be 3.3 volts, and the boards must share a common ground. This design never connects 5-volt signals directly.
 >
-> [Point at the right box.] The Zybo connects to a Windows PC through the J10 connector using direct USB. The PC runs the analyzer server and shows the results in a browser.
+> The Zynq chip on the board contains two parts: an FPGA for hardware logic and an ARM processor for software.
 >
-> [Point at the J12 box.] J12 is a separate connector for board power, programming, and the console. The console port is useful during development, but it is not the analyzer data connection.
+> The analyzer sends data to a Windows PC through J10 using direct USB. J12 is a separate connector for board power, programming, and the console. The console port is useful during development, but it is not the analyzer data connection.
 >
 > The FPGA samples 8 channels at up to 100 million samples per second. You can record a triggered capture, or watch decoded messages in live mode. The PC displays waveforms and live messages, and it can save captures as files.
 
@@ -699,7 +699,7 @@ A short term sheet is at the end of this document. Look there first if any acron
 
 **Route:** Embedded system.
 
-**On the slide:** A table of test areas and results: Portable C code 18/18 native tests; Release and PC tools 22/22 prechecks and 167 host tests; Repeated captures 500 captures; USB recovery.
+**On the slide:** A table of test areas and results: Portable C code 18/18 native tests; Release and PC tools 22/22 prechecks and 180 host tests; Repeated captures 500 captures; USB recovery.
 
 **Say:**
 
@@ -707,7 +707,7 @@ A short term sheet is at the end of this document. Look there first if any acron
 >
 > [Point at row 1.] Eighteen native tests run on Windows. Native tests exercise the portable C code: commands, decoders, buffer rules, and session logic. They are fast and easy to repeat, but they cannot prove interrupt timing on real hardware.
 >
-> [Point at row 2.] Twenty-two release prechecks and 167 host tests cover the generated definitions and the PC-side tools.
+> [Point at row 2.] Twenty-two release prechecks and 180 host tests cover the generated definitions and the PC-side tools. The 180-test suite is the final closeout run from 18 October.
 >
 > [Point at row 3.] For real behavior, the bench tests do the work. A run of 500 captures passed with exact lengths and clean checksums.
 >
@@ -765,25 +765,49 @@ A short term sheet is at the end of this document. Look there first if any acron
 
 **Route:** Shared close.
 
-**On the slide:** A screenshot of the analyzer application showing a UART waveform and decoded bytes on one timeline, with cursor A marking a sample.
+**On the slide:** The real analyzer UI screenshot: a UART waveform and its decoded bytes on one timeline, with the capture controls visible.
 
 **Say:**
 
 > Now we come back to the shared results, where both subsystems work together.
 >
-> [Point at the screenshot.] This is the actual user interface. The waveform shows one channel, and the decoded bytes sit directly below it on the same timeline. The cursor marks a sample position so you can measure timing. You can zoom, scroll, search for edges, decode a capture, view live messages, and export the results as industry-standard files.
+> [Point at the screenshot.] This is the actual user interface, captured on 18 October from the W11 image. The waveform shows channel 0, and the decoded bytes sit directly below it on the same timeline. You can zoom, scroll, search for edges, decode a capture, view live messages, and export the results as industry-standard files.
 >
-> The screenshot is an offline illustration: I loaded a synthetic UART capture into the viewer, so it is not a new hardware measurement. The important evidence behind this slide is different: on the 26th of September, the final USB image booted from an SD card with no JTAG connection, and all six user-interface end-to-end tests passed on that image. Those tests covered capture, host decoding, live control, and reopening saved captures offline.
+> This is a real external ESP32-S3 UART capture, not a synthetic illustration. The capture used 10 million samples per second, 64 thousand raw samples, channel 0 only, and UART at 115,200 baud. The live session reported 1,464 events and 1,220 real waveform packets with zero gaps.
 >
-> One item is still open. The automated checks pass, but a human visual check on the real board is still on the to-do list. I want to be clear about that boundary.
+> The USB image also booted from an SD card with no JTAG connection, and all six user-interface end-to-end tests passed. The earlier September boot and the current W11 boot both passed. The visual walkthrough was author-confirmed on 12 October and accepted on 18 October.
+>
+> The next slide enlarges the decoded frame so the bytes are easy to read.
 
 ---
 
-## Slide 35 — The device has tested limits and a few release checks left
+## Slide 35 — The decoded UART bytes match the transmitted message
 
 **Route:** Shared close.
 
-**On the slide:** A table of limits: Input voltage, Capture size and rate, Live decoding, Visual UI check, and Public release.
+**On the slide:** A full-width close-up of the real UART waveform with six decoded byte labels, six cards mapping hexadecimal to characters, the UART settings, the bit timing, and the demonstration-video link.
+
+**Say:**
+
+> This is the decoding result in close-up, and it is the clearest single check that the whole path works.
+>
+> [Point at the waveform.] The upper trace is the real signal on channel 0. The labels below it are the bytes recovered by the decoder at their exact sample positions.
+>
+> [Point at the six cards.] Read the bytes from left to right: 4C is L, 41 is A, 2D is a hyphen, 53 is S, 33 is 3, and 0A is a newline. Together they spell LA-S3 followed by a newline, which is exactly the message the ESP32 sent.
+>
+> [Point at the settings.] The UART format is 8 data bits, no parity, and one stop bit at 115,200 baud. At that rate each bit lasts about 8.68 microseconds. With 10 million samples per second, that is about 87 samples per bit, which is plenty of resolution for reliable decoding.
+>
+> [Point at the link.] A video demonstration of the working instrument is available at this link. The slide and the report both include it so you can watch the analyzer operate.
+>
+> The important point is not just that bytes appeared. The decoder recovered the exact six bytes from a real external signal, and the live view kept zero gaps.
+
+---
+
+## Slide 36 — The device has tested limits; product release is deferred
+
+**Route:** Shared close.
+
+**On the slide:** A table of limits: Input voltage, Capture size and rate, Live decoding, Visual UI check, and Public product release.
 
 **Say:**
 
@@ -793,17 +817,17 @@ A short term sheet is at the end of this document. Look there first if any acron
 >
 > [Point at row 2.] The working device is the 100-megahertz design with an 8-mebibyte capture buffer and up to 32,768 pre-trigger samples. The 200-megahertz version is a project-plan stretch item; it has not been built or tested, so the released design stays at 100.
 >
-> [Point at row 3.] Live decoding is qualified at 115,200-baud UART and 10-kilohertz SPI and I²C. Higher traffic can lose data, and the device counts and reports it.
+> [Point at row 3.] Live decoding is qualified at 115,200-baud UART and 10-kilohertz SPI and I²C. Higher traffic can lose data, and the device counts and reports it. The live waveform is a bounded preview, not a lossless recorder; use burst export for a complete record.
 >
-> [Point at row 4.] The automated browser tests pass and the recent viewer fixes are tested offline, but the visual check on the real board is still open.
+> [Point at row 4.] The automated browser tests and the visual walkthrough are complete. The W11 SD image cold-booted on 18 October, and the external UART browser checks passed ten out of ten.
 >
-> [Point at row 5.] SD boot passed, but the USB identity used during development is for in-house use, and the version 1.0 release needs approval.
+> [Point at row 5.] SD boot passed, but the USB identity used during development is for in-house use. A public USB identity and a tagged product release are deferred beyond the completed class project.
 >
 > These are the exact boundaries I am standing behind today.
 
 ---
 
-## Slide 36 — The FPGA handles timing; firmware and the PC make the data useful
+## Slide 37 — The FPGA handles timing; firmware and the PC make the data useful
 
 **Route:** Shared close.
 
@@ -827,7 +851,7 @@ A short term sheet is at the end of this document. Look there first if any acron
 
 ---
 
-## Slide 37 — RTOS Logic Analyzer
+## Slide 38 — RTOS Logic Analyzer
 
 **Route:** Shared close.
 
@@ -843,7 +867,7 @@ A short term sheet is at the end of this document. Look there first if any acron
 - **Why use run encoding?** It saves space when signals repeat, which is common in protocols. The firmware knows the format and reconstructs time from the run counts.
 - **How do you prevent data loss?** Buffers are owned by one party at a time, reuse waits for the last reader, queues have documented drop-and-count behavior, and the hardware reports overflow.
 - **Why is USB 1.62 megabytes per second, not the nominal USB speed?** That number is the measured application throughput for the whole acquire-transfer-verify workflow, not the raw bus signaling rate. Larger chunks and host pacing made the link efficient.
-- **What is not finished?** The human visual check on the real board, the public USB identity, and the version 1.0 release approval. The 200-megahertz stretch design has not been tested.
+- **What is not finished?** The implementation and the class deliverables are complete. A public USB identity, a tagged product release, website deployment, gateway tuning, SUMP integration, and the 200-megahertz stretch remain deferred or unverified.
 
 ---
 

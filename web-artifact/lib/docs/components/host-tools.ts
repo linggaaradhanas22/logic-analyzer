@@ -1193,7 +1193,7 @@ export const hostToolsComponents: ComponentDoc[] = [
         summary:
           'W01-W11 host suites cover the capture store, envelope parity, UART/SPI/I²C decode parity, the /api/* routes against the mock analyzer, exports/offline round trips, trace, real-run waveform framing/callback routing/bounded fanout, cancellation and Reset, and the page DOM-stub run including gaps/frozen pause/history bounds.',
         scope:
-          'W11 final: host 177/177 on 2026-10-17 plus PAGE CHECK and syntax checks. Mock/host checks prove host logic only; the real device/browser gates are separate evidence.',
+          'W11 final closeout: host 180/180 on 2026-10-18 plus PAGE CHECK and syntax checks. Mock/host checks prove host logic only; the real device/browser gates are separate evidence.',
         date: '17 Oct 2026',
         sources: [
           { label: 'UI plan', path: 'docs/unified-ui-plan.md', kind: 'spec' },

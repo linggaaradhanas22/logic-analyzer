@@ -3,7 +3,9 @@
 One fresh-eye review read all 37 PDF slides and the full notes on 2026-10-12.
 The reviewer judged both independent routes understandable; the embedded route
 needed a more explicit sample-format contract on the visible slides. Draft
-score: 59/70 (before corrections). No second review score is claimed.
+score: 59/70 (before corrections). No second review score is claimed. The deck
+later grew to 38 slides with the real UART screenshot, hardware photograph, and
+decoded-frame close-up; this review remains the historical 12 October record.
 
 | # | Slides | Finding | Decision and correction |
 |---|---|---|---|

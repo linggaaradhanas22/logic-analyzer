@@ -213,7 +213,7 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
       'Project Python environment with pyserial, numpy, pyvcd, click, pyyaml, pytest and matplotlib; no hardware.',
     report: 'build/reports/test-host.json (ignored local)',
     evidence:
-      'W11 final PASS 177/177 on 2026-10-17, including real-run waveform framing/routing, bounded fanout, cancellation and Reset; earlier V02-V09 cases remain covered. Pre-existing matplotlib warnings/pytest temp-link cleanup notices are recorded in the ledger.',
+      'W11 final closeout PASS 180/180 on 2026-10-18, including real-run waveform framing/routing, bounded fanout, cancellation and Reset; earlier V02-V09 cases remain covered. Pre-existing matplotlib warnings/pytest temp-link cleanup notices are recorded in the ledger.',
     status: 'host-tested',
   },
   {

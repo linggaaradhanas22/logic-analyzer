@@ -10,7 +10,8 @@ the constraint/CDC decisions behind it.
 
 Firmware 0x000A0000 / UI w11 are running from the updated SD image (JP5=SD),
 with SD USB UI E2E 6/6 and external ESP32 UART browser checks 10/10. See
-[current-handover.md](current-handover.md) for image hashes and source state.
+[current-handover.md](current-handover.md) for image hashes and publication
+state.
 W11 copies exact transition words from owned DMA segments into bounded static
 event buffers, then sends them over USB/SSE beside decoded events. Absolute
 segment timestamps align slots started mid-stream and after decoder gaps.

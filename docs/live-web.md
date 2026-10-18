@@ -8,11 +8,13 @@ its web UI intact. `docs/plan.md` remains normative; `docs/protocol.md` defines
 the analyzer wire protocol and is **not** changed by this bridge (no new wire
 messages).
 
-**Unified UI note (W00-W09, 2026-09-20).** The unified workspace
+**Unified UI note (W00-W11).** The unified workspace
 (`docs/unified-ui-plan.md`) reuses this bridge's hub, SSE feed, `/status` and
-`/control/*` contract unchanged and serves the workspace at `/` with this
-legacy page at `/legacy`. `la-web` keeps serving the page below exactly as
-documented here; the acceptance checks in section 8 still apply to it.
+`/control/*` contract and serves the workspace at `/` with this legacy page at
+`/legacy`. W11 raises the unified server to four live browser tabs; `la-web`
+keeps serving the page below exactly as documented here and remains
+single-client. The acceptance checks in section 8 still apply to the legacy
+path.
 
 **W11 continuation (18 October 2026).** The unified `la-ui` now opts into real
 waveform preview on USB firmware 0x000A0000, verified after SD cold boot. The
@@ -130,10 +132,12 @@ and [current-handover.md](current-handover.md) for current limits and evidence.
 - **Bounded replay ring:** 4096 formatted messages by default. When full the
   oldest message is evicted and `ring_dropped` is counted; the live session is
   never blocked by the ring.
-- **Single client (settled in V00):** `max_clients` defaults to 1. A second
+- **Single client for legacy `la-web`:** its `max_clients` is 1. A second
   concurrent `GET /events` is refused with `409 Conflict` and a short text
-  body; the hub counts `refused`. The hub fan-out is a per-client bounded
-  queue so `max_clients` can be raised later without a redesign.
+  body; the hub counts `refused`. The unified `la-ui` server sets
+  `max_clients=4` and uses the same per-client bounded queues; a fifth feed is
+  refused. The fan-out is per-client, so legacy and unified limits do not
+  change the wire contract.
 - **Slow client:** each client has a 256-message queue. When it is full the
   message is dropped for that client and `client_dropped` is counted; the live
   pump and the analyzer link are never blocked. Reconnect replays the ring.

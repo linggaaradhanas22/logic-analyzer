@@ -1,7 +1,10 @@
 # Independent content review and disposition
 
 One fresh-eye review of all 24 rendered PowerPoint/PDF slides and presenter
-notes was completed on 2026-10-12. The reviewer did not receive authoring
+notes of the original comparison deck was completed on 2026-10-12. The quoted
+test counts and screenshot description belong to that reviewed version; the
+current 38-slide deck and final 180-test host suite are recorded in
+`README.md` and `docs/status.md`. The reviewer did not receive authoring
 instructions. The draft scored 55/70; this is the pre-correction score, not a
 claim of a second review of the corrected deck. Fourteen findings were adopted
 wholly or in part; one optional restructuring suggestion was declined. No
@@ -25,7 +28,9 @@ second review round was run.
 | 14 | 5–17 | Reduce architecture detail / move task inventory to Q&A | Decline | User explicitly requested architecture in depth and firmware/FPGA separation; full technical middle retained |
 | 15 | 21 | Utilization graphic is more prominent than timing-closure headline | Adopt in part | Headline now covers both device fit and 100 MHz timing; numeric timing evidence remains in the paired readout |
 
-Remaining qualifications are explicit: UI screenshot is synthetic/offline; board
-results are dated existing evidence; human visual gate and public release
-identity/tag remain open. Mechanical/layout checks and native PowerPoint
-renders were regenerated after the adopted corrections.
+Remaining qualifications at that review date were explicit: the UI screenshot
+was synthetic/offline, board results were dated existing evidence, and the human
+visual gate and public release identity/tag were open. The walkthrough was later
+author-confirmed (12 October), the real UART screenshot replaced the synthetic
+image, and the class project completed on 18 October. Mechanical/layout checks
+and native PowerPoint renders were regenerated after the adopted corrections.

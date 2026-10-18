@@ -1,7 +1,8 @@
 # Historical wireless-first manuscript — September 2026
 
 Preserved during the 12 October 2026 documentation refresh. The current report
-is `manuscript.md`; this file records the earlier gateway design and estimates.
+is the LaTeX source in `latex/`; `manuscript.md` is the later historical
+Markdown manuscript. This file records the earlier gateway design and estimates.
 
 Filled version of `docs/hardwarex/template.md` for this project. Delete the
 italic template notes when pasting into the Word template. All ten figures are

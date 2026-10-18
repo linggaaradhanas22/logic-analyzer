@@ -3,9 +3,10 @@
 This document is the interface contract for the P9.1 bulk-data link between the
 Zybo PL and the ESP32 gateway. The UART link (JD-1..4, docs/wiring.md) remains
 the command/ACK path; the SPI link carries the bulk Zynq to ESP32 direction
-(burst transfers and live events). It is a P9.1 design document; the measured
-bench gate (>=1.5 MB/s over a 64 MB drain) is recorded in `docs/status.md` when
-it runs.
+(burst transfers and live events). It is a P9.1 design document. Current status:
+the framed-burst gates and a 4 MiB byte-verified capture passed; the 64 MB drain
+target is met on the default direct-USB path at 1.62 MB/s, while the optional
+ESP32 Wi-Fi relay remains at 0.28 MB/s and is deferred. See `docs/status.md`.
 
 ## Physical interface
 

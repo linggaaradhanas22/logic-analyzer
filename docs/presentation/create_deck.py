@@ -267,12 +267,12 @@ def base_content():
     add("Tests cover the FPGA, firmware, host tools and SD boot",
         table(["Test area","Recorded result","What was tested"],[
             ["FPGA simulation","12/12 Questa tests passed; 2026-09-20","Sample order, triggers, encoding, packet endings, stalls and overflow"],
-            ["C code and host tools","2026-09-20: native 18/18 + release 22/22; 2026-10-01: host 167","Protocol messages, decoders, buffer handling and Windows host tools"],
+            ["C code and host tools","2026-09-20: native 18/18 + release 22/22; 2026-10-18: host 180","Protocol messages, decoders, buffer handling and Windows host tools"],
             ["Physical loopback","18/18 external JE→JC tests passed over USB; 2026-09-19","1/10/100 MS/s with counter, walking, PRBS, UART, SPI and I²C patterns"],
             ["Long-running tests","500 captures passed; 60 s UART live test passed","Repeated capture checks and live decoding at the tested data rate"],
             ["SD-card boot","Cold SD boot + 6/6 UI tests passed; 2026-09-26","Boot without JTAG, then run capture, decoding, live and export workflows"]],[25,34,41]),
         3,"Recorded snapshots, not one final-revision run: docs/status.md; usb-u05-regression.md; sd-boot-verification.md",
-        "This table combines dated evidence snapshots, not one new all-tests run. The 167 host-test count is the October 1 host-only correction; native 18 and release 22 are the recorded firmware-era gates. The external loopback matrix is different from the internal self-test mux: it passes through real header wiring. The September 26 SD boot used the packaged USB image, then passed all six UI end-to-end cases after the live loopback jumper was installed. E2E means end-to-end. Automated API/SSE and headless browser checks are evidence; they do not close the remaining human visual click-through gate. No hardware was programmed or retested to build this presentation.")
+        "This table combines dated evidence snapshots, not one new all-tests run. The 180 host-test count is the final 18 October suite; native 18 and release 22 are recorded firmware-era gates. The external loopback matrix is different from the internal self-test mux: it passes through real header wiring. The September 26 SD boot used the packaged USB image, then passed all six UI end-to-end cases after the live loopback jumper was installed. E2E means end-to-end. Automated API/SSE and headless browser checks are evidence; the human visual walkthrough was separately author-confirmed on 12 October and accepted on 18 October. No hardware was programmed or retested to build this presentation.")
 
     add("USB transferred 64 MiB at 1.62 MB/s in each test",
         columns("USB transfer tests / MB/s",svg(
@@ -314,15 +314,15 @@ def base_content():
         ]),3,"build/release/timing_summary.rpt + utilization.rpt, 2026-09-20; docs/status.md, V10 bit PASS",
         "Use the current local routed reports, which are newer than the older P9 resource numbers in architecture.md. LUT is lookup table and BRAM is block RAM. Both utilization bars use the full 0–100 percent available-capacity scale. The block RAM usage is relatively higher because the history ring and output FIFO map into BRAM. WNS is worst negative slack even when its reported number is positive; WHS is worst hold slack. The current report states all user-specified constraints are met. Asynchronous inputs have documented synchronizer/false-path treatment; a timing report is not analog input bandwidth or signal-integrity qualification. No synthesis or routing was rerun for this presentation.","m05")
 
-    add("The device has tested limits and a few release checks left",
+    add("The device has tested limits; product release is deferred",
         table(["Area","Current status","Limit or next step"],[
             ["Input voltage","Eight 3.3 V CMOS inputs; no built-in input protection","Use a common ground and short leads. Add a level shifter for 5 V signals."],
             ["Capture size and rate","100 MS/s; 8 MiB capture buffer; up to 32,768 pre-trigger samples","Reject captures that exceed the buffer. Test the 200 MS/s design before claiming it."],
             ["Live decoding","Tested at 115200-baud UART and 10 kHz SPI/I²C","Higher traffic can lose data; the device counts and reports those losses."],
-            ["Visual UI check","Automated browser tests passed; October fixes tested offline","Check waveform viewing, edge stepping and the main controls on the real board."],
-            ["Public release","SD boot passed; USB identity is still for in-house use","Choose a public USB identity and approve the v1.0 release."]],[25,37,38]),
-        4,"docs/limits.md; docs/status.md, 2026-10-01; build/reports/sd-boot-verification.md",
-        "This is an operational boundary and completion checklist grounded in the project records, not a generic risk slide. The SD boot gate is closed: it passed September 26. The v1.0 tag remains unauthorized and the USB development identity 1209:0001 is for in-house use. The October 1 viewer fixes were host/browser tested against offline/mock data, while the actual board visual run remains open. The firmware and FPGA on the SD image were not changed by those host corrections. The 200 MS/s path is a stretch item rather than an achieved specification. Distinguish device burst capacity, live decoder throughput and browser presentation limits.")
+            ["Visual UI check","Automated browser tests and the visual walkthrough are complete","Use exported captures for records; the live view is a bounded preview."],
+            ["Public product release","SD boot passed; USB identity is still for in-house use","Choose a public USB identity and authorize a tagged product release."]],[25,37,38]),
+        4,"docs/limits.md; docs/status.md, 2026-10-18; build/reports/sd-w11/",
+        "This is an operational boundary and completion checklist grounded in the project records, not a generic risk slide. The class project is complete. The W11 SD boot passed 18 October 2026, and the visual walkthrough was author-confirmed on 12 October and accepted on 18 October. The v1.0 tag remains unauthorized and the USB development identity 1209:0001 is for in-house use; those are deferred product-release items, not open implementation work. The 200 MS/s path is a stretch item rather than an achieved specification. Distinguish device burst capacity, live decoder throughput and browser presentation limits.")
 
     add("The FPGA handles timing; firmware and the PC make the data useful",
         table(["Goal","How the design meets it","What the tests showed"],[

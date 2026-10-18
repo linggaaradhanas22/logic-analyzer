@@ -1,5 +1,12 @@
 # Logic Analyzer with Live Protocol Decoding
 
+> **Historical Markdown manuscript (12 October 2026).** The current class report
+> is the LaTeX source in `latex/` with its compiled Embedded and FPGA PDFs.
+> This file is preserved as the earlier Word/Markdown manuscript and is not kept
+> in sync with W11, the hardware photograph, the demonstration-video links, or
+> the class-specific author variants. Use [status.md](../status.md) for current
+> status.
+
 ## Project and author information
 
 **Author and sole contributor:** Lingga Aradhana Sahadewa

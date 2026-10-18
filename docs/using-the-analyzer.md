@@ -10,8 +10,9 @@ Normal bench startup now uses the **W11 SD image, JP5 = SD**, verified on
 J10 for analyzer data and `python tools/run.py jtag-zynq`. See section 2 and
 [current-handover.md](current-handover.md) for image identity and current state.
 The ESP32 gateway is still supported, but it is optional and is not a supported
-connection target for the unified UI. The current ESP32-S3 runs the standalone
-UART demonstration from `fw-esp32/demo-uart/`.
+connection target for the unified UI. The current ESP32-S3 runs the combined
+UART/SPI/I²C demonstration from `fw-esp32/demo-protocols/`; the single-UART
+`fw-esp32/demo-uart/` build remains available as a simpler alternative.
 
 All commands below run from the project root in PowerShell. Electrical details
 are in `docs/wiring.md`, current limits are in `docs/limits.md`, and development

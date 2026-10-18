@@ -172,9 +172,10 @@ view on 18 October, separately from the automated checks above.
 ## Repository/publication handoff
 
 - The user authorized committing all pending source and pushing `origin/main`.
-  Source commit **`b933946`** is on `origin/main`; the remote SHA matched HEAD
-  and the worktree was clean after pushing. The closeout follow-up pins portal
-  links to that revision. Older WIP statements are historical.
+  Source commit **`b933946`** and completion record **`4190c69`** are on
+  `origin/main`; the remote SHA matched HEAD and the worktree was clean after
+  each push. Portal links are pinned to `b933946`. Older WIP statements are
+  historical.
 - The portal source is included in the closeout. Website deployment is separate
   and has not been performed by this source publication.
 - Compiled class deliverables remain in their delivery folders. Generated

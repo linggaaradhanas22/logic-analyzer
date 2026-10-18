@@ -21,7 +21,7 @@ MUTED = '#607685'
 
 REQUIRED_NUMBERS = ['1.62', '606,411', '606,405', '124.7', '32,768', '4,092', '67,108,864',
                     '41.4', '41.5', '37.93', '61.67', '0.576', '0.022', '18/18', '12/12',
-                    '500', '167', '22/22', '8', '100', '256', '64', '0x40000000', '0x40400000',
+                    '500', '180', '22/22', '8', '100', '256', '64', '0x40000000', '0x40400000',
                     '4C410002', '115,200', '10']
 FORBIDDEN = ('consulting-pptx-skill', 'FINAL DIRECT-USB DESIGN', 'Sources:', 'Text 1', 'YYYY')
 
@@ -117,7 +117,7 @@ def validate(blocks, md_text):
         m = re.match(r'Slide (\d+) — ', title)
         assert m, f'Slide heading without number: {title}'
         numbers.append(int(m.group(1)))
-    assert numbers == list(range(1, 38)), f'Slide numbers wrong: {numbers}'
+    assert numbers == list(range(1, 39)), f'Slide numbers wrong: {numbers}'
     assert 'FPGA system' in md_text and 'Embedded system' in md_text
     missing = [n for n in REQUIRED_NUMBERS if n not in md_text]
     assert not missing, f'Missing key numbers: {missing}'

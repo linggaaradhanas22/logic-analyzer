@@ -40,8 +40,8 @@ def replace_verified(source, destination):
 
 def main():
     report = json.loads((STAGING / 'script-report.json').read_text(encoding='utf-8'))
-    if report['slides'] != 37:
-        raise RuntimeError('Script does not cover all 37 slides')
+    if report['slides'] != 38:
+        raise RuntimeError('Script does not cover all 38 slides')
     for name in FILES:
         if not (STAGING / name).is_file():
             raise RuntimeError(f'Missing staged script file: {name}')

@@ -9,7 +9,7 @@
 > Permana). Both keep all 38 slides and both custom shows. The internal
 > `../deliverables/` copy is the Embedded variant; the FPGA variant is in the
 > FPGA class delivery folder. Current firmware `0x000A0000`, UI `w11`, SD boot
-> and source state are in [`../current-handover.md`](../current-handover.md) and
+> and publication state are in [`../current-handover.md`](../current-handover.md) and
 > [`../status.md`](../status.md).
 
 Purpose: explain the engineering problem, final direct-USB device, architecture,
@@ -44,7 +44,7 @@ Status: complete class deliverable. The user authorized source commit/push on
 ## Deliverables
 
 - `../deliverables/presentation-script.md` / `.docx` / `.pdf`: the complete
-  slide-by-slide speaking script. It covers all 37 slides with spoken
+  slide-by-slide speaking script. It covers all 38 slides with spoken
   paragraphs, pointing cues, likely questions, and a term sheet; each slide is
   tagged with its route and skipped-slide notes. Source of truth:
   `docs/presentation/presentation-script.md`.
@@ -63,10 +63,9 @@ The internal `../deliverables/` files were refreshed with the Embedded variant
 on 18 October 2026. The FPGA variant (`logic-analyzer-design.pptx` and
 `logic-analyzer-design.pdf`) was copied to
 `C:\Users\lingg\Projects\KCCI_technical\FPGA_Proj\Final Project Deliverables`;
-the Embedded variant was copied to the Embedded class folder. The separate
-speaking-script files remain the 12 October source and were not regenerated for
-this image/author update. No `-revised`, dated or numbered output copies are
-created. The parent directory is an explicit user-authorized exception to the
+the Embedded variant was copied to the Embedded class folder. The speaking
+script was regenerated for the current 38-slide deck. No `-revised`, dated or
+numbered output copies are created. The parent directory is an explicit user-authorized exception to the
 usual project-root output rule.
 
 ## Present either subsystem independently
@@ -99,8 +98,9 @@ Slide 35 enlarges `uart-demo-frame.png` across the slide and maps each decoded
 hexadecimal byte to its character: `4C 41 2D 53 33 0A` → `LA-S3` plus newline.
 It includes the 115200-baud 8N1 settings and calculated bit timing (8.68 µs,
 approximately 87 samples at 10 MS/s). Both custom shows include this result.
-The separate 12 October speaking script remains the earlier 37-slide version;
-the PPTX notes and current presenter-notes file cover the new slide.
+The speaking script was updated on 18 October for slide 35 and the current
+38-slide deck; its Markdown, DOCX, and PDF deliverables match the published
+PPTX and presenter notes.
 
 The shared hardware photo is stored at
 `docs/hardwarex/assets/logic-analyzer-hardware.jpeg` and appears on slide 4.
@@ -146,9 +146,10 @@ node docs\presentation\render_deck.mjs
 .venv\Scripts\python.exe -X utf8 docs\presentation\check_delivery.py --check-only
 ```
 
-`check_delivery.py` now verifies the real UART screenshot and its SHA-256 copy
-in staging instead of the old synthetic-image assertion. The two named custom
-shows contain 23 and 26 slides, including the decoding close-up.
+`check_delivery.py` verifies the real UART screenshot, the hardware photograph,
+the decoded-frame close-up, and the exact demonstration URI in both the PPTX and
+the native PowerPoint PDF. The two named custom shows contain 23 and 26 slides,
+including the decoding close-up.
 
 Inspect the native PowerPoint PDF and `build/presentation/previews/powerpoint-*.png`
 slides after the check-only command and before running the final command. The

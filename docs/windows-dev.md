@@ -212,10 +212,12 @@ and `docs/current-handover.md`.
 W11 adds automatic activity focus, actual live waveforms + annotations,
 Pause/Follow and Reset UI. Reset clears in-memory work/browser preferences and
 disconnects. Live rate is the server startup rate, independent of Capture Rate.
-The ESP32-S3 external demo uses GPIO17/115200 8N1 and can be built/flashed via
-`python tools/run.py demo-esp32-uart -- -p COMx flash`; it is not the gateway
-application. Native ROM programming on COM10 and the subsequent plain RESET
-were verified for this bench. See `fw-esp32/demo-uart/README.md`.
+The ESP32-S3 external demo supplies UART, SPI and I²C stimulus and can be
+built/flashed via `python tools/run.py demo-esp32-protocols -- -p COMx flash`;
+it is not the gateway application. Native ROM programming on COM10 and the
+subsequent plain RESET were verified for this bench. The simpler single-UART
+build remains available as `demo-esp32-uart`. See
+`fw-esp32/demo-protocols/README.md` and `fw-esp32/demo-uart/README.md`.
 
 ### Live web view (legacy la-web)
 

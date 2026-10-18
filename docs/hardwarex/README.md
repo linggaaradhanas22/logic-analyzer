@@ -5,19 +5,22 @@
 > 0.17.0 workflow. Two PDF variants exist: Embedded (Lingga Aradhana Sahadewa)
 > and FPGA (Lingga Aradhana Sahadewa, Alvin Hadar, Bagas Budhi Permana). The
 > matching presentation and KCCI workbook were copied to both class delivery
-> folders. The older Word/PDF/workbook under `../` and the 12 October packaged
-> set remain historical and were not modified. For current firmware `0x000A0000`,
-> UI `w11`, SD boot, live-waveform behavior and source/publication state, read
+> folders. The older Word/PDF/workbook outputs associated with the historical
+> Markdown manuscript remain historical and were not modified. For current firmware `0x000A0000`,
+> UI `w11`, SD boot, live-waveform behavior and publication state, read
 > [`../current-handover.md`](../current-handover.md) and [`../status.md`](../status.md).
 
-`manuscript.md` is the report content source for the Embedded system and FPGA
-classes; `latex/hardwarex-report.tex` is the current compiled report source.
-`rtos-implementation.md` supplies the expanded code review. The earlier
+`latex/hardwarex-report.tex` is the current report source. `manuscript.md` is the
+preserved 12 October Markdown manuscript; it predates the W11 live-waveform
+changes, the hardware photograph, the demonstration-video link, and the class
+variants. `rtos-implementation.md` supplies the expanded code review. The earlier
 wireless-first text is preserved in `manuscript-wireless-2026-09.md`.
 
-Author: Lingga Aradhana Sahadewa. Class-project period: 15 September–12 October
-2026. KCCI funded the project. The author confirmed completion of the visual
-walkthrough on 12 October; the execution date was not specified.
+Embedded-variant author: Lingga Aradhana Sahadewa. FPGA variant: Lingga
+Aradhana Sahadewa, Alvin Hadar, Bagas Budhi Permana. Class-project period:
+15 September–12 October 2026. KCCI funded the project. The author confirmed
+completion of the visual walkthrough on 12 October; the execution date was not
+specified.
 
 ## Outputs
 
@@ -33,8 +36,8 @@ Final class deliverables were copied to:
 
 Each folder contains the matching LaTeX report PDF, presentation PPTX/PDF and
 KCCI workbook. The report DOCX, presentation script and presenter notes were not
-copied. The workbook has its implementation plan, four weekly activity sheets and
-the untouched original scoring sheet. The FPGA variant lists Alvin Hadar and
+copied. The workbook has its implementation plan, four phase-based design/implementation
+weekly logs, and the original Project Scoring Sheet as the last tab. The FPGA variant lists Alvin Hadar and
 Bagas Budhi Permana in the team table with RTL-only responsibilities; all other
 work remains Lingga Aradhana Sahadewa's. The embedded variant keeps Lingga as the
 sole member. The old publisher outputs under `../` remain historical, as does the
@@ -97,11 +100,12 @@ unchanged. `workbook-checks.json` records the embedded variant and
 scoring XML hash `f8cebe35...f7877`.
 
 The LaTeX validator checks the rendered PDFs against the current source: A4
-pages, embedded fonts, 1.5 cm margins, seven images (four diagrams and three real
-UART screenshots), required HardwareX-style headings, the correct author block
-for each variant, and no overfull boxes, missing glyphs, template instructions or
-journal-only license/repository fields. The report content is 18 pages in each
-variant. The current editable diagram source is
+pages, embedded fonts, 1.5 cm margins, eight images (one hardware photograph,
+four diagrams and three real UART screenshots), required HardwareX-style
+headings, the correct author block for each variant, the demonstration-video
+hyperlink, and no overfull boxes, missing glyphs, template instructions or
+journal-only license/repository fields. The report content is 19 pages in each
+variant, including the clickable video row in the page-2 specifications table. The current editable diagram source is
 `diagrams/project-report_v2.drawio` with four pages; `assets/figures/` contains
 the PNG copies used by LaTeX and `assets/uart-demo/` contains the real 18 October
 2026 UART UI screenshots.
@@ -110,6 +114,6 @@ The historical 12 October `document-checks.json` and `publication.json` remain
 valid for the preserved Word/PDF/workbook set. The original diagram and report
 are historical, not current default diagrams. No report refresh is evidence of
 new FPGA, firmware, protocol or bench testing. The user-confirmed walkthrough is
-explicitly separate from machine-measured results. The current source is committed
-with the 18 October project move and LaTeX/class-deliverable update; the
-historical Word/PDF binaries remain unchanged.
+explicitly separate from machine-measured results. The current source was
+published on 18 October 2026 in commits `b933946` and `4190c69`; the historical
+Word/PDF binaries remain unchanged.

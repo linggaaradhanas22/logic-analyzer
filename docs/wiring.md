@@ -155,11 +155,14 @@ ribbon removed.
 - **Current W11 bench (2026-10-18): JP5 = SD, JP6 = USB.** The verified SD image
   starts firmware 0x000A0000 without JTAG. JP5 = JTAG is only for development
   loading; power-cycle after changing it. See `docs/current-handover.md`.
-- **Current external UART demonstration:** ESP32-S3 GPIO17 -> JC-1 (CH0) and
-  ESP32 GND -> JC-5 or JC-11, at 115200 8N1. Power both boards independently;
-  never connect either board's VCC to the other. Remove any JE-1 -> JC-1
-  self-test jumper before driving JC-1 externally. The S3 runs
-  `fw-esp32/demo-uart/`, not the optional gateway.
+- **Current external protocol demonstration:** ESP32-S3 GPIO17 -> JC-1 (CH0,
+  UART 115200 8N1), SPI GPIO12/11/10 -> JC-2/3/4 (CH1/2/3), I²C GPIO9/8 ->
+  JC-7/8 (CH4/5), and ESP32 GND -> JC-5 or JC-11. The I²C demo also needs
+  GPIO9↔GPIO4 and GPIO8↔GPIO5 loopback. Power both boards independently; never
+  connect either board's VCC to the other. Remove any JE-to-JC self-test jumper
+  before driving those inputs externally. The S3 runs
+  `fw-esp32/demo-protocols/`, not the optional gateway. The single-UART
+  `fw-esp32/demo-uart/` build is an optional simpler stimulus.
 - Keep the ESP32 on its own USB or approved 3.3 V supply and connect signal ground.
 - Do not power an ESP32 GPIO from a 5 V rail.
 - Keep acquisition leads short; inspect idle levels before enabling a patgen output.

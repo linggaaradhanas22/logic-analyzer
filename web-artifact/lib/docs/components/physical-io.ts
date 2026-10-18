@@ -43,8 +43,8 @@ export const physicalIoComponents: ComponentDoc[] = [
       },
       {
         status: 'implemented-unverified',
-        summary: 'No arbitrary external signal source has been characterized through these inputs.',
-        scope: 'Only the on-board pattern generator was looped back; the external voltage, edge-rate and stimulus matrix remains open.',
+        summary: 'The full external voltage, edge-rate and arbitrary-stimulus matrix has not been characterized.',
+        scope: 'An external ESP32-S3 UART source at 3.3 V/115200 baud was captured and decoded on 18 October 2026, but a systematic external voltage, edge-rate and arbitrary-source matrix remains open.',
         sources: [{ label: 'Wiring and header map', path: 'docs/wiring.md', kind: 'spec' }],
       },
     ],

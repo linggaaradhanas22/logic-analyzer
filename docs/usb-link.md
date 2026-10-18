@@ -216,10 +216,12 @@ trace/export compatibility, bounded failure recovery and >=1.5 MB/s verified
 payload over 64 MiB (67,108,864 bytes). Use decimal MB/s and state timing bounds;
 the existing P9 harness already transfers MiB despite its short 'MB' label.
 
-Decisions still open: usable USB identity; demonstrated ISR deferral; static
-memory sizing and cache arrangement; exact descriptor bytes; board/power bench
-confirmation; host tuning justified by measurements; optional wireless support
-and the live browser-view scope. None is a passing implementation result.
+Decisions still open at proposal time: usable USB identity; demonstrated ISR
+deferral; static memory sizing and cache arrangement; exact descriptor bytes;
+board/power bench confirmation; host tuning justified by measurements; optional
+wireless support and the live browser-view scope. U02-U09 later resolved the
+implementation decisions; the public USB identity remains deferred. These were
+proposal items, not passing implementation results.
 
 ## 9. Frozen integration contract (U02, 2026-09-18)
 

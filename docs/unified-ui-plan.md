@@ -19,9 +19,9 @@ Firmware 0x000A0000 and UI w11 passed native 18/18, host **180/180** and real
 ESP32 browser tests; the updated SD image cold-booted on 18 October with USB UI
 E2E 6/6 and browser checks 10/10. The unified UI now supports up to four live
 browser tabs with fan-out; a fresh live start clears stale replay, and the
-legacy `la-web` contract remains single-client. See
-[current-handover.md](current-handover.md) for image hashes, current boot/wiring,
-evidence and source-WIP/publication state.
+legacy `la-web` contract remains single-client. The class project is complete;
+see [current-handover.md](current-handover.md) for image hashes, current
+boot/wiring, evidence and publication state.
 
 Live preview carries exact FPGA transition words on the decoder's absolute
 sample clock, including mid-stream slot starts. History is two seconds or
@@ -49,8 +49,9 @@ legacy page remain available; no RTL, regmap or DMA-mode change was required.
   per-slot live with auto-stop, trace dump, 1M-sample capture in 1.58 s), the
   V04 regression 8/8 after the disconnect slot-cleanup fix, and a real
   headless-Chrome bench smoke with zero console errors. The **[HUMAN]**
-  visual click-through remains open and is not claimed as passing; the USB
-  BOOT.BIN SD boot was bench-verified on 2026-09-26.
+  visual click-through was still open at that time and was not claimed as
+  passing then; the USB BOOT.BIN SD boot was bench-verified on 2026-09-26, and
+  the visual walkthrough was later author-confirmed (12 October).
 
 The device-side boundary held: no firmware, PL, register-map or protocol file
 was modified by any packet.
@@ -210,7 +211,7 @@ the same implementation in `host/la_ui/server.py`. `la-web` is unchanged.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────┐
-│ [COM13 ▾] [Connect]  ● linked  fw 0x00090000  pl 0x4C410002   [Ping] │
+│ [COM13 ▾] [Connect]  ● linked  fw 0x000A0000  pl 0x4C410002   [Ping] │
 ├───────────────┬───────────────────────────────────────────────────────┤
 │ Connection    │  Waveform / Timeline canvas                           │
 │  ports, ping  │   time ruler                                          │

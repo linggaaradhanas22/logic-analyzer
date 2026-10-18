@@ -228,5 +228,6 @@ Recorded results relevant to this design are:
   Source: `docs/rtos-design.md`, P7.6/P8.2 evidence.
 
 The current code and these dated reports support an explicit RTOS explanation.
-They do not establish fresh timing measurements, every task's runtime CPU load,
-or completion of the still-open human browser/real-board visual walkthrough.
+They do not establish fresh timing measurements or every task's runtime CPU
+load. The human browser/real-board visual walkthrough was author-confirmed on
+12 October 2026 and accepted on the current W11 view on 18 October 2026.

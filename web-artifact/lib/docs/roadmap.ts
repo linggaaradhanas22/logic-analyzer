@@ -155,7 +155,7 @@ export const ROADMAP: RoadmapPhase[] = [
     statusNote:
       'USB-first class project complete, 2026-10-18: PC-hosted live view, W11 real waveforms, aligned decode, activity focus, Reset UI, verified SD boot and both class deliverable sets. SD UI E2E 6/6 and browser/external-UART checks 10/10 passed. SUMP and public product-release work are deferred beyond the completed scope.',
     evidence:
-      'P10.1 page and /ws WebSocket carried the decoded LA-TEST bytes plus stats over the phone hotspot (2026-09-14) with test-esp32-mocks 4/4; the host bridge passed the V04 USB gates 8/8 on 2026-09-20 (60 s zero-drop 606,411 events, SPI/I2C, stop-on, compact, overload recovery 0.05 s). W11 firmware 0x000A0000 / UI w11 passed native 18/18, host 177/177, SD USB UI E2E 6/6 and browser external-UART 10/10 (2026-10-18).',
+      'P10.1 page and /ws WebSocket carried the decoded LA-TEST bytes plus stats over the phone hotspot (2026-09-14) with test-esp32-mocks 4/4; the host bridge passed the V04 USB gates 8/8 on 2026-09-20 (60 s zero-drop 606,411 events, SPI/I2C, stop-on, compact, overload recovery 0.05 s). W11 firmware 0x000A0000 / UI w11 passed native 18/18, host 180/180, SD USB UI E2E 6/6 and browser external-UART 10/10 (2026-10-18).',
     remaining:
       'Deferred beyond the class project: P10.2 sigrok/SUMP bridge (no signed virtual-COM pair driver; docs/sigrok-bridge.md), website deployment, public USB identity and a tagged product release. No new external SPI/I2C preview or overload qualification is claimed by W11.',
     subsystems: ['esp32-gateway', 'host-tools', 'zynq-rtos'],

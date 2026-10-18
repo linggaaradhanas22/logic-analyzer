@@ -127,10 +127,12 @@ that scope. The limits below remain applicable to the completed instrument.
   the CDC host transport, and its USB-Serial-JTAG console is disabled in the
   firmware configuration).
 - **Current external S3 demo differs from that gateway profile.** It runs
-  `demo-esp32-uart`, GPIO17 at 115200 8N1, and mirrors heartbeat on native USB
-  Serial/JTAG COM10. Manual BOOT/RESET/native-ROM programming was verified
-  because the bridge port did not enumerate. Do not apply the gateway's
-  native-USB console restriction to this standalone demo.
+  `demo-esp32-protocols` (UART GPIO17 at 115200 8N1, SPI, and I²C) and mirrors
+  console logs on native USB Serial/JTAG COM10. Manual
+  BOOT/RESET/native-ROM programming was verified because the bridge port did not
+  enumerate. Do not apply the gateway's native-USB console restriction to this
+  standalone demo. The single-UART `demo-esp32-uart` build is an optional
+  simpler alternative.
 - Wi-Fi credentials live only in the ignored `build/esp32/sdkconfig`; a fresh
   checkout must set them with `tools/set_wifi.py` before network gates.
 - `build/reports` and release artifacts are ignored: on another checkout a
