@@ -126,7 +126,7 @@ def test_ping_and_state(ui):
     assert payload["connected"] is True
     assert payload["pong"]["pl_id"] == 0x4C410002
     status, payload = _json(server, "GET", "/api/ping")
-    assert status == 200 and payload["pong"]["fw_version"] == 0x00090000
+    assert status == 200 and payload["pong"]["fw_version"] >= 0x00090000
 
 
 def test_capture_viewer_and_exports(ui):
@@ -201,6 +201,14 @@ def test_live_per_slot_and_auto_stop(ui):
         time.sleep(0.05)
     assert any(message.get("e") for message in reader.messages), \
         "no live UART events reached the SSE feed"
+    if state.pong["fw_version"] >= 0x000A0000:
+        deadline = time.monotonic() + 5.0
+        while not any("waveform" in message for message in reader.messages) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        waves = [message["waveform"] for message in reader.messages if "waveform" in message]
+        assert waves, "real waveform packets did not reach the SSE feed"
+        assert all(wave["rate"] == 100_000_000 and wave["end"] > wave["start"] and
+                   all(word >> 8 for word in wave["words"]) for wave in waves)
 
     status, payload = _json(server, "POST", "/control/start?slot=1")
     assert status == 200 and payload["slots"][1] == "streaming"

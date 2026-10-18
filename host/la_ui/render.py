@@ -1,8 +1,8 @@
 """Server-side decimation and sample windows for the viewer (W01).
 
-The page never receives a full capture by default. It asks for a min/max
-envelope of roughly one bucket per horizontal pixel and, when zoomed in, for
-exact sample windows. Envelopes are built from the lazily decoded numpy
+The page requests bounded exact sample windows (including an entire small
+record when it fits the detail limit) and a min/max envelope of roughly one
+bucket per horizontal pixel for large records. Envelopes use the lazy numpy
 sample array (an RLE capture is never expanded twice) and served as compact
 little-endian binary:
 

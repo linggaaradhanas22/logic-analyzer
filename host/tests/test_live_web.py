@@ -124,6 +124,47 @@ def test_ring_overflow_replay_and_drop_accounting() -> None:
         hub.detach(feed)
 
 
+def test_attach_replays_only_the_newest_queue_sized_history() -> None:
+    hub = LiveEventHub(ring_size=8, client_queue=3)
+    _publish_indexed(hub, 7)
+    feed = hub.attach()
+    try:
+        replayed = [feed.queue.get_nowait() for _ in range(3)]
+        assert [json.loads(message)["e"][0][0] for message in replayed] == [4, 5, 6]
+        assert hub.stats()["client_dropped"] == 0
+    finally:
+        hub.detach(feed)
+
+
+def test_begin_session_clears_replay_and_queues_but_keeps_clients() -> None:
+    hub = LiveEventHub(client_queue=8, max_clients=2)
+    first = hub.attach()
+    second = hub.attach()
+    _publish_indexed(hub, 4)
+    assert first.queue.qsize() == 4 and second.queue.qsize() == 4
+    hub.begin_session()
+    assert hub.stats()["clients"] == 2
+    assert hub.events == hub.stats()["messages"] == 0
+    assert not hub._ring and not hub._wave_ring
+    assert first.queue.empty() and second.queue.empty()
+    assert hub.stats()["client_dropped"] == 0
+    hub.detach(first)
+    hub.detach(second)
+
+
+def test_multi_client_fanout_sends_the_same_message() -> None:
+    hub = LiveEventHub(max_clients=2)
+    first = hub.attach()
+    second = hub.attach()
+    try:
+        message = hub.publish_frame([_event(0, 1, 9, b"X")])
+        assert message is not None
+        assert first.queue.get_nowait() == second.queue.get_nowait() == message
+    finally:
+        hub.detach(first)
+        hub.detach(second)
+
+
 def test_single_client_conflict_and_release() -> None:
     hub = LiveEventHub()
     first = hub.attach()

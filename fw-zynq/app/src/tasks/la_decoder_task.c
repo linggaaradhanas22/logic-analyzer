@@ -132,8 +132,8 @@ static void decoder_drain_segments(la_decoder_ctx_t *ctx)
             /* P8.5: busy time around the feed is the decoder throughput
              * metric (the reads themselves happen inside the core). */
             XTime_GetTime(&start);
-            (void)la_decoder_core_feed_segment(&ctx->core, words, word_count,
-                                               message.sequence, decoder_event,
+            (void)la_decoder_core_feed_segment_at(&ctx->core, words, word_count,
+                                               message.sequence, message.first_sample, decoder_event,
                                                ctx);
             XTime_GetTime(&end);
             ctx->app->decoder_words[ctx->slot] += word_count;

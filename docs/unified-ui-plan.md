@@ -9,11 +9,28 @@ execution package for that work. `docs/plan.md` remains the normative overall
 plan; `docs/live-web.md` remains the frozen contract for the existing host
 bridge, which this package extends rather than replaces.
 
-**Planning only.** This document records the frozen decisions and the ordered
-packets. No implementation is authorized until the user issues an execution
-instruction.
+## Current continuation — W11, 18 October 2026
 
-## Implementation status (2026-09-20)
+The original planning authorization and W00-W09 scope below are historical;
+those packets were implemented. The latest user-authorized W11 change adds
+real live waveforms, activity-focused capture rendering and Reset UI. This
+explicitly supersedes the original "events only/no firmware change" boundary.
+Firmware 0x000A0000 and UI w11 passed native 18/18, host **180/180** and real
+ESP32 browser tests; the updated SD image cold-booted on 18 October with USB UI
+E2E 6/6 and browser checks 10/10. The unified UI now supports up to four live
+browser tabs with fan-out; a fresh live start clears stale replay, and the
+legacy `la-web` contract remains single-client. See
+[current-handover.md](current-handover.md) for image hashes, current boot/wiring,
+evidence and source-WIP/publication state.
+
+Live preview carries exact FPGA transition words on the decoder's absolute
+sample clock, including mid-stream slot starts. History is two seconds or
+16,384 runs and 10,000 annotations per slot, with visible omissions/gaps.
+Pause freezes a bounded snapshot. Reset stops/cancels acquisition, disconnects
+and clears session/browser settings. The prior raw acquisition and event-only
+legacy page remain available; no RTL, regmap or DMA-mode change was required.
+
+## Historical W00-W09 implementation status (2026-09-20)
 
 - **W00 complete**: the scope freeze is in `docs/plan.md` and `docs/status.md`.
 - **W01-W07 complete locally**: `host/la_ui/` (store, decimation, native
@@ -67,8 +84,8 @@ These were settled with the user before this document; they are not open.
 | UI form | Local browser page served by the Python host; no desktop shell |
 | Frontend stack | Hand-written vanilla JS + Canvas; no npm, no CDN, no build step |
 | Waveform features | Zoom/pan + time ruler + cursor readout; channel labels/colors/reorder/height; dual cursors A/B with measurements; protocol overlays on captures; trigger marker + pre/post boundary; edge/glitch annotations and search; save/load view state and screenshots |
-| Live content | Decoded events only (no raw waveform while streaming); no firmware/protocol change |
-| Live display | Time-aligned event timeline (not a raw signal waveform) |
+| Live content | W11: actual FPGA transition preview plus decoded events; original events-only scope superseded by user authorization |
+| Live display | W11: real digital traces with aligned protocol annotations, Pause/Follow, zoom and Fit history |
 | Capture decoding | Yes, host-side, in the first version, via the existing native C decoders |
 | Capture size target | Up to 1M samples smoothly; larger allowed with a warning and decimation |
 | Device support | Direct-USB Zynq profile only (`serial://COMx`) |
@@ -86,7 +103,7 @@ These were settled with the user before this document; they are not open.
 | Trace display | Time-aligned timeline canvas like `la-cli trace` |
 | Browser | Chrome/Edge only |
 | Theme | Dark default |
-| Live history | Bounded by event count (default 100,000 events per decoder, drop counted) |
+| Live history | W11: two seconds or 16,384 runs plus 10,000 annotations per slot; omissions/gaps counted |
 | Capture store | Host session memory only; files written only on export |
 | Open formats | `.sr` (sigrok), `.vcd`, `.csv` |
 | Waveform PNG | Client canvas snapshot; the host matplotlib PNG stays for the CLI |
@@ -501,9 +518,12 @@ The bench target is `serial://COM13` with the current V06/V10 USB image; the
 
 ## 9. Rollback and handoff
 
-- Rollback is trivial: the package is host-only. Removing the `la-ui` entry
-  point and the `host/la_ui/` package returns the repository to the current
-  state; `la-cli`, `la-web` and the legacy page are untouched throughout.
+- Current continuation is [current-handover.md](current-handover.md). W11 is
+  firmware + host + additive protocol, so rollback must use a matched firmware/
+  host pair; simply deleting the UI package no longer describes the whole change.
+- The original W00-W09 host-only rollback remains historical: its original
+  packets did not modify device files. Earlier images are backed up under
+  `build/reports/sd-w11/baseline/`; never overwrite the current card implicitly.
 - The gateway profile, its web UI and all device evidence remain valid and
   are not modified by any packet.
 - Update `docs/status.md` at the end of every packet with the date, files,

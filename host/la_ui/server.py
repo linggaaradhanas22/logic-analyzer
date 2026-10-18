@@ -37,7 +37,7 @@ from .open import OpenError, open_capture
 from .render import DETAIL_MAX_SAMPLES, decode_window, encode_envelope
 from .store import Capture, CaptureStore
 
-UI_VERSION = "w10"
+UI_VERSION = "w11"
 PAGE_DIR = Path(__file__).resolve().parent / "static"
 STATIC_FILES = {
     "index.html": "text/html; charset=utf-8",
@@ -129,7 +129,7 @@ class UiState:
         self.pong: dict | None = None
         self.store = CaptureStore()
         self.jobs = JobRunner()
-        self.hub = LiveEventHub()
+        self.hub = LiveEventHub(max_clients=4, client_queue=512)
         self.controller: LiveSessionController | None = None
         self.rate_text = str(rate)
         self.sample_div = sample_div(parse_size(rate))
@@ -151,6 +151,10 @@ class UiState:
     # -- connection ---------------------------------------------------------
 
     def connect(self, target: str) -> dict:
+        with self.device_lock:
+            return self._connect(target)
+
+    def _connect(self, target: str) -> dict:
         target = str(target or "").strip()
         if not target:
             raise ApiError(400, "target is required (serial://COMx)")
@@ -178,6 +182,7 @@ class UiState:
     def disconnect(self) -> dict:
         with self.lock:
             controller = self.controller
+            waveform_supported = bool(self.pong and self.pong["fw_version"] >= 0x000A0000)
         if controller is not None and controller.state != "idle":
             controller.stop_all()
         with self.lock:
@@ -189,6 +194,11 @@ class UiState:
             self.hub.target = ""
             self.hub.state = "idle"
         if client is not None:
+            if waveform_supported:
+                try:
+                    client.configure_waveform(False)
+                except (AnalyzerError, TransportError):
+                    pass
             self._clear_decoder_slots(client)
             client.close()
         return {"connected": False}
@@ -213,6 +223,29 @@ class UiState:
             self.disconnect()
         except Exception:  # noqa: BLE001 - shutdown must not raise
             pass
+
+    def reset(self) -> dict:
+        """Stop work before discarding session state; leave the device detached."""
+        if self.controller is not None and not self.controller.stop_all():
+            raise ApiError(409, "live acquisition is still stopping; retry Reset UI")
+        job_id = self.jobs.running_id
+        if job_id is not None:
+            self.cancel_job(job_id)
+            if not self.jobs.wait_idle(timeout=8.0):
+                raise ApiError(409, "acquisition is still stopping; retry Reset UI")
+        with self.device_lock:
+            if self.client is not None and self.trace_active:
+                self.client.trace_control(p.TRACE_STOP)
+            self.disconnect()
+            self.store.clear()
+            self.jobs = JobRunner()
+            self.trace_model = None
+            self.trace_active = False
+            self.decoder_specs = ["", "", ""]
+            self.patgen_mode = "off"
+            self.hub.reset()
+            self._build_controller_locked()
+        return self.state_snapshot()
 
     def require_client(self) -> AnalyzerClient:
         with self.lock:
@@ -254,7 +287,8 @@ class UiState:
         if self.client is not None:
             self.controller = LiveSessionController(
                 self.client, self.hub, slot_configs, stream_config,
-                prepare=self._live_prepare, stop_on_overrun=False)
+                prepare=self._live_prepare, stop_on_overrun=False,
+                on_waveform=self.hub.publish_waveform)
 
     def connection_info(self) -> dict:
         with self.lock:
@@ -273,6 +307,7 @@ class UiState:
                 "slots": (controller.slot_states() if controller is not None
                           else ["unconfigured"] * 3),
                 "version": UI_VERSION,
+                "waveform_supported": bool(self.pong and self.pong["fw_version"] >= 0x000A0000),
             }
 
     def state_snapshot(self) -> dict:
@@ -350,6 +385,9 @@ class UiState:
                     "message": "streaming", "slots": controller.slot_states()}
 
     def _live_prepare(self) -> None:
+        self.hub.begin_session()
+        if self.pong and self.pong["fw_version"] >= 0x000A0000:
+            self.require_client().configure_waveform(True)
         if self.patgen_mode != "off":
             self._configure_patgen(self.patgen_mode, self.sample_div)
 
@@ -456,7 +494,7 @@ class UiState:
                 self._configure_patgen(meta["patgen"], meta["sample_div"])
             progress(0.05, "arming")
             try:
-                result = client.capture(config, timeout_s=timeout_s)
+                result = client.capture(config, timeout_s=timeout_s, cancel_event=cancel)
             except (AnalyzerError, TransportError) as exc:
                 raise ApiError(502, f"capture failed: {exc}") from exc
             if cancel.is_set():
@@ -484,14 +522,8 @@ class UiState:
     def cancel_job(self, job_id: str) -> bool:
         job = self.jobs.get(job_id)
         self.jobs.cancel(job_id)
-        if job.kind == "capture" and job.state == "running":
-            # Cooperative: ABORT the device so a stuck transfer ends early.
-            try:
-                client = self.client
-                if client is not None:
-                    client.abort(timeout_s=2.0)
-            except Exception:  # noqa: BLE001 - best effort
-                pass
+        # The capture worker observes cancel and sends ABORT itself. The HTTP
+        # thread must not read the same serial stream concurrently.
         return True
 
     # -- host decode ---------------------------------------------------------
@@ -840,6 +872,10 @@ class _UiHandler(BaseHTTPRequestHandler):
 
     def _route_post(self, path: str, query: dict) -> None:
         state = self.state
+        if path == "/api/reset":
+            self._read_body()
+            self._send_json(HTTPStatus.OK, state.reset())
+            return
         if path in ("/control/start", "/control/stop"):
             self._route_control(path, query)
             return

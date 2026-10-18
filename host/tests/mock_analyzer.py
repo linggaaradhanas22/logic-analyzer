@@ -43,7 +43,7 @@ STATUS_PAYLOAD = (
 assert len(STATUS_PAYLOAD) == 52
 
 
-_LIVE_SCENARIOS = ("live", "live_link_overrun", "live_compact", "live_stop_on")
+_LIVE_SCENARIOS = ("live", "live_link_overrun", "live_compact", "live_stop_on", "live_waveform")
 
 
 def counter_samples(total: int) -> bytes:
@@ -129,7 +129,8 @@ class MockAnalyzer:
                     return
                 if self.scenario == "noise_then_pong":
                     self._send_raw(connection, b"\x00garbage\xff\xaa" * 4)
-                self._send(connection, p.PONG, struct.pack("<IIQ", 1, 0x4C410002, 42))
+                version = 0x000A0000 if self.scenario == "live_waveform" else 1
+                self._send(connection, p.PONG, struct.pack("<IIQ", version, 0x4C410002, 42))
             elif message_type == p.GET_STATUS:
                 if self.scenario == "stale_nak_status":
                     # A duplicate NAK for an older ARM request must be ignored
@@ -177,6 +178,8 @@ class MockAnalyzer:
             elif message_type == p.EVT_CFG:
                 self.last_evt_format = p.unpack_evt_cfg(payload)
                 self._send(connection, p.ACK, p.pack_ack(p.EVT_CFG, sequence))
+            elif message_type == p.WAVE_CFG:
+                self._send(connection, p.ACK, p.pack_ack(p.WAVE_CFG, sequence))
             elif message_type == p.LINK_CFG:
                 self.last_link_transport = p.unpack_link_cfg(payload)
                 self._send(connection, p.ACK, p.pack_ack(p.LINK_CFG, sequence))
@@ -318,6 +321,10 @@ class MockAnalyzer:
         `live` ends with a stage-1 decoder overrun; `live_link_overrun` ends
         with a stage-2 link overrun (the P8.4 relay report). `live_compact`
         instead sends one EVT_BLOCK with a delta escape."""
+        if self.scenario == "live_waveform":
+            words = txn_words([(100, 1), (87, 0), (87, 1), (100, 0)])
+            self._send(connection, p.EVT_WAVEFORM,
+                       struct.pack("<BBHIQI", 1, 1, 4, 10_000_000, 0, 0) + words)
         if self.scenario == "live_compact":
             self._stream_live_compact(connection)
             return

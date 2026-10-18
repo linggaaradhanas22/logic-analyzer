@@ -28,6 +28,7 @@ def source_files() -> list[Path]:
         LATEX / "hardwarex-report.tex",
         LATEX / "hardwarex-embedded.tex",
         LATEX / "hardwarex-fpga.tex",
+        ROOT / "docs/hardwarex/assets/logic-analyzer-hardware.jpeg",
         LATEX / "HardwareXTemplate_20210707.tex",
         Path(__file__),
         ROOT / "tools" / "validate_hardwarex_latex.py",

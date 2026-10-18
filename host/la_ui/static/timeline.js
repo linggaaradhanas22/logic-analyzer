@@ -1,7 +1,7 @@
 /* Unified UI timeline renderers (W03 live, W06 trace).
  *
- * LiveTimeline draws one decoder slot's decoded events on a sample-time axis
- * with a bounded history and auto-follow; TraceTimeline draws the P8.3 trace
+ * LiveTimeline retains the legacy event view. LiveWaveform draws actual FPGA
+ * runs with aligned decoding and bounded/frozen history. TraceTimeline draws the P8.3 trace
  * model (task lanes, busy spans, queue/stream/mark/ISR markers) on a
  * millisecond axis. Both are plain canvases owned by the app.
  */
@@ -201,6 +201,175 @@
     }
   }
 
+  class LiveWaveform extends window.LAWaveform.WaveformView {
+    constructor(canvas, slot) {
+      super(canvas);
+      this.slot = slot;
+      this.runs = [];
+      this.events = [];
+      this.maxEvents = 10000;
+      this.dropped = 0;
+      this.gaps = 0;
+      this.follow = true;
+      this.sampleRate = 100000000;
+      this.latestActivity = null;
+      this.spec = "";
+      this.mask = 1;
+      this.onInfo = null;
+      this.frozen = null;
+      canvas.addEventListener("mousedown", () => this.pause());
+      canvas.addEventListener("dblclick", () => this.resume());
+    }
+
+    configure(spec) {
+      if (this.spec === spec) return;
+      this.spec = spec || "";
+      const used = [...this.spec.matchAll(/(?:rx|sck|mosi|miso|cs|scl|sda)=([0-7])\b/g)]
+        .map(match => Number(match[1]));
+      this.mask = used.reduce((mask, channel) => mask | (1 << channel), 0) || 1;
+      this.channels = window.LAWaveform.defaultChannels().map(channel =>
+        Object.assign(channel, { visible: !!(this.mask & (1 << channel.index)) }));
+      this.resize();
+    }
+
+    clear() {
+      this.runs = [];
+      this.events = [];
+      this.annotations = {};
+      this.annotationSlots = [];
+      this.dropped = this.gaps = 0;
+      this.latestActivity = null;
+      this.follow = true;
+      this.frozen = null;
+      this.meta = null;
+      this.cursors = { a: null, b: null };
+      this.resize();
+    }
+
+    add(records) {
+      for (const record of records) this.events.push({ t_sample: Number(record[0]),
+        kind: Number(record[1]), data: record[2] || "",
+        name: KIND_NAMES[record[1]] || String(record[1]) });
+      if (this.events.length > this.maxEvents) {
+        const excess = this.events.length - this.maxEvents;
+        this.events.splice(0, excess);
+        this.dropped += excess;
+      }
+      this.annotations[this.slot] = this.events;
+      if (!this.annotationSlots.length) {
+        this.annotationSlots = [this.slot];
+        this.resize();
+      }
+      this.render();
+    }
+
+    addWaveform(packet) {
+      let time = Number(packet.start);
+      const previous = this.runs[this.runs.length - 1];
+      if (previous && time < previous.end) return;
+      if (previous && time > previous.end) this.gaps++;
+      let last = previous;
+      for (const word of packet.words) {
+        const sample = word & 255;
+        const end = time + Math.floor(word / 256);
+        if (last && last.end === time && last.sample === sample) {
+          last.end = end;
+        } else {
+          if (last && last.end === time && ((last.sample ^ sample) & this.mask)) {
+            this.latestActivity = time;
+          }
+          last = { start: time, end, sample };
+          this.runs.push(last);
+        }
+        time = end;
+      }
+      this.sampleRate = Number(packet.rate);
+      if (!this.meta) {
+        this.meta = { total_samples: time, sample_rate_hz: this.sampleRate, has_signal: true };
+        const baud = /baud=(\d+)/.exec(this.spec);
+        this.view.span = this.sampleRate * (baud ? 80 / Number(baud[1]) : 0.002);
+      }
+      this.meta.total_samples = time;
+      this.meta.sample_rate_hz = this.sampleRate;
+      // Retain at most 16k exact runs and two seconds, also while paused.
+      const oldest = Math.max(0, time - this.sampleRate * 2);
+      let trim = Math.max(0, this.runs.length - 16384);
+      while (trim < this.runs.length - 1 && this.runs[trim].end < oldest) trim++;
+      if (trim) this.runs.splice(0, trim);
+      if (this.runs[0].start < oldest) this.runs[0] = Object.assign({}, this.runs[0], {start: oldest});
+      const first = this.runs[0].start;
+      let eventTrim = 0;
+      while (eventTrim < this.events.length && this.events[eventTrim].t_sample < first) eventTrim++;
+      if (eventTrim) { this.events.splice(0, eventTrim); this.dropped += eventTrim; }
+      if (this.follow) {
+        const anchor = this.latestActivity === null || this.latestActivity < first
+          ? time : this.latestActivity;
+        this.view.start = Math.max(first, anchor - this.view.span * 0.85);
+      } else if (!this.frozen && this.view.start < first) {
+        this.view.start = first;
+      }
+      this.omitted = packet.omitted;
+      this.render();
+    }
+
+    _detailCoversView() { return !!(this.runs && this.runs.length); }
+    _maybeRequestDetail() {}
+
+    _drawDetailChannel(index, high, low) {
+      const ctx = this.ctx;
+      ctx.beginPath();
+      let previous = null;
+      for (const run of this.frozen ? this.frozen.runs : this.runs) {
+        if (run.end < this.view.start) continue;
+        if (run.start > this.view.start + this.view.span) break;
+        const left = Math.max(run.start, this.view.start);
+        const right = Math.min(run.end, this.view.start + this.view.span);
+        const level = run.sample & (1 << index) ? high : low;
+        const x = this.timeToX(left);
+        if (previous && previous.end === run.start) ctx.lineTo(x, level);
+        else ctx.moveTo(x, level); // Unknown ranges stay blank, never bridged.
+        ctx.lineTo(this.timeToX(right), level);
+        previous = run;
+      }
+      ctx.stroke();
+    }
+
+    _drawAnnotationRow(row) {
+      const current = this.annotations[row.slot];
+      if (this.frozen) this.annotations[row.slot] = this.frozen.events;
+      super._drawAnnotationRow(row);
+      this.annotations[row.slot] = current;
+    }
+    pause() {
+      if (!this.frozen) this.frozen = {
+        runs: this.runs.map(run => Object.assign({}, run)), events: this.events.slice() };
+      this.follow = false;
+      this.render();
+    }
+    zoom(factor, anchor) { this.pause(); super.zoom(factor, anchor); }
+    fit() {
+      if (!this.runs || !this.runs.length) return;
+      this.pause();
+      const runs = this.frozen.runs;
+      if (!runs.length) return;
+      this.view = { start: runs[0].start,
+        span: Math.max(2, runs[runs.length - 1].end - runs[0].start) };
+      this.render();
+    }
+    resume() { this.frozen = null; this.follow = true; this.render(); }
+    render() {
+      if (this._pendingDraw) return;
+      this._pendingDraw = true;
+      window.requestAnimationFrame(() => {
+        this._pendingDraw = false;
+        super.render();
+        if (this.meta && this.onInfo) this.onInfo(
+          `${this.follow ? "Following activity" : "Paused"} · real signal · ` +
+          `${this.runs.length} runs · ${this.gaps} gaps · ${this.omitted || 0} omitted preview ranges`);
+      });
+    }
+  }
+
   class TraceTimeline {
     constructor(canvas) {
       this.canvas = canvas;
@@ -354,5 +523,5 @@
     }
   }
 
-  window.LATimeline = { LiveTimeline, TraceTimeline, KIND_NAMES, KIND_COLORS };
+  window.LATimeline = { LiveTimeline, LiveWaveform, TraceTimeline, KIND_NAMES, KIND_COLORS };
 })();

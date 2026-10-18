@@ -88,7 +88,13 @@ LA_DECODER_API int la_decoder_core_feed_segment(la_decoder_core_t *core,
                                                 uint32_t word_count,
                                                 uint32_t sequence,
                                                 la_decode_event_callback callback,
-                                                void *context);
+                                                 void *context);
+
+/* Acquisition-clock variant: slots enabled mid-stream and slots recovering
+ * from queue loss retain the same absolute time axis as the waveform. */
+LA_DECODER_API int la_decoder_core_feed_segment_at(la_decoder_core_t *core,
+    const uint32_t *words, uint32_t word_count, uint32_t sequence,
+    uint64_t first_sample, la_decode_event_callback callback, void *context);
 
 LA_DECODER_API const la_decoder_stats_t *la_decoder_core_stats(const la_decoder_core_t *core);
 LA_DECODER_API const la_proto_decoder_config_t *la_decoder_core_config(const la_decoder_core_t *core);

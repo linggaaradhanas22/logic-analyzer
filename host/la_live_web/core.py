@@ -152,6 +152,9 @@ class LiveEventHub:
         self._format_dropped = 0
         self._refused = 0
         self._started = time.monotonic()
+        self._wave_ring: deque[str] = deque(maxlen=16)
+        self._wave_frames = 0
+        self._wave_omitted = 0
 
     @property
     def clients(self) -> int:
@@ -200,16 +203,27 @@ class LiveEventHub:
         return message
 
     def attach(self) -> ClientFeed:
-        """Attaches a client and replays the ring; raises ``HubFull``."""
+        """Attaches a client and replays the newest bounded history.
+
+        The replay is intentionally limited to what the client queue can hold
+        instead of offering the whole ring and counting the overflow as client
+        loss. A new tab therefore receives the most recent events without
+        inflating the drop counters. Raises ``HubFull``.
+        """
         with self._lock:
             if len(self._feeds) >= self.max_clients:
                 self._refused += 1
+                limit = ("single-client" if self.max_clients == 1
+                         else f"{self.max_clients}-client limit")
                 raise HubFull(
                     f"live view already has {len(self._feeds)} client(s); "
-                    "the host bridge is single-client"
+                    f"the host bridge is {limit}"
                 )
             feed = ClientFeed(self.client_queue)
-            for message in self._ring:
+            for message in list(self._ring)[-self.client_queue:]:
+                if not feed.offer(message):
+                    self._client_dropped += 1
+            for message in list(self._wave_ring)[-self.client_queue:]:
                 if not feed.offer(message):
                     self._client_dropped += 1
             self._feeds.append(feed)
@@ -242,8 +256,74 @@ class LiveEventHub:
                 "slots": list(self.slots),
                 "slot_labels": list(self.slot_labels),
                 "error": self.error,
+                "waveform_frames": self._wave_frames,
+                "waveform_omitted": self._wave_omitted,
                 "uptime_s": round(time.monotonic() - self._started, 3),
             }
 
     def stats_message(self) -> str:
         return json.dumps({"stats": self.stats()}, separators=(",", ":"))
+
+    def reset(self) -> None:
+        """Clear session history/counters, retaining attached SSE clients."""
+        with self._lock:
+            self._ring.clear()
+            self._wave_ring.clear()
+            self._wave_frames = self._wave_omitted = 0
+            self._events = self._messages = self._sent = 0
+            self._ring_dropped = self._client_dropped = self._format_dropped = 0
+            self._refused = 0
+            self.error = None
+            self.slots = ["unconfigured"] * SLOTS
+            self.slot_labels = [""] * SLOTS
+            self.decoder = ""
+            for feed in self._feeds:
+                while True:
+                    try:
+                        feed.queue.get_nowait()
+                    except queue.Empty:
+                        break
+                feed.dropped = 0
+
+    def publish_waveform(self, waveform: Mapping) -> None:
+        """Bounded raw-preview replay, separate from decoder-event accounting.
+
+        Full client queues drop newest messages and increment client loss; the
+        next absolute start index makes any missing waveform range explicit.
+        """
+        message = json.dumps({"waveform": waveform}, separators=(",", ":"))
+        with self._lock:
+            self._wave_ring.append(message)
+            self._wave_frames += 1
+            self._wave_omitted = int(waveform["omitted"])
+            for feed in self._feeds:
+                if not feed.offer(message):
+                    self._client_dropped += 1
+
+    def clear_waveforms(self) -> None:
+        with self._lock:
+            self._wave_ring.clear()
+            self._wave_frames = self._wave_omitted = 0
+
+    def begin_session(self) -> None:
+        """Starts a fresh live view without stale history or queued frames.
+
+        Existing browser tabs keep their EventSource connection, but their
+        queues are drained and the server replay history/counters restart with
+        the session. This prevents a previous run's replay backlog from being
+        mistaken for current client loss or from hiding new waveform data.
+        """
+        with self._lock:
+            self._ring.clear()
+            self._wave_ring.clear()
+            self._events = self._messages = self._sent = 0
+            self._ring_dropped = self._client_dropped = self._format_dropped = 0
+            self._wave_frames = self._wave_omitted = 0
+            self.error = None
+            for feed in self._feeds:
+                while True:
+                    try:
+                        feed.queue.get_nowait()
+                    except queue.Empty:
+                        break
+                feed.dropped = 0

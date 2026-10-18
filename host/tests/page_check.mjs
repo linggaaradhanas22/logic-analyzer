@@ -288,6 +288,26 @@ try {
   for (let index = 0; index < 120000; index++) flood.push([index, 1, "00"]);
   live.add(flood);
   checks.liveBound = live.events.length === live.maxEvents && live.dropped > 0;
+  live.clear();
+  live.configure("uart:rx=0,baud=115200");
+  live.addWaveform({start:1000,rate:10000000,omitted:0,
+    words:[(100 << 8) | 1, (87 << 8), (87 << 8) | 1]});
+  live.add([[1100,1,"4c"]]);
+  checks.liveRealRuns = live.runs.length === 3 && live.runs[1].start === 1100 &&
+    live.events[0].t_sample === 1100 && live.sampleRate === 10000000;
+  live.pause();
+  const pausedStart = live.view.start;
+  live.addWaveform({start:2000,rate:10000000,omitted:1,words:[(20 << 8) | 1]});
+  checks.liveGap = live.gaps === 1 && live.runs[3].start === 2000;
+  checks.livePause = live.view.start === pausedStart && !live.follow;
+  checks.liveFrozen = live.frozen.runs.length === 3 && live.runs.length === 4;
+  live.resume();
+  checks.liveFollow = live.follow;
+  live.clear();
+  checks.liveClear = live.runs.length === 0 && live.events.length === 0 && live.meta === null;
+  live.addWaveform({start:0,rate:1000,omitted:0,words:[(10000 << 8) | 1]});
+  checks.liveIdleBound = live.runs[0].start === 8000 && live.view.start >= 8000;
+  live.clear();
 
   const trace = app.state.traceTimeline;
   trace.setModel({

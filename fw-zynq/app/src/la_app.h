@@ -108,7 +108,7 @@
 #define LA_PRIO_USB 5u
 #define LA_PRIO_STATUS 1u
 
-#define LA_FW_VERSION UINT32_C(0x00090000)
+#define LA_FW_VERSION UINT32_C(0x000A0000)
 
 typedef enum la_ctrl_kind {
     LA_CTRL_ARM = 1,
@@ -186,6 +186,7 @@ typedef struct la_live_segment_msg {
     uint32_t slot;
     uint32_t length;
     uint32_t sequence;
+    uint64_t first_sample; /* Acquisition clock, shared with real waveform. */
 } la_live_segment_msg_t;
 
 typedef struct la_decoder_config_msg {
@@ -264,6 +265,9 @@ typedef struct la_app {
     volatile uint32_t decoder_busy_us[LA_DECODER_COUNT];
     volatile uint32_t live_overflows;
     volatile uint8_t live_active;
+    /* W11: opt-in real transition preview. CmdTask changes this only in IDLE.
+     * AcqTask copies while holding the segment; no DMA references enter TX. */
+    volatile uint8_t waveform_enabled;
     /* P7.7 stop-on match: the first decoder to complete its pattern latches
      * the slot and the matching sample index here (critical section), then
      * notifies AcqTask with LA_NOTIFY_STOP_ON. AcqTask clears the flag when

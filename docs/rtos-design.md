@@ -1,5 +1,25 @@
 # RTOS Ownership and Scheduling Design
 
+## Current implementation note — W11, 18 October 2026
+
+Use [current-handover.md](current-handover.md) for the current SD image, tests
+and runtime state. The tables below mix the original P1 design and dated
+implementation reviews; actual task constants are in `la_app.h` (decoder
+stacks 4 KiB, TX/USB stacks 12 KiB in the current default build).
+
+W11 preserves ordinary SG and notification-only ISR behavior. AcqTask copies
+actual transition words while it owns each DMA segment into a static event
+block; preview never queues a borrowed DMA pointer. Drop-newest preview policy
+reserves four free blocks/two event-queue entries for decoders, counts omissions
+and advances the absolute acquisition clock over all input words. Decoder
+segment handles now include that clock, so late-starting slots/gap recovery
+align with the waveform. TxTask returns every preview block through block_q.
+The host capture worker is the sole serial reader during cancellation; Reset
+requests cancellation, waits for the worker's ABORT/cleanup and then clears
+state/disconnects. See protocol.md for wire/preview bounds. These changes passed
+native 18/18, host 177/177 and the SD tests recorded in the current handover;
+old latency/throughput figures below were not remeasured by this update.
+
 This document is the P1 ownership contract for the Zynq FreeRTOS application
 and the ESP-IDF bridge. It describes static storage and queue policies before
 target code exists. Windows tests exercise the ownership adapter only; they do

@@ -32,6 +32,9 @@ typedef struct la_acq_ctx {
     uint8_t overflow_seen;
     uint8_t decoder_enabled[LA_PROTO_DECODER_MAX_SLOTS];
     uint32_t enabled_decoders;
+    uint64_t waveform_time;
+    uint32_t waveform_omitted;
+    uint8_t waveform_encoding;
 } la_acq_ctx_t;
 
 static void acq_post_overrun(la_acq_ctx_t *ctx, uint32_t dropped, uint8_t stage)
@@ -260,6 +263,9 @@ static void acq_start_live(la_acq_ctx_t *ctx, const la_ctrl_msg_t *message)
         return;
     }
     ctx->live = 1u;
+    ctx->waveform_time = 0u;
+    ctx->waveform_omitted = 0u;
+    ctx->waveform_encoding = (uint8_t)(message->config.mode & 1u);
     ctx->overflow_seen = 0u;
     app->live_stop_on = 0u;
     ctx->trig_index = 0u;
@@ -332,6 +338,63 @@ static void acq_stop_live(la_acq_ctx_t *ctx, int report_overrun, uint32_t droppe
     }
 }
 
+/* Preview is lower priority than decoding: reserve four free event blocks and
+ * two ev_q entries. Full policy is drop-newest preview only, never block DMA or
+ * steal a decoder reference. Absolute timestamps expose every omitted range. */
+static void acq_preview(la_acq_ctx_t *ctx, const la_live_segment_msg_t *segment)
+{
+    la_app_t *app = ctx->app;
+    const uint8_t *data;
+    uint32_t offset;
+#if LA_TRANSPORT_USB
+    uint32_t bytes;
+    uint64_t first;
+    la_event_batch_t *block = NULL;
+#endif
+    data = (const uint8_t *)la_live_ring_slot_address(&app->live_ring, segment->slot);
+    if (ctx->waveform_encoding == 0u) {
+        ctx->waveform_time += segment->length;
+        return;
+    }
+#if LA_TRANSPORT_USB
+    first = ctx->waveform_time;
+#endif
+    for (offset = 0u; offset + 4u <= segment->length; offset += 4u) {
+        ctx->waveform_time += (uint32_t)data[offset + 1u] |
+            ((uint32_t)data[offset + 2u] << 8) | ((uint32_t)data[offset + 3u] << 16);
+    }
+#if LA_TRANSPORT_USB
+    if (app->waveform_enabled == 0u) {
+        return;
+    }
+    bytes = segment->length & ~3u;
+    if (bytes > LA_PROTO_MAX_PAYLOAD - LA_PROTO_WAVE_HEADER_SIZE) {
+        bytes = (LA_PROTO_MAX_PAYLOAD - LA_PROTO_WAVE_HEADER_SIZE) & ~3u;
+        ctx->waveform_omitted++;
+    }
+    if (bytes == 0u) {
+        return;
+    }
+    if (uxQueueMessagesWaiting(app->block_q) <= 4u ||
+        uxQueueSpacesAvailable(app->ev_q) <= 2u ||
+        xQueueReceive(app->block_q, &block, 0) != pdTRUE) {
+        ctx->waveform_omitted++;
+        return;
+    }
+    memset(block, 0, offsetof(la_event_batch_t, data));
+    block->type = LA_PROTO_EVT_WAVEFORM;
+    block->length = (uint16_t)la_proto_pack_waveform(first,
+        100000000u / (app->live_sample_div + 1u), ctx->waveform_omitted,
+        data, bytes, block->data, sizeof(block->data));
+    if (block->length == 0u || xQueueSend(app->ev_q, &block, 0) != pdTRUE) {
+        ctx->waveform_omitted++;
+        (void)xQueueSend(app->block_q, &block, 0);
+    } else {
+        (void)xTaskNotify(app->tx_task, LA_NOTIFY_TX, eSetBits);
+    }
+#endif
+}
+
 static void acq_handle_live_irq(la_acq_ctx_t *ctx)
 {
     la_app_t *app = ctx->app;
@@ -385,6 +448,8 @@ static void acq_handle_live_irq(la_acq_ctx_t *ctx)
                 (message.length + 63u) & ~63u);
         }
 #endif
+        message.first_sample = ctx->waveform_time;
+        acq_preview(ctx, &message);
         for (d = 0u; d < LA_PROTO_DECODER_MAX_SLOTS; ++d) {
             if (ctx->decoder_enabled[d] == 0u) {
                 continue;

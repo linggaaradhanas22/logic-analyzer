@@ -36,6 +36,7 @@
 #define LA_PROTO_DATA_END_WIRE_SIZE ((uint16_t)4u)
 #define LA_PROTO_EVT_OVERRUN_WIRE_SIZE ((uint16_t)8u)
 #define LA_PROTO_DATA_CHUNK_FIELD_SIZE ((uint16_t)4u)
+#define LA_PROTO_WAVE_HEADER_SIZE ((uint16_t)20u)
 
 typedef enum la_proto_message_type {
     LA_PROTO_PING = 0x01,
@@ -52,11 +53,13 @@ typedef enum la_proto_message_type {
     LA_PROTO_EVT_CFG = 0x19,
     LA_PROTO_LINK_CFG = 0x1A,
     LA_PROTO_TEST_RECORD = 0x1B,
+    LA_PROTO_WAVE_CFG = 0x1C,
     LA_PROTO_STATUS = 0x20,
     LA_PROTO_EVT_TRIGGERED = 0x21,
     LA_PROTO_EVT_DECODED = 0x22,
     LA_PROTO_EVT_OVERRUN = 0x23,
     LA_PROTO_EVT_BLOCK = 0x24,
+    LA_PROTO_EVT_WAVEFORM = 0x25,
     LA_PROTO_DATA_BEGIN = 0x30,
     LA_PROTO_DATA_CHUNK = 0x31,
     LA_PROTO_DATA_END = 0x32,
@@ -231,6 +234,13 @@ LA_PROTO_API uint32_t la_crc32_ieee_update(uint32_t crc,
 LA_PROTO_API uint32_t la_crc32_ieee_finish(uint32_t crc);
 
 LA_PROTO_API int la_proto_message_type_valid(uint8_t type);
+/* W11 opt-in preview: v1, txn encoding, word count, rate, absolute first sample,
+ * cumulative omitted preview ranges, then exact little-endian run/sample words.
+ * The caller retains DMA ownership until this bounded copy completes. */
+LA_PROTO_API size_t la_proto_pack_waveform(uint64_t first_sample, uint32_t rate,
+                                          uint32_t omitted, const uint8_t *words,
+                                          size_t bytes, uint8_t *output,
+                                          size_t capacity);
 LA_PROTO_API int la_proto_validate_config(const la_proto_config_t *config);
 LA_PROTO_API size_t la_proto_pack_config(const la_proto_config_t *config,
                                          uint8_t *output,

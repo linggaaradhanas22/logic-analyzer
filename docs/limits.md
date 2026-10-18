@@ -4,6 +4,13 @@ This file collects the project's current limits and unverified gates in one
 place. Each item names the evidence or the gate that would retire it; the
 authoritative execution ledger is `docs/status.md`.
 
+Current image/bench handover: [current-handover.md](current-handover.md),
+18 October 2026. W11 firmware 0x000A0000 / UI w11 cold-boot from the updated
+SD card; the SD gate is verified, not pending. The USB-first class project is
+complete and its source publication is recorded in `docs/status.md`. Public USB
+identity, website deployment, and a tagged product release are deferred beyond
+that scope. The limits below remain applicable to the completed instrument.
+
 ## Electrical and input
 
 - **3.3 V only.** JC/JE/JD are LVCMOS33. Never connect a 5 V source without an
@@ -83,6 +90,17 @@ authoritative execution ledger is `docs/status.md`.
 
 ## Decoding and host
 
+- **W11 live waveform is bounded inspection, not lossless recording.** Actual
+  FPGA transition words share the decoder time axis; preview drops newest on
+  queue/pool pressure and can truncate a segment after 1019 words. Gaps remain
+  blank and are counted. Browser history is two seconds or 16,384 runs plus
+  10,000 annotations per slot; Pause retains one bounded frozen snapshot.
+  External UART preview is bench/browser verified; no new external SPI/I2C
+  preview or overload qualification is claimed. Burst capture/export remains
+  the saved-waveform path.
+- **Reset UI discards unexported session data** and saved UI preferences, stops
+  acquisition and disconnects. It does not erase exports or either board's
+  flash/SD image. Reconnect after resetting.
 - **Decoders are transition-based.** They consume `(t_sample, sample)` tuples
   and emit events; they do not re-sample analog behavior. A segment
   discontinuity resets decoder state and emits a discontinuity marker.
@@ -108,6 +126,11 @@ authoritative execution ledger is `docs/status.md`.
   CP2102 "UART" port and keep the console there (the native "USB" port carries
   the CDC host transport, and its USB-Serial-JTAG console is disabled in the
   firmware configuration).
+- **Current external S3 demo differs from that gateway profile.** It runs
+  `demo-esp32-uart`, GPIO17 at 115200 8N1, and mirrors heartbeat on native USB
+  Serial/JTAG COM10. Manual BOOT/RESET/native-ROM programming was verified
+  because the bridge port did not enumerate. Do not apply the gateway's
+  native-USB console restriction to this standalone demo.
 - Wi-Fi credentials live only in the ignored `build/esp32/sdkconfig`; a fresh
   checkout must set them with `tools/set_wifi.py` before network gates.
 - `build/reports` and release artifacts are ignored: on another checkout a

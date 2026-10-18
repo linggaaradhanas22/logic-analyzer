@@ -1,6 +1,12 @@
-# Proposed direct Zynq USB link
+# Direct Zynq USB link — implementation contract and history
 
-Prepared: 2026-09-17. Status: **design proposal; not implemented or bench-verified**.
+Prepared: 2026-09-17 as a design proposal. **Current status (18 October 2026):
+implemented, adopted and SD-boot verified**, including W11 firmware 0x000A0000.
+Read [current-handover.md](current-handover.md) for current image/evidence and
+[protocol.md](protocol.md) for W11's additive real-transition preview messages.
+The initial proposal/driver investigations below are dated history, not open
+bring-up work. The USB-first class project is complete; source publication is
+recorded in [status.md](status.md). A tagged product release is separate.
 Baseline inspected: `b30adfd`. Overall authority: [plan.md](plan.md).
 Execution sequence: [usb-migration-implementation-instructions.md](usb-migration-implementation-instructions.md).
 Results and authorization: [status.md](status.md).

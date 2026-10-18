@@ -830,6 +830,21 @@ static int test_argument_guards(void)
           "NULL result rejected");
     CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_CONFIG, 0u, NULL, 1u, 0u, &result) == -1,
           "NULL payload with length rejected");
+    {
+        uint8_t config[] = {1u, 1u, 0u, 0u};
+        CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_WAVE_CFG, 7u, config, 4u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_WAVE_CFG && result.action == 1u,
+              "waveform opt-in accepted while idle");
+        dispatch.view = LA_CMD_VIEW_CAPT;
+        CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_WAVE_CFG, 7u, config, 4u, 0u, &result) == 0 &&
+              result.outcome == LA_CMD_OUT_NAK && result.error == LA_PROTO_ERROR_BUSY,
+              "waveform cannot change during capture");
+        dispatch.view = LA_CMD_VIEW_IDLE;
+        config[2] = 1u;
+        CHECK(la_cmd_dispatch_step(&dispatch, LA_PROTO_WAVE_CFG, 7u, config, 4u, 0u, &result) == 0 &&
+              result.error == LA_PROTO_ERROR_BAD_FIELD,
+              "waveform reserved fields validated");
+    }
     return 0;
 }
 

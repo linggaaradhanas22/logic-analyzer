@@ -4,6 +4,11 @@ This is the current-state entry point. [status.md](status.md) is the execution
 ledger; [plan.md](plan.md) remains the requirements authority. Earlier dated
 phase records are history, not instructions to resume old USB bring-up work.
 
+**Project status: Complete — 18 October 2026.** The delivered USB-first
+instrument, external demo firmware, operating documentation, and Embedded/FPGA
+class submissions are complete. The source publication record is at the top of
+[status.md](status.md). Optional extensions remain documented as deferred work.
+
 ## Project location and class deliverables (18 October 2026)
 
 The active repository moved to `C:\Users\lingg\Projects\Logic-Analyzer\Source_Code`.
@@ -13,8 +18,15 @@ The current report is the LaTeX HardwareX-style class report in
 `docs/hardwarex/latex/`; it compiles with the pinned Tectonic 0.17.0 workflow.
 Two report/presentation/workbook variants were copied to the two class delivery
 folders: Embedded (Lingga Aradhana Sahadewa only) and FPGA (Lingga Aradhana
-Sahadewa, Alvin Hadar, Bagas Budhi Permana). The presentation keeps all 37
-slides and both custom shows; slide 34 now uses the real UART demo capture.
+Sahadewa, Alvin Hadar, Bagas Budhi Permana). The presentation has 38 slides and
+both custom shows (23 FPGA / 26 Embedded): slide 4 shows the hardware photo,
+slide 34 the real UART UI, and slide 35 the decoding close-up and video link.
+Both report PDFs have 19 pages, with the video also linked from their page-2
+specifications tables. Both workbooks contain the same four design/implementation
+weekly logs and place Project Scoring Sheet last. Class folders contain the
+matching report PDF, PPTX, presentation PDF, and XLSX; delivery hashes are in the
+execution ledger. The demonstration is at
+<https://youtu.be/1xx84Ndi4vQ?si=ldsuYEWvYVqu2u6->.
 
 ## Ready-to-use bench state
 
@@ -134,8 +146,8 @@ Demo capture: 10 MS/s, 64k, raw, Pre 0, blank edge triggers, Patgen off, Slot 0
 
 | Check | Latest evidence |
 |---|---|
-| Native protocol/decoder/ownership tests | 18/18 PASS, W11 build, 17 October |
-| Host tests | 177/177 PASS, 17 October; pre-existing matplotlib warnings and pytest temp-link cleanup warning recorded |
+| Native protocol/decoder/ownership tests | 18/18 PASS, final source closeout, 18 October |
+| Host tests | 180/180 PASS, final source closeout, 18 October; existing matplotlib deprecation warnings |
 | JavaScript/page model | Syntax and PAGE CHECK OK, including exact runs, gaps, frozen pause and idle history bounds |
 | Firmware build / JTAG development load | PASS, 17 October; not used for the 18 October cold boot |
 | SD image creation, package, card read-back | PASS, 18 October |
@@ -159,17 +171,19 @@ view on 18 October, separately from the automated checks above.
 
 ## Repository/publication handoff
 
-- `main` / `origin/main` still point to **b487413**. W11 source, this SD/doc sync,
-  the UART demo and earlier report/presentation source remain **local WIP**;
-  no commit/push was requested. Do not imply these changes exist at that SHA.
-- The portal source is synchronized locally. Its GitHub source links identify
-  the committed baseline, with a local-WIP notice; no website deployment ran.
-- October 12 report/slide/workbook outputs are dated deliverables. Their READMEs
-  point here for subsequent runtime changes; their binaries are not regenerated
-  by this SD/handover task.
-- Public USB identity and `v1.0` tag/publication remain open. Optional gateway
-  S3 SPI corruption, SUMP deferral and 200 MS/s stretch are not closed by W11.
-- Next session: read this file, AGENTS.md, plan/status and `git status`; verify
+- The user authorized committing all pending source and pushing `origin/main`.
+  The top of the execution ledger records the final commit and remote checks;
+  older WIP statements are historical.
+- The portal source is included in the closeout. Website deployment is separate
+  and has not been performed by this source publication.
+- Compiled class deliverables remain in their delivery folders. Generated
+  environments, captures, logs, build reports and release binaries stay ignored;
+  the editable sources and hardware photograph are included in Git.
+- Public USB identity and a tagged product release are deferred. Optional
+  gateway S3 SPI corruption, SUMP integration and 200 MS/s remain documented
+  limitations or extensions, not completed measurements.
+- No implementation task remains for the delivered class project. For future
+  maintenance, read this file, AGENTS.md, plan/status and `git status`; verify
   SD firmware identity before bench work, then follow the user's new request.
   Do not resume U03 enumeration, assume the ESP32 is a gateway, or overwrite the
   SD card with the previous `0x00090000` image.

@@ -22,6 +22,7 @@
   <span id="link-pill" class="pill">offline</span>
   <span id="fw-info" class="dim"></span>
   <button id="btn-ping" class="ghost" disabled>Ping</button>
+  <button id="btn-reset-ui" class="ghost" title="Stop acquisition, disconnect, clear session captures and restore UI defaults">Reset UI</button>
 </header>
 
 <main id="workspace">
@@ -73,6 +74,7 @@
       <div id="chan-list"></div>
       <div class="row wrap">
         <button id="btn-fit" class="ghost">Fit</button>
+        <button id="btn-focus" class="ghost" title="Show a readable window around the first signal activity">Focus activity</button>
         <button id="btn-zoom-in" class="ghost">+</button>
         <button id="btn-zoom-out" class="ghost">−</button>
         <button id="btn-zoom-cursors" class="ghost">Zoom A/B</button>
@@ -137,6 +139,7 @@
     <div class="viewer-head">
       <span>Live</span>
       <span id="live-summary" class="dim">idle</span>
+      <span id="live-wave-status" class="dim">real waveform + decode</span>
       <span class="spacer"></span>
       <button id="btn-live-stop-all" class="ghost" disabled>Stop all</button>
     </div>

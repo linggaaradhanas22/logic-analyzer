@@ -12,6 +12,18 @@ supported optional profile.
 The implementation source of truth is `docs/plan.md`. The execution ledger,
 measured evidence, blockers and next actions are in `docs/status.md`.
 
+**Project status: Complete — 18 October 2026.** The USB-first logic analyzer and
+both class deliverable sets are finished. Source publication and final check
+results are recorded in [docs/status.md](docs/status.md).
+
+**Current handover:** [docs/current-handover.md](docs/current-handover.md).
+W11 firmware **0x000A0000**, UI **w11** and the updated SD image are verified:
+JP5=SD cold boot, real live waveforms + aligned decoding, readable captured
+activity and Reset UI. The ESP32-S3 combined demo supplies external UART, SPI,
+and I²C stimulus. Optional gateway tuning, the 200 MS/s extension, public USB
+identity, website deployment, and a tagged product release are deferred beyond
+the completed class-project scope.
+
 ## What exists today
 
 | Area | State |
@@ -22,8 +34,8 @@ measured evidence, blockers and next actions are in `docs/status.md`.
 | ESP32 gateway (UART + SPI bulk link, TCP relay, web live view) | Optional supported profile (`--profile gateway`); bench-verified; Wi-Fi drain is its open performance limit |
 | Host `la-cli` (capture, `.sr`/VCD/PNG export, live decode, trace) | Host-tested; burst and live used on bench |
 | Direct Zynq USB transport (CDC-ACM, 1.62 MB/s measured) | Default product transport since the 2026-09-20 V00 pivot |
-| Live web view (host bridge, V02-V04; ESP32 `la_web` for the gateway profile) | Host bridge bench-verified over USB 8/8 (V04); [HUMAN] browser smoke open; ESP32 view bench-verified (P10.1) |
-| Release packaging (profile-aware BOOT.BIN, optional ESP32 bin set, Python wheel) | Tooling present; the USB-profile SD boot is bench-verified (2026-09-26); the tag is the remaining release gate |
+| Live UI | W11 real FPGA waveform + aligned decode, Pause/Follow and Reset; external ESP32 UART browser checks 10/10 on SD (2026-10-18); legacy event-only page retained |
+| Release packaging (BOOT.BIN, optional gateway bin set, Python wheel) | W11 image installed/read-back verified and cold-booted from SD (2026-10-18); public USB identity and release publication/tag remain open |
 
 ## Specifications
 
@@ -55,6 +67,8 @@ python tools/run.py sim
 python tools/run.py bit           # Vivado bitstream/XSA
 python tools/run.py fw-zynq       # Vitis firmware (USB profile; --profile gateway)
 python tools/run.py fw-esp32      # ESP-IDF gateway (optional profile)
+python tools/run.py demo-esp32-uart # standalone external S3 UART source
+python tools/run.py demo-esp32-protocols # S3 UART+SPI+I2C demo (J1-header pins)
 python tools/run.py boot          # BOOT.BIN packaging (USB profile; --profile gateway)
 python tools/run.py package       # wheel + optional ESP32 set (--profile gateway)
 python tools/run.py test-e2e -- --target serial://COM13
@@ -71,6 +85,7 @@ not-run, not pass.
 |---|---|
 | `docs/plan.md` | Normative implementation plan and design requirements |
 | `docs/status.md` | Execution ledger: phase state, verified gates, blockers |
+| `docs/current-handover.md` | Current SD image, bench wiring, W11 features, evidence and source/publication state |
 | `docs/using-the-analyzer.md` | Operating guide: load, verify, capture, live decode, web view, trace |
 | `docs/architecture.md` | Zynq/PL integration, constraints, resource use |
 | `docs/rtos-design.md` | Tasks, queues, ownership, cache contract, measurements |
@@ -81,8 +96,8 @@ not-run, not pass.
 | `docs/spi-link.md` | P9.1 SPI bulk-link contract and measured results |
 | `docs/live-web.md` | V01 host live-web bridge contract (SSE, single client, bounded replay ring) |
 | [`docs/unified-ui-plan.md`](docs/unified-ui-plan.md) | W00-W09 unified UI package: one browser workspace for capture, waveform viewing, live decode, exports and trace |
-| [`docs/usb-migration-implementation-instructions.md`](docs/usb-migration-implementation-instructions.md) | Proposed direct-Zynq USB migration: agent work packets, decision gates and handoff; execution not started |
-| [`docs/usb-link.md`](docs/usb-link.md) | Proposed USB CDC-ACM contract, verified prerequisites and remaining bench questions |
+| [`docs/usb-migration-implementation-instructions.md`](docs/usb-migration-implementation-instructions.md) | Historical U00-U09 execution package; USB is implemented/adopted, with current continuation linked at the top |
+| [`docs/usb-link.md`](docs/usb-link.md) | Implemented USB CDC-ACM contract and dated integration evidence |
 | `docs/test-plan.md` | Acceptance matrices per phase |
 | `docs/limits.md` | Known limits and unverified gates |
 | `docs/sigrok-bridge.md` | P10.2 SUMP bridge assessment and deferral |
@@ -109,8 +124,9 @@ profile uses `tcp://la-esp32.local:5555` with the same commands.
 `la-ui` serves the unified workspace on the same default address: connect,
 burst capture with the waveform viewer (zoom/pan, cursors, measurements,
 channel layout, trigger and pre/post markers, edge and pattern search),
-host-side capture decoding with annotation rows, live decoded events on a
-time-aligned timeline with per-slot control, exports (`.sr`/`.vcd`/CSV/PNG),
+host-side capture decoding with annotation rows, real live digital waveforms
+with aligned decoded events and per-slot/Pause/Follow controls, Reset UI,
+exports (`.sr`/`.vcd`/CSV/PNG),
 offline open of saved captures, the trace timeline and the pattern generator.
 The legacy page stays available at `/legacy` on the same server; see
 `docs/using-the-analyzer.md` section 7 and `docs/unified-ui-plan.md`.

@@ -15,13 +15,20 @@ export function SiteFooter() {
           <p>Zybo Z7-10 · Zynq-7010 · ESP32 · FreeRTOS · native Windows</p>
         </div>
         <p className="footer-note">
-          Evidence snapshot reviewed {SNAPSHOT.reviewedOn}; newest bench evidence {SNAPSHOT.benchOn}.
+          Evidence snapshot reviewed {SNAPSHOT.reviewedOn}; newest bench
+          evidence {SNAPSHOT.benchOn}.
           <br />
           Sources pinned at{' '}
-          <a className="inline-source" href={SNAPSHOT.sourceTree} target="_blank" rel="noreferrer">
+          <a
+            className="inline-source"
+            href={SNAPSHOT.sourceTree}
+            target="_blank"
+            rel="noreferrer"
+          >
             {SNAPSHOT.sourceSha}
           </a>
-          . Targets are not presented as measurements.
+          . The USB-first class project is complete. Targets are not presented
+          as measurements.
         </p>
       </div>
     </footer>

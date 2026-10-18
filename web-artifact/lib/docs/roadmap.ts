@@ -50,7 +50,7 @@ export const ROADMAP: RoadmapPhase[] = [
       'Block design on the pinned Zybo Z7-10 board part with PS7 preset, SmartConnect fabrics, SG DMA, constraints and a timing-clean bitstream/XSA.',
     status: 'bench-verified',
     statusNote:
-      'Complete on bench: timing and DRC are clean and the programmed design ran (LD0 blink). JP5 stays on JTAG for development; SD boot belongs to P10.',
+      'Complete on bench: timing and DRC are clean and the programmed design ran (LD0 blink). JP5 remains JTAG for development; the W11 USB SD boot (JP5=SD) was verified in P10 on 2026-10-18.',
     evidence:
       'bit PASS with zero failing endpoints (WNS +0.255 ns, WHS +0.024 ns), DRC 0 errors and LD0 blinking at 1 Hz (2026-09-10); the P9.1 JA-1 rebuild closed timing again at WNS +0.247 ns (2026-09-13).',
     remaining:
@@ -139,20 +139,25 @@ export const ROADMAP: RoadmapPhase[] = [
       'P9.1 framed bursts bit-exact 4 KB to 256 KB at 10 MHz, 20/20 at 18 MHz, a 4 MiB byte-verified capture and honest 40 MHz fault recovery; P9.2 compact events measured 51.6-53.3 % wire-byte saving (2026-09-12/13); direct USB drain 1.62 MB/s over three 64 MiB trials with byte-exact data.',
     remaining:
       'The gateway Wi-Fi drain is 0.28 MB/s (a supported optional profile); 19/20 MHz lose chunks (18 MHz ceiling); the 200 ohm SCK/MISO edge characterization is open; P9.3 200 MS/s stretch decision and P9.4 Wi-Fi tuning remain gateway-profile items.',
-    subsystems: ['fpga-capture', 'protocol-link', 'esp32-gateway', 'host-tools'],
+    subsystems: [
+      'fpga-capture',
+      'protocol-link',
+      'esp32-gateway',
+      'host-tools',
+    ],
   },
   {
     id: 'P10',
     name: 'UX and release',
     outcome:
       'Host live web view (with the ESP32 page retained for the gateway profile), the sigrok bridge decision, consolidated documentation and profile-aware release packaging (BOOT.BIN, optional ESP32 bin set, Python wheel).',
-    status: 'blocked',
+    status: 'bench-verified',
     statusNote:
-      'Phase in progress: P10.1 is bench-verified on the gateway and the V00-V04 pivot moved the default live view to the PC host bridge (SSE); P10.2 is deferred by the plan condition and the release gate still waits on the [HUMAN] SD boot and tag authorization.',
+      'USB-first class project complete, 2026-10-18: PC-hosted live view, W11 real waveforms, aligned decode, activity focus, Reset UI, verified SD boot and both class deliverable sets. SD UI E2E 6/6 and browser/external-UART checks 10/10 passed. SUMP and public product-release work are deferred beyond the completed scope.',
     evidence:
-      'P10.1 page and /ws WebSocket carried the decoded LA-TEST bytes plus stats over the phone hotspot (2026-09-14) with test-esp32-mocks 4/4; the host bridge passed the V04 USB gates 8/8 on 2026-09-20 (60 s zero-drop 606,411 events, SPI/I2C, stop-on, compact, overload recovery 0.05 s).',
+      'P10.1 page and /ws WebSocket carried the decoded LA-TEST bytes plus stats over the phone hotspot (2026-09-14) with test-esp32-mocks 4/4; the host bridge passed the V04 USB gates 8/8 on 2026-09-20 (60 s zero-drop 606,411 events, SPI/I2C, stop-on, compact, overload recovery 0.05 s). W11 firmware 0x000A0000 / UI w11 passed native 18/18, host 177/177, SD USB UI E2E 6/6 and browser external-UART 10/10 (2026-10-18).',
     remaining:
-      'P10.2 sigrok/SUMP bridge deferred (no signed virtual-COM pair driver; docs/sigrok-bridge.md); P10.4 profile-aware boot/package pass and the [HUMAN] SD boot + v1.0 tag authorization remain.',
+      'Deferred beyond the class project: P10.2 sigrok/SUMP bridge (no signed virtual-COM pair driver; docs/sigrok-bridge.md), website deployment, public USB identity and a tagged product release. No new external SPI/I2C preview or overload qualification is claimed by W11.',
     subsystems: ['esp32-gateway', 'host-tools', 'zynq-rtos'],
   },
 ];

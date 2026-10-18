@@ -22,8 +22,10 @@ TRACE_CTRL = 0x18
 EVT_CFG = 0x19
 LINK_CFG = 0x1A
 TEST_RECORD = 0x1B
+WAVE_CFG = 0x1C
 STATUS, EVT_TRIGGERED, EVT_DECODED, EVT_OVERRUN = 0x20, 0x21, 0x22, 0x23
 EVT_BLOCK = 0x24
+EVT_WAVEFORM = 0x25
 DATA_BEGIN, DATA_CHUNK, DATA_END = 0x30, 0x31, 0x32
 ACK, NAK, LOG = 0x40, 0x41, 0x7F
 
@@ -147,6 +149,20 @@ def encode(message_type: int, sequence: int, payload: bytes = b"") -> bytes:
 
 class FrameError(Exception):
     """Raised when a received frame cannot be used."""
+
+
+def unpack_waveform(payload: bytes) -> dict:
+    """Exact FPGA run words, never reconstructed from decoded events."""
+    if len(payload) < 20:
+        raise FrameError("short waveform header")
+    version, encoding, count, rate, start, omitted = struct.unpack_from("<BBHIQI", payload)
+    if version != 1 or encoding != 1 or not rate or not count or len(payload) != 20 + count * 4:
+        raise FrameError("invalid waveform header/count")
+    words = [word[0] for word in struct.iter_unpack("<I", payload[20:])]
+    if any(word >> 8 == 0 for word in words):
+        raise FrameError("zero-length waveform run")
+    return {"start": start, "rate": rate, "omitted": omitted, "words": words,
+            "end": start + sum(word >> 8 for word in words)}
 
 
 def unpack_pong(payload: bytes) -> dict:

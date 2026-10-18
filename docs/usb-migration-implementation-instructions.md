@@ -1,7 +1,12 @@
 # Direct Zynq USB migration implementation instructions
 
 Prepared: 2026-09-17. Baseline: `b30adfd` on `main`.
-Status: **planning package only; execution not started**.
+Status at preparation: planning package only. **Current status (18 October
+2026): USB implemented/adopted; this is the historical U00-U09 packet record.**
+Resume from [current-handover.md](current-handover.md), not U03 bring-up. W11
+firmware 0x000A0000 / UI w11 now include real live waveform preview and Reset UI;
+the new image is installed and cold-boot verified on SD. Current evidence and
+source/publication boundaries are in [status.md](status.md).
 
 ## 1. Outcome and authorization
 

@@ -514,6 +514,21 @@ int la_cmd_dispatch_step(la_cmd_dispatch_t *dispatch,
     case LA_PROTO_TEST_RECORD:
         return handle_test_record(sequence, payload, length, result);
 
+    case LA_PROTO_WAVE_CFG:
+        if (length != 4u) {
+            result_nak(result, type, sequence, LA_PROTO_ERROR_BAD_LENGTH);
+        } else if (payload[0] != 1u || payload[1] > 1u ||
+                   payload[2] != 0u || payload[3] != 0u) {
+            result_nak(result, type, sequence, LA_PROTO_ERROR_BAD_FIELD);
+        } else if (dispatch->view != LA_CMD_VIEW_IDLE) {
+            result_nak(result, type, sequence, LA_PROTO_ERROR_BUSY);
+        } else {
+            result_ack(result, type, sequence);
+            result->outcome = LA_CMD_OUT_WAVE_CFG;
+            result->action = payload[1];
+        }
+        return 0;
+
     case LA_PROTO_GET_STATUS:
         if (length != 0u) {
             result_nak(result, type, sequence, LA_PROTO_ERROR_BAD_LENGTH);
@@ -546,6 +561,7 @@ int la_cmd_dispatch_step(la_cmd_dispatch_t *dispatch,
     case LA_PROTO_EVT_DECODED:
     case LA_PROTO_EVT_OVERRUN:
     case LA_PROTO_EVT_BLOCK:
+    case LA_PROTO_EVT_WAVEFORM:
     case LA_PROTO_DATA_BEGIN:
     case LA_PROTO_DATA_CHUNK:
     case LA_PROTO_DATA_END:

@@ -52,11 +52,13 @@ where the receiver documents forward-compatible handling.
 | `0x19` | `EVT_CFG` | host -> Zynq | `format:u8`, reserved[3] (additive v1 extension) |
 | `0x1A` | `LINK_CFG` | host -> Zynq | `transport:u8`, `spi_clock_mhz:u8`, reserved[2] (additive v1 extension) |
 | `0x1B` | `TEST_RECORD` | host -> Zynq | `record_id:u32` (additive v1 extension, U03 bench) |
+| `0x1C` | `WAVE_CFG` | host -> Zynq | `version:u8=1`, `enabled:u8`, reserved[2]; USB waveform preview |
 | `0x20` | `STATUS` | Zynq -> host | status snapshot, 52 bytes in v1 |
 | `0x21` | `EVT_TRIGGERED` | Zynq -> host | `trig_index:u64` |
 | `0x22` | `EVT_DECODED` | Zynq -> host | zero or more event records |
 | `0x23` | `EVT_OVERRUN` | Zynq -> host | `dropped:u32`, `stage:u8`, reserved[3] |
 | `0x24` | `EVT_BLOCK` | Zynq -> host | versioned compact event block (v1) |
+| `0x25` | `EVT_WAVEFORM` | Zynq -> host | exact transition preview with absolute sample clock (v1) |
 | `0x30` | `DATA_BEGIN` | Zynq -> host | burst metadata |
 | `0x31` | `DATA_CHUNK` | Zynq -> host | `offset:u32` + up to 4092 bytes |
 | `0x32` | `DATA_END` | Zynq -> host | reconstructed-data `crc32:u32` |
@@ -69,6 +71,46 @@ types are rejected by the typed command dispatcher but remain parseable by the
 framing layer so a newer peer can be proxied without allocation.
 
 ## Fixed Payloads
+
+### Live waveform preview (W11, firmware `0x000A0000`)
+
+The direct-USB profile accepts `WAVE_CFG` only while idle. Its four-byte payload
+is `[1, enabled, 0, 0]`, with enabled 0 or 1. Invalid length/fields are NAKed;
+an active acquisition returns BUSY. It defaults off at boot. The optional
+gateway profile returns UNSUPPORTED. The unified UI enables it before live
+acquisition and disables it on disconnect; old firmware retains event-only
+decoding and the UI explicitly reports that a firmware update is needed.
+
+`EVT_WAVEFORM` has a 20-byte header followed by unchanged FPGA transition words:
+
+| Offset | Size | Field |
+|---:|---:|---|
+| 0 | 1 | version = 1 |
+| 1 | 1 | encoding = 1 (run/sample words) |
+| 2 | 2 | word count (1 through 1019) |
+| 4 | 4 | acquisition sample rate in Hz |
+| 8 | 8 | absolute first sample index since live ARM |
+| 16 | 4 | cumulative omitted preview ranges in this session |
+| 20 | count × 4 | little-endian words: `run[23:0]`, `sample[7:0]`; run > 0 |
+
+Payload length must equal `20 + count*4` and never exceed 4096. AcqTask copies
+the preview while it owns the DMA segment and before releasing/reposting it;
+TxTask receives a static event-buffer handle, never a borrowed DMA pointer.
+Preview shares the existing multi-producer event pool/queue but reserves at
+least four free blocks and two queue entries for decoder work. A full pool/
+queue drops the newest preview only; a segment above 1019 words publishes its
+prefix and counts the omitted suffix. The acquisition clock still advances
+over every word. The next packet's absolute start exposes gaps, which the
+browser leaves blank. This is bounded live inspection, not lossless recording.
+
+Decoded events use the same acquisition epoch, including decoder slots enabled
+mid-stream and after a decoder-queue gap (a DISCONTINUITY is still emitted).
+Waveform data is never synthesized from protocol bytes. Host SSE forwards it
+as `{"waveform":{"start":...,"end":...,"rate":...,"omitted":...,"words":[...]}}`.
+The hub keeps 16 preview packets for reconnect, separately from event history;
+full browser queues drop newest messages and increment client loss. Browser
+history is bounded to two seconds or 16,384 runs, plus 10,000 annotations per
+slot. Pause freezes a bounded snapshot while acquisition continues.
 
 ### CONFIG, type `0x10`
 

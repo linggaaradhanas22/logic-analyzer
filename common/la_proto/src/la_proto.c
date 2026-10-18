@@ -130,6 +130,8 @@ int la_proto_message_type_valid(uint8_t type)
     case LA_PROTO_EVT_DECODED:
     case LA_PROTO_EVT_OVERRUN:
     case LA_PROTO_EVT_BLOCK:
+    case LA_PROTO_WAVE_CFG:
+    case LA_PROTO_EVT_WAVEFORM:
     case LA_PROTO_DATA_BEGIN:
     case LA_PROTO_DATA_CHUNK:
     case LA_PROTO_DATA_END:
@@ -140,6 +142,32 @@ int la_proto_message_type_valid(uint8_t type)
     default:
         return 0;
     }
+}
+
+size_t la_proto_pack_waveform(uint64_t first_sample, uint32_t rate,
+                             uint32_t omitted, const uint8_t *words,
+                             size_t bytes, uint8_t *output, size_t capacity)
+{
+    size_t index;
+    if (words == NULL || output == NULL || bytes == 0u || (bytes % 4u) != 0u ||
+        rate == 0u || capacity < LA_PROTO_WAVE_HEADER_SIZE ||
+        bytes > capacity - LA_PROTO_WAVE_HEADER_SIZE ||
+        bytes > LA_PROTO_MAX_PAYLOAD - LA_PROTO_WAVE_HEADER_SIZE) {
+        return 0u;
+    }
+    for (index = 0u; index < bytes; index += 4u) {
+        if ((get_u32_le(words + index) >> 8) == 0u) {
+            return 0u;
+        }
+    }
+    output[0] = 1u;
+    output[1] = 1u;
+    put_u16_le(output + 2, (uint16_t)(bytes / 4u));
+    put_u32_le(output + 4, rate);
+    put_u64_le(output + 8, first_sample);
+    put_u32_le(output + 16, omitted);
+    memcpy(output + LA_PROTO_WAVE_HEADER_SIZE, words, bytes);
+    return LA_PROTO_WAVE_HEADER_SIZE + bytes;
 }
 
 int la_proto_validate_config(const la_proto_config_t *config)

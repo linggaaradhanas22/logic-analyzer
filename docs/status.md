@@ -55,6 +55,415 @@ commit, and the worktree is clean.
 
 ## Snapshot
 
+### Project completion and source publication (2026-10-18, in progress)
+
+User authorizes committing and pushing all pending project work to origin/main
+and marking the project done. Scope: W11 firmware/protocol/UI, ESP32 UART and
+combined demos, runner relocation/setup fixes and tests, synchronized docs and
+portal, report/presentation/workbook source revisions, and the hardware photo.
+Generated environments, build outputs, captures, logs, compiled class artifacts,
+and credentials remain excluded under the repository rules. Initial review:
+main at 0b7271b; origin is the expected GitHub logic-analyzer repository;
+`git fetch origin` PASS. Existing dated WIP entries below are historical and
+will be superseded by this closeout. Completion applies to the delivered
+USB-first class project. Optional gateway tuning, 200 MS/s, SUMP, public USB
+identity, website deployment, and release tagging retain their documented scope.
+Acceptance: source/change review, native/host/tooling/page/portal checks, current
+report/delivery checks, completion/handover synchronization, intended-only commit,
+push, remote hash match, and clean worktree. Next: finish review and run checks.
+
+Closeout review/checks PASS: native 18/18 (`python tools/run.py test-native`),
+ESP32 mocks 4/4 (`... test-esp32-mocks`), host 180/180 (`... test-host`), tooling
+8/8 (`python -m unittest discover -s tests/tooling -v`), PAGE CHECK OK
+(`node host/tests/page_check.mjs`), register generation/check (`... gen`), and
+environment (`... check-env`). Commands used `.venv\Scripts\python.exe`.
+Canonical reports are under `build/reports/{test-native,test-esp32-mocks,test-host,
+gen,check-env}.json` and their logs; source audit:
+`build/reports/closeout-source-audit.json` (81 intended files, no generated
+artifact paths or credential-pattern findings). The demo queue's drop-newest
+policy is now documented, and its README reflects the four-tab unified UI.
+Portal validation PASS (7 subsystems, 79 components, 21 registers, 26 messages,
+186 coverage entries). Initial `npm run validate` lacked an esbuild command
+shim; prepending the existing pinned esbuild executable directory to the process
+PATH resolved it without changing dependencies. Updated README, current handover,
+plan, limits, presentation status, and portal closeout text for class-project
+completion while retaining optional/deferred limitations. Next: final portal
+build/lint, delivery validation, source commit/push, then pin portal source links
+to that commit and record completion publication.
+
+Final artifact/portal gates PASS: both report PDFs validate (19 pages/eight
+images, class authors, hardware photo, two video links including page 2);
+presentation delivery checks pass (38 slides, two custom shows, native renders,
+photo/video URI, zero layout failures); both workbook variants retain four
+one-page logs, all activity text, five hours/week, and scoring last. Evidence:
+`docs/hardwarex/latex/latex_validation.json`,
+`build/presentation/delivery-checks.json`, and
+`build/reports/project-documentation/weekly-log-print-checks.json`.
+Portal production build and changed-file lint PASS. Initial build/lint failed
+because relocated `node_modules` junctions referenced missing package paths;
+`npx --yes pnpm@10.28.2 install --frozen-lockfile --force` restored only ignored
+dependencies. Package manifests/lockfile are unchanged. `npm run build`, targeted
+`npm run lint -- <changed portal files>`, final validation, and
+`git diff --check` now PASS. Source audit rechecked 83 intended files with no
+generated-artifact or credential-pattern findings. No new RTL/bench measurement,
+website deployment or release tag is claimed. Next: commit/push the full source
+set, then pin the portal to that published source revision and close the ledger.
+
+### Specifications-table video navigation (2026-10-18, verified and delivered; source WIP)
+
+User requests a new YouTube-link row in both report specifications tables for
+quick navigation. Added "Video demonstration" immediately after Hardware name
+in `docs/hardwarex/latex/hardwarex-report.tex`, using the exact existing video
+target. Updated `tools/validate_hardwarex_latex.py` to require the row and URI
+on page 2 of each PDF. Preserve the demonstration-section links. Scope: shared
+LaTeX, validator, report PDFs/manifests, both class-folder report copies, and this
+ledger. Next: rebuild/validate, inspect page 2, and hash-verify delivery. Existing
+WIP is preserved; no commit/push requested.
+
+Verification/delivery PASS: `.venv\Scripts\python.exe
+tools/build_hardwarex_latex.py` and `... tools/validate_hardwarex_latex.py`.
+Both reports have 19 A4 pages, eight images, correct authors, no overfull text
+or missing glyphs, and the exact clickable URI in the specifications table on
+page 2. Both page-2 renders were visually reviewed:
+`build/reports/specification-video-{embedded,fpga}.png`. Scoped
+`git diff --check` PASS. `.venv\Scripts\python.exe
+build/reports/publish_spec_link.py --deliver` replaced both class-folder report
+PDFs and verified destination hashes. Evidence:
+`build/reports/specification-video-delivery.json`; Embedded SHA-256
+`5ed7f2d267c29d279c0c5bbf139a2fec4549ecd684d6427eda06c5da0b6fc7c3`;
+FPGA `1e4a11a31908e3737f19e13d6869576bfb482259860fc3cec4543f19649a0790`.
+No blockers remain. Source remains explicitly WIP without a commit/push request.
+Next: user review of the quick-navigation link on page 2 of both reports.
+
+### Hardware photo and demonstration video (2026-10-18, verified and delivered; source WIP)
+
+User confirmed both class versions and placement: hardware photo in the report
+Hardware description and PPT board-connections slide; clickable YouTube link
+beside UART demonstration results. Source photo:
+`C:\Users\lingg\Downloads\WhatsApp Image 2026-10-18 at 11.36.16.jpeg`, visually
+confirmed against the attachment. Copy it to
+`docs/hardwarex/assets/logic-analyzer-hardware.jpeg`; preserve the original.
+Video target: `https://youtu.be/1xx84Ndi4vQ?si=ldsuYEWvYVqu2u6-`.
+Scope: shared report/presentation sources, image/build inputs, hyperlink export
+and validation, regenerated Embedded/FPGA report PDFs and PPTX/PDF companions,
+class deliverable copies, presentation README, and this ledger. Acceptance:
+correct image, working embedded URI links, author/custom-show preservation,
+native renders/layout validation, and hash-verified delivery. Existing WIP is
+preserved; no commit/push requested. Next: copy the photo, edit sources, and
+build/check both author variants.
+
+Source phase: copied the original JPEG to the agreed repository asset path.
+Added a captioned hardware figure to the shared LaTeX report and the photo to
+slide 4 without changing route positions. Added the supplied video target to
+the report UART demonstration and slide 35. Extended HTML-to-PPTX export to
+preserve anchor targets and added checks for the PPTX and native PDF URI.
+Report checks now require the hardware image/caption and video link; its build
+manifest includes the JPEG. Updated presentation documentation. Next: compile,
+render, inspect image placement, and verify links in all six output documents.
+
+Embedded/report verification: LaTeX build and validator PASS; Embedded report
+18 pages and FPGA report 19 pages, each with eight images and the exact video
+URI. Hardware-photo/report-video page PNGs in `build/reports/` were inspected.
+Embedded presentation: 38 slides, correct author, 23/26-slide custom shows,
+zero browser errors and geometry issues. Native slide 4 and 35 renders inspected.
+First native PDF check exposed a missing URI despite a text-run PPTX hyperlink.
+Added a text-box click action as well; rerender/check PASS. An attempted COM
+ExportAsFixedFormat call failed argument binding and was reverted; the working
+native SaveAs path is retained. Final `check_delivery.py --check-only` PASS,
+including the exact link target in the saved PPTX and native PDF. Existing
+uppercase/cover/back-cover warnings remain, with zero failures. Next: archive
+and deliver Embedded, then build/check/deliver FPGA.
+
+Final verification PASS for both author variants. Commands:
+`.venv\Scripts\python.exe tools/build_hardwarex_latex.py`,
+`.venv\Scripts\python.exe tools/validate_hardwarex_latex.py`, and the presentation
+`create_deck.py`, `render_deck.mjs`, `export_pptx.py`, `render_powerpoint.ps1`,
+`check_delivery.py --check-only` workflow (with each `DECK_AUTHORS` value and
+the documented Playwright module path). Both PPTX/PDF pairs contain the correct
+photo on slide 4 and exact clickable YouTube target on slide 35; all custom
+shows/authors preserved. Report PDFs contain the photo in Hardware description
+and the video beside the UART demonstration. Report build/validation manifests
+are under `docs/hardwarex/latex/`; reviewed report PNGs under `build/reports/`.
+Photo SHA-256 matches the Downloads original:
+`694cfe060e5b70e9001ab6ceb160d3648ea8e0d496e93fb5251fb2d5c119dd3c`.
+
+Delivery PASS: `.venv\Scripts\python.exe -X utf8
+build/reports/publish_uart_closeup.py embedded` and `... fpga` replaced each
+class folder's report PDF, PPTX, and presentation PDF and verified their hashes.
+The FPGA presentation PDF was initially locked; after the user closed the PDFs,
+retry succeeded. Internal `Logic-Analyzer/deliverables/` presentation PPTX/PDF/notes
+also match Embedded. Reports with exact file hashes:
+`build/reports/hardware-media-delivery-{embedded,fpga}.json`; archived native
+slide 4/35 previews and check reports:
+`build/presentation/variants/{embedded,fpga}/`. Scoped `git diff --check` PASS
+(line-ending notices only). No blockers remain. No commit/push requested;
+tracked changes remain explicitly source WIP. Next: user review of the updated
+hardware photo and demonstration links in both class deliverables.
+
+### KCCI weekly design/implementation logs (2026-10-18, verified and delivered; source WIP)
+
+User confirmed: use the same integrated project progression in both Embedded
+and FPGA workbooks, keep the existing dates and five hours per week, and move
+Project Scoring Sheet to the last tab in both. Week 1 covers specifications,
+architecture, and the implementation plan; Weeks 2–4 cover implementation and
+verification details. Preserve each variant's members and responsibilities.
+Scope: `docs/hardwarex/build_kcci_workbook.py`, this ledger, generated workbook
+variants/check reports, and the two class deliverable XLSX copies. These are
+phase-based activity summaries rather than the previous daily evidence timeline.
+Acceptance: verify four log texts/dates/hours, final scoring tab, correct local
+print-area sheet indices, unchanged scoring XML and original media/styles,
+readable weekly print output, and hash-verified delivery. Existing report,
+presentation, firmware and tooling WIP is preserved. No commit/push requested.
+Next: rewrite the shared log content and reorder workbook tabs safely.
+
+User expanded scope and confirmed the weekly-summary appendix in both
+HardwareX class-report PDFs must match the revised workbook phases. Add
+`docs/hardwarex/latex/hardwarex-report.tex`, both report builds/validation
+records, and both class-folder report PDF copies to the intended changes.
+
+Workbook build PASS: `.venv\Scripts\python.exe -X utf8
+docs/hardwarex/build_kcci_workbook.py --variant both`. Both files now order the
+implementation plan, Weeks 1–4, and scoring last. All dates/hours/activity texts
+and local print-area indices pass checks. Scoring XML remains byte-identical
+with SHA-256 `f8cebe3504d13fccb02fb9a27b029befd3a2e812520ac74856ae3375157f7877`.
+Original fonts/styles/media remain preserved. Reports:
+`build/reports/project-documentation/workbook-checks{,-fpga}.json`.
+Next: native worksheet print review, matching report appendix, and delivery.
+
+Print/report verification PASS: native Excel exported all four weekly logs for
+both variants with `& build/reports/project-documentation/render_weekly_logs.ps1`.
+Each log fits one page and contains all five activities and the five-hour footer.
+Visual samples reviewed: FPGA Week 1 and Embedded Week 3. The matching report
+appendix now describes requirements/architecture/plan, FPGA implementation,
+firmware/host implementation, then integration/verification. Commands:
+`.venv\Scripts\python.exe tools/build_hardwarex_latex.py` and
+`.venv\Scripts\python.exe tools/validate_hardwarex_latex.py` PASS for both
+18-page PDFs with no overfull text or missing glyphs. Both appendix page images
+were reviewed. Additional checks:
+`.venv\Scripts\python.exe -X utf8 build/reports/project-documentation/verify_and_deliver_logs.py`
+PASS; report `weekly-log-print-checks.json` in the same directory. Existing
+class workbooks were already Excel-resaved with scoring last; their package
+part numbers differ from the original template. Verification resolves scoring
+by worksheet name and confirms current form values and scoring cell formatting
+match before replacement. No existing instructor/admin values will be lost.
+Whitespace check PASS for builder, report source, and ledger. Next: deliver both
+XLSX/report PDF pairs and verify hashes.
+
+Delivery PASS: `.venv\Scripts\python.exe -X utf8
+build/reports/project-documentation/verify_and_deliver_logs.py --deliver`
+replaced `KCCI Project_Documentation_Forms.xlsx` and the class-specific
+HardwareX report PDF in both `KCCI_technical/Embedded/Final Project Deliverables`
+and `KCCI_technical/FPGA_Proj/Final Project Deliverables`. Dates, five hours/week,
+member lists, administrative fields, and scoring contents remain preserved.
+Both workbooks end with Project Scoring Sheet, and both report appendices match
+the phase-based logs. Every destination hash matches its generated source.
+Evidence: `build/reports/project-documentation/weekly-log-delivery.json`.
+Embedded XLSX SHA-256:
+`cfa383888b13f17d9f49865d2212f1941978dc30d2d2407d0def32c5608a9967`;
+Embedded PDF `c9152d8a3f160c385abd30bdfa373e21f1fe0ec653a4920f516a3adbffb198c8`;
+FPGA XLSX `b1573e917abe30966570931859cfb5e05c720bb089bdd674a2183a07a8fc2e46`;
+FPGA PDF `9d0b433b06bc00cf85134aa022e93d640e5e0ed7704d7371bb08b022e0594a1d`.
+No blockers remain. Tracked changes remain explicitly source WIP without a
+commit/push request. Next: user/instructor review of the revised weekly logs.
+
+### Combined ESP32 demo flash verification (2026-10-18, verified locally; source WIP)
+
+User requests the same ready-to-copy setup verification for `demo-protocols`.
+Shared runner fixes and its README commands are already in place. Scope:
+run `python tools/run.py demo-esp32-protocols -- flash`, verify automatic port
+selection and flash hashes, then inspect bounded serial startup/status output.
+Only this ledger needs a tracked change unless verification exposes a defect.
+Initial `git status --short --branch`: existing WIP preserved, main tracks
+origin/main. Hardware GPIO waveforms and I2C loopback wiring are unverified.
+No commit/push requested; source remains explicitly WIP. Next: flash the
+connected ESP32-S3 and verify the combined demo startup.
+
+Verification PASS: `python tools/run.py demo-esp32-protocols -- flash` builds
+and selects COM10 automatically; bootloader, application and partition-table
+flash hashes verified, followed by hard reset. Reports:
+`build/reports/demo-esp32-protocols.{json,log}`. Bounded serial verification:
+`.tools/espressif/python_env/idf5.5_py3.11_env/Scripts/python.exe -c` using
+`serial.Serial('COM10',115200,timeout=5)` and `read(8192)` PASS, with an assertion
+for `UART running batches=`. Observed `LA_PROTO_DEMO` UART counts 600 through
+1000 and I2C successful transaction counts 234 through 390, with write `4C 41`
+and read `41 33`. This confirms combined firmware execution and successful
+on-board I2C traffic; SPI/electrical analyzer waveform verification remains
+unverified. The ESP32 now runs the combined demo instead of the single-UART
+demo. No further setup/source repair needed. Source remains explicitly WIP;
+next: use the combined README wiring and analyzer settings for capture/live
+decoding. Ledger whitespace check: `git diff --check -- docs/status.md`.
+
+### ESP32 demo setup repair (2026-10-18, verified locally; source WIP)
+
+Scope: repair the relocated project-local ESP-IDF tools; make `tools/run.py`
+report environment-export errors and archive stale demo CMake workspaces;
+add a canonical setup target and copyable demo README commands. Intended files:
+`tools/run.py`, `fw-esp32/demo-{uart,protocols}/README.md`, and this ledger.
+Acceptance: required tools install, UART and combined demo builds from a plain
+Windows shell, relocation/error-path checks, and serial-port discovery before
+any flash. Existing source changes are user WIP and remain preserved. Initial
+checks: `git fetch origin` PASS; `git status --short --branch` and
+`git log --oneline --decorate -5` show main at origin/main (0b7271b), with
+pre-existing WIP. Diagnosis: CMake cache references the old root; IDF export
+fails for missing RISC-V tools and dfu-util and the runner discards the error.
+No commit/push requested; changes will remain explicitly WIP. Next: implement
+the runner repair, install project-local tools, then build both demos.
+
+Implementation: added `setup-esp32`, IDF-Python-based environment export with
+actionable failures, and non-destructive stale-demo-workspace archiving in
+`tools/run.py`. Both demo READMEs now use setup and port-auto-detected flash
+commands. `python tools/run.py setup-esp32` PASS (114.875 s); evidence:
+`build/reports/setup-esp32.{json,log}`. Port listing through the IDF Python PASS:
+ESP32-S3 native USB is COM10 (`303A:1001`); Zybo is COM13 (`1209:0001`). First
+UART build attempt exceeded the outer 120-second tool limit; no pass claimed.
+Next: rerun with a longer limit and verify both builds and recovery paths.
+
+Longer UART build exposed a second stale cache inside `bootloader/` even though
+the top-level cache had already been regenerated by the earlier user attempts.
+Build FAIL (not a toolchain failure); log: `build/reports/demo-esp32-uart.log`.
+Extended relocation detection to check both application and bootloader caches.
+Next: verify the real stale-bootloader recovery and clean builds.
+
+Both `python tools/run.py demo-esp32-uart` and
+`python tools/run.py demo-esp32-protocols` now PASS, including real relocation
+archiving and complete bootloader rebuilds. UART `-- flash` PASS on COM10 with
+flash hashes verified. Evidence: `build/reports/demo-esp32-{uart,protocols}.{json,log}`.
+Espressif's generic auto-detection scanned Bluetooth and Zybo ports first;
+added native Espressif USB preference for demo targets (explicit `-p`/ESPPORT
+still wins), and documented it in both READMEs. Next: verify the final flash
+path, regression checks, and a build from outside the project root.
+
+Final verification PASS: `python -m unittest discover -s tests/tooling -v`
+(8/8, new `tests/tooling/test_runner_idf.py` covers application/bootloader
+relocation, fresh caches, export diagnostics/Windows PATH and native-port
+selection); `python tools/run.py demo-esp32-uart -- flash` (automatic COM10,
+all three flash hashes verified, no unrelated-port scan); and
+`python C:/Users/lingg/Projects/Logic-Analyzer/Source_Code/tools/run.py demo-esp32-protocols`
+from `fw-esp32/demo-uart/` (PASS, confirms runner paths are independent of caller
+directory). Build/flash reports: `build/reports/demo-esp32-{uart,protocols}.{json,log}`;
+setup evidence: `build/reports/setup-esp32.{json,log}`. `git diff --check --
+tools/run.py docs/status.md` PASS (line-ending notice only).
+
+Bounded IDF-Python pyserial read of COM10 confirms repeated
+`LA_UART_DEMO: RUNNING batches=... TX=GPIO17 baud=115200`. The first assertion
+expected a literal heartbeat label and failed despite valid RUNNING output;
+corrected the verification assertion to the actual firmware status string,
+then PASS. The board now runs the single-UART demo. Combined demo build is
+verified; its flash and GPIO electrical waveforms were not checked in this
+session. No local setup blockers remain. Source remains explicitly WIP with
+the existing worktree changes; no commit or push requested. Next: user can copy
+the updated README build/flash commands in a normal PowerShell window and
+verify GPIO17 with the analyzer.
+
+### Presentation decoding close-up (2026-10-18, verified and delivered; source WIP)
+
+User requests a closer view of decoding results in addition to the full UI
+screenshot. Scope: add a shared UART result slide immediately after slide 34,
+using the real `uart-demo-frame.png` with a readable hex-to-text explanation.
+Include it in both FPGA and Embedded custom shows and both author variants.
+Intended files: presentation content/styles, route counts and checks, README,
+this ledger, generated PPTX/PDF/notes and matching class-folder PPTX/PDF copies.
+Acceptance: browser layout checks, native PowerPoint renders, custom-show
+verification, visual review of the close-up, and hash-verified delivery. Preserve
+the earlier report/W11 WIP. No commit/push requested. Next: implement slide 35
+and update the two routes from 37 to 38 total slides.
+
+Implementation phase: added slide 35 with the real full-width UART frame,
+hexadecimal-to-character cards, 115200-baud 8N1 settings, and calculated bit
+timing. The deck now has 38 slides; the FPGA custom show has 23 and Embedded has
+26. Updated content/styles, route references, native render checks, delivery
+checks, and README. Embedded build PASS with `create_deck.py`,
+`render_deck.mjs`, `export_pptx.py`, `render_powerpoint.ps1`, and
+`check_delivery.py --check-only` under `docs/presentation/`. Browser geometry
+issues/page errors: zero. HTML/PPTX checks: zero failures; existing uppercase,
+cover-line heuristic, and untitled back-cover warnings remain. Native slide 35
+visually reviewed: waveform, six byte labels, settings and message are readable.
+Next: archive/deliver Embedded, build/check FPGA, and verify its delivery.
+
+Final verification/delivery PASS for both author variants. Commands for each:
+`.venv\Scripts\python.exe -X utf8 docs/presentation/create_deck.py`,
+`node docs/presentation/render_deck.mjs`,
+`.venv\Scripts\python.exe -X utf8 docs/presentation/export_pptx.py`,
+`& docs/presentation/render_powerpoint.ps1`, and
+`.venv\Scripts\python.exe -X utf8 docs/presentation/check_delivery.py --check-only`.
+Set `DECK_AUTHORS` to the appropriate author list and `PLAYWRIGHT_MODULE_DIR` as
+documented in the presentation README. Both builds have 38 slides, correct
+authors, 23/26-slide native custom shows including slide 35, zero browser errors
+and zero geometry issues. Native PowerPoint close-up and title renders were
+visually reviewed. `git diff --check -- docs/presentation docs/status.md` PASS.
+Existing comparison files remain hash-identical. No new hardware run was needed.
+
+`build/reports/publish_uart_closeup.py embedded` and `... fpga` (using the project
+Python environment) archived checked variants and replaced the class-folder
+`logic-analyzer-design.pptx` and `logic-analyzer-design.pdf`. The internal
+`Logic-Analyzer/deliverables/` PPTX/PDF/notes were refreshed with Embedded.
+Every copied artifact was SHA-256 verified. Reports:
+`build/reports/presentation-closeup-{embedded,fpga}.json`; detailed checks and
+review PNGs: `build/presentation/variants/{embedded,fpga}/`. Delivery hashes:
+Embedded PPTX `bcf99d4f0d53677a3a1c31420742ddece2e6b6216160874b2bc886bb537a2a73`,
+PDF `e742ee19079140fbb23d88ded1d627f8908870fb7dbc745c78ac3cee28e36b88`;
+FPGA PPTX `801ed075ec6b3c5111555aba99f8ed7191bf723148a8c00fb37ab66ece0e6a87`,
+PDF `bbb86428b858884763a13e4ef5df2c39ca15db8233d14b8aff945eb0aed0301a`.
+No blockers remain. Source remains WIP without a commit/push request. Next:
+presenter/user review of slide 35 in either class custom show.
+
+### Instructor-facing HardwareX report revision (2026-10-18, verified and delivered; source WIP)
+
+Scope: rewrite the shared LaTeX report for both Embedded and FPGA submissions.
+Use clear academic prose, explain the RTOS mechanisms through the acquisition
+workflow, and remove assistant-to-user commentary and literal instruction labels.
+Preserve class-specific authors and RTL responsibilities. Intended files:
+`docs/hardwarex/latex/hardwarex-report.tex`, report validator if its wording checks
+need adjustment, both compiled PDFs and build/validation manifests. Acceptance:
+build both variants, validate layout/authors/images, read the extracted PDF text,
+inspect rendered pages, and refresh the matching class-folder report PDFs.
+Verification commands and delivery paths will be recorded below. Existing W11
+source changes are unrelated WIP and remain preserved. This revision is WIP;
+no commit or push was requested.
+
+Rewrite phase: updated `docs/hardwarex/latex/hardwarex-report.tex` throughout
+the abstract, context, FPGA/DMA explanation, RTOS section, task/queue tables,
+validation discussion, conclusion, contributions, and weekly summary. The RTOS
+section explains preemption, blocked tasks, interrupt notifications, segment
+references, queue overflow, semaphores, static storage, and cache invalidation,
+with a UART data-flow example. Removed literal "Explicit RTOS" and development
+handoff commentary. Class headings and credits now identify the correct
+submission. `tools/validate_hardwarex_latex.py` checks the rewritten RTL credit
+sentences. Verification pending: both report builds and PDF checks. Next: build,
+review extracted text/layout, and refresh the two class-folder PDFs.
+
+First build: `.venv\Scripts\python.exe tools/build_hardwarex_latex.py` compiled
+both 18-page variants. PDF text/layout review found an overfull Priority header
+and a floating RTOS figure interrupting the numbered workflow. Corrected the
+header and kept the smaller RTOS figure before the sequence. Also simplified
+the scope table, defined key interface terms, and corrected the UART caption
+from "64k raw words" to the demonstrated 64,000 samples. Build/validation must
+be repeated before delivery. No new hardware tests were run in this revision.
+
+Final verification PASS:
+`.venv\Scripts\python.exe tools/build_hardwarex_latex.py` and
+`.venv\Scripts\python.exe tools/validate_hardwarex_latex.py`. Both PDFs have
+18 A4 pages, seven images, embedded fonts, correct class-specific authors and
+credits, and no overfull boxes or missing glyphs. Build/validation records:
+`docs/hardwarex/latex/{latex_build_manifest,latex_validation}.json`; compile logs:
+`build/latex-hardwarex/hardwarex-{embedded,fpga}.log`. Extracted text and page
+images were inspected with the PDF reader, including the corrected task table
+and uninterrupted UART workflow. The separate excerpt renderer was unavailable
+because `pdftoppm` is missing; PDF-reader images provided visual review instead.
+`git diff --check` PASS (line-ending notices only).
+
+Delivery PASS after the user closed both locked destination PDFs. Replaced the
+existing reports in `C:\Users\lingg\Projects\KCCI_technical\Embedded\Final Project
+Deliverables\Logic Analyzer with Live Protocol Decoding_Lingga Aradhana Sahadewa.pdf`
+and `C:\Users\lingg\Projects\KCCI_technical\FPGA_Proj\Final Project Deliverables\Logic
+Analyzer with Live Protocol Decoding_Lingga Aradhana Sahadewa, Alvin Hadar, Bagas
+Budhi Permana.pdf`. `Get-FileHash -Algorithm SHA256` confirms each destination
+matches its compiled source: Embedded
+`728f9db427bdf74b60c1827d44254defd34e629cb567a0fee49d835f59ef0dd2`;
+FPGA `2367d7c6c0ca0bbc6ac618907883a525cd90524673bf9654f89e215e8681ec16`.
+No delivery blocker remains. Source changes remain explicitly WIP without a
+commit/push request. Next: instructor/user review of the revised reports.
+
 **Current-state entry point:** [current-handover.md](current-handover.md),
 updated 18 October 2026. The W11 SD image is installed and cold-boot verified;
 JP5=SD, firmware 0x000A0000 / UI w11. Older session entries below retain the
@@ -2237,12 +2646,12 @@ boot of the USB BOOT.BIN remain open; no `v1.0` tag was created. Evidence:
 | Project root | `C:\Users\lingg\Projects\Logic-Analyzer\Source_Code` |
 | Plan source | `docs/plan.md` is normative; the root `logic-analyzer-implementation-plan-v0.4.md` is the historical v0.4 snapshot. The 2026-09-17 USB planning addendum is in `docs/plan.md` only. |
 | Branch | `main` |
-| Last implementation change | Local W11 waveform-first UI, actual transition preview, reset/cancellation and external S3 UART demo; committed baseline remains b487413; source WIP is not at that SHA |
+| Last implementation change | Completed W11 waveform-first UI, actual transition preview, reset/cancellation, external S3 UART/SPI/I²C demos, and both class deliverable source sets |
 | Remote | `origin` -> `https://github.com/linggaaradhanas22/logic-analyzer.git` |
-| Remote state | `git fetch origin` PASS on 2026-10-18; HEAD and origin/main at b487413. W11/demo/doc sources remain local WIP; no commit/push/tag requested in this session |
-| Current pending work | W11 SD boot and waveform/reset features pass locally. Source commit/push, portal deployment, public USB identity/release tag, optional gateway SPI fault/tuning, SUMP deferral, 200 MS/s and new external SPI/I2C preview qualification remain separate. See docs/current-handover.md; do not resume old USB bring-up. |
+| Remote state | User authorized all-source commit/push on 2026-10-18; final commit and remote verification are recorded in the closeout at the top of this ledger |
+| Current pending work | No implementation work remains in the delivered USB-first class-project scope. Website deployment, public USB identity/tagged release, optional gateway SPI fault/tuning, SUMP and 200 MS/s are deferred. See docs/current-handover.md. |
 | Workflow | Native Windows only; use `python tools/run.py <target>` |
-| Phase | P0-P8 historical close-out evidence retained below; P9 optional/stretch boundaries remain. USB-first UI through W11 is implemented/verified locally. W11 SD installation/cold boot PASS on 2026-10-18 (E2E 6/6, browser/ESP32 10/10); repository and portal publication remain WIP, not a release. |
+| Phase | Class project complete (2026-10-18), including W11 and both class report/presentation/workbook sets. W11 SD cold boot PASS (E2E 6/6, browser/ESP32 10/10). Historical P0-P10 measurements remain below; optional/stretch limits are not presented as completed. |
 
 Generated environments, reports, logs and build outputs are intentionally
 ignored by Git. The reports described below are local evidence and must be
@@ -2277,7 +2686,7 @@ phase requires the command or bench evidence named by the plan.
 These results were observed at the fixed project root using the project
 `.venv`; dates and reports are recorded per row. This is retained phase history;
 unqualified older counts below are not W11 counts. Latest: native 18/18, host
-177/177, SD USB UI E2E 6/6 and SD browser/external UART 10/10. Archived W11
+180/180, SD USB UI E2E 6/6 and SD browser/external UART 10/10. Archived W11
 reports are in `build/reports/ui-waveform/` and `build/reports/sd-w11/`;
 root-level report filenames may be overwritten by later canonical runs.
 
@@ -2483,12 +2892,12 @@ the implementation is not present.
 
 1. Read `AGENTS.md`, `docs/current-handover.md`, `docs/plan.md` and the latest
    entry at the top of this ledger; inspect `git status --short --branch`.
-2. Preserve all local W11, UART-demo and earlier documentation WIP. Baseline is
-   b487413; do not claim the new implementation is already committed/pushed.
+2. The class project is complete. Read the closeout publication record rather
+   than resuming earlier WIP; preserve any new user changes before maintenance.
 3. Normal startup: JP5=SD, JP6=USB, J12 power, J10 data. The installed W11
    BOOT.BIN SHA-256 begins 6cb120cc; expected firmware/PL are 0x000A0000 /
    0x4C410002. Enumerate COM ports instead of assuming the number forever.
-4. ESP32-S3 is the external GPIO17 UART stimulus (COM10 console), not the
+4. ESP32-S3 runs the combined UART/SPI/I²C stimulus (COM10 console), not the
    gateway. Analyzer endpoint is COM13 on this bench. Keep common ground and
    GPIO17 -> JC-1; no JE-to-JC loopback on an externally driven input.
 5. UI w11: hard-refresh one browser tab, Connect, Capture/Decode or Apply live

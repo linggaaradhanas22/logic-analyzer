@@ -1,5 +1,12 @@
 # Three-level web artifact implementation instructions
 
+> **Current continuation (18 October 2026):** this remains the historical portal
+> implementation contract. The portal's current status/snapshot and `/using`
+> pages have been synchronized locally with W11 firmware 0x000A0000 / UI w11 and
+> the verified SD cold boot. The USB-first class project is complete, and source
+> publication is recorded in `status.md`; the website has not been redeployed. See
+> [`current-handover.md`](current-handover.md) for the operational handover.
+
 Prepared: 2026-09-11, Asia/Jakarta. Revised: 2026-09-14 (P7–P10.1 landed; the
 statuses, component lists, evidence snapshot and roadmap emphasis below were
 reconciled with `docs/status.md` and the current source before implementation).

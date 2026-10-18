@@ -32,30 +32,32 @@ export default function UsingPage() {
           </p>
           <h1>From power-off to a trusted capture</h1>
           <p className="doc-answer">
-            Start with the verified JTAG development boot, connect the Zybo
+            Start from the verified W11 SD image (JP5 = SD), connect the Zybo
             directly to the PC over J10, prove the complete path with an
             internal counter waveform, and only then attach a real 3.3 V target.
-            The browser workspace handles connection, capture, waveform
-            inspection, decode, live events, export and trace in one page.
+            The browser workspace handles connection, capture, activity-focused
+            waveform inspection, decode, real live waveforms with aligned
+            events, exports, trace and Reset UI in one page.
           </p>
           <div className="doc-status-row">
             <StatusBadge
               status="bench-verified"
-              label="Direct USB and unified UI bench-verified"
+              label="W11 USB SD boot, live waveform and Reset UI verified"
             />
             <StatusBadge
               status="known-issue"
               label="Development USB identity 1209:0001"
             />
             <StatusBadge
-              status="blocked"
-              label="Physical SD boot remains unverified"
+              status="bench-verified"
+              label="Physical SD boot verified 18 Oct 2026"
             />
           </div>
           <p className="doc-scope">
-            Current default: JP5 = JTAG, JP6 = USB, J12 power/JTAG/console, J10
-            analyzer data. The ESP32 gateway is optional and is not a supported
-            unified-UI target.
+            Current normal startup: JP5 = SD, JP6 = USB, J12 power/JTAG/console,
+            J10 analyzer data. JP5 = JTAG is the development load path. The
+            ESP32 gateway is optional and is not a supported unified-UI target;
+            the current ESP32-S3 runs the GPIO17 UART demonstration.
           </p>
         </header>
 
@@ -138,7 +140,9 @@ export default function UsingPage() {
               <h3>Board setup</h3>
               <ul>
                 <li>
-                  <strong>JP5 = JTAG.</strong> Power-cycle once after moving it.
+                  <strong>JP5 = SD for normal W11 startup.</strong> Use JP5 =
+                  JTAG only for development loading, and power-cycle after
+                  moving it.
                 </li>
                 <li>
                   <strong>JP6 = USB.</strong> The recorded bench powers the
@@ -192,39 +196,53 @@ export default function UsingPage() {
         </section>
 
         <section className="doc-section" id="power-load">
-          <h2>2. Power and load the current image</h2>
+          <h2>2. Power and boot the current image</h2>
           <div className="doc-prose">
-            <ol>
-              <li>With power removed, set JP5 and JP6.</li>
-              <li>Connect J12 and apply board power.</li>
-              <li>Connect J10 directly to the PC.</li>
-              <li>
-                From the repository root, load the default direct-USB profile:
-              </li>
-            </ol>
+            <p>
+              <strong>Normal startup uses the verified W11 SD image.</strong>{' '}
+              With power removed, set JP5 = SD and JP6 = USB, insert the card,
+              connect J12 for power and J10 directly to the PC, then power on.
+              No JTAG load is needed after ordinary power cycling.
+            </p>
+            <p>
+              The installed image is 2,415,152 bytes, SHA-256{' '}
+              <Inline>6cb120cc...a847b892</Inline>. Expect firmware{' '}
+              <Inline>0x000A0000</Inline>, PL <Inline>0x4C410002</Inline> and UI{' '}
+              <Inline>w11</Inline>. Card read-back, cold identity, USB UI E2E
+              6/6 and external UART browser checks 10/10 passed on 18 October
+              2026.
+            </p>
+            <p>
+              Rebuild with <Inline>python tools/run.py boot</Inline> and package
+              with <Inline>python tools/run.py package</Inline>. Replacing the
+              card and observing a cold boot remain physical steps; do not infer
+              them from a successful build.
+            </p>
           </div>
-          <Cmd>{`python tools\\run.py jtag-zynq`}</Cmd>
           <p className="doc-prose">
-            This resets the PS, programs the PL, runs the FSBL, downloads{' '}
-            <Inline>la_app_usb</Inline> and starts CPU0. It writes{' '}
-            <Inline>build/reports/jtag-zynq.json</Inline>. The image is
-            volatile, so repeat this after every board power loss.
+            <strong>Development boot:</strong> select JP5 = JTAG, power-cycle,
+            then run <Inline>python tools/run.py jtag-zynq</Inline>. This resets
+            the PS, programs the PL, runs the FSBL, downloads{' '}
+            <Inline>la_app_usb</Inline> and starts CPU0; it writes{' '}
+            <Inline>build/reports/jtag-zynq.json</Inline>. The JTAG image is
+            volatile.
           </p>
           <p className="doc-prose">
-            On a clean checkout, build the bitstream/XSA before the firmware:
+            On a clean checkout, build the bitstream/XSA and firmware before
+            either boot path:
           </p>
           <Cmd>{`python tools\\run.py bit
-python tools\\run.py fw-zynq
-python tools\\run.py jtag-zynq`}</Cmd>
+python tools\\run.py fw-zynq`}</Cmd>
           <div className="doc-evidence">
-            <div className="doc-evidence-item" data-status="blocked">
+            <div className="doc-evidence-item" data-status="verified">
               <p>
-                <strong>Do not substitute an assumed SD boot.</strong>
+                <strong>SD boot is verified for W11.</strong>
               </p>
               <p>
-                <Inline>python tools/run.py boot</Inline> builds a USB-profile
-                BOOT.BIN, but physical startup from the SD card with JP5 = SD
-                remains an open human release gate.
+                W11 firmware 0x000A0000 / UI w11 cold-booted with JP5 = SD: USB
+                UI E2E 6/6 and browser external-UART checks 10/10. Earlier
+                September SD evidence is historical. Public USB identity and the
+                release tag/publication remain separate gates.
               </p>
             </div>
           </div>
@@ -300,7 +318,10 @@ python tools\\run.py jtag-zynq`}</Cmd>
                   The link pill must say <strong>linked</strong>.
                 </li>
                 <li>
-                  Firmware should be <Inline>0x00090000</Inline>.
+                  Firmware should be <Inline>0x000A0000</Inline>; UI{' '}
+                  <Inline>w11</Inline>. Older <Inline>0x00090000</Inline> SD
+                  images show event-only live decoding and require an image
+                  update.
                 </li>
                 <li>
                   PL should be <Inline>0x4C410002</Inline>.
@@ -404,7 +425,11 @@ python tools\\run.py jtag-zynq`}</Cmd>
                 <li>
                   Completion means exact size and whole-capture CRC passed.
                 </li>
-                <li>Zoom, pan, Fit, cursors and edge stepping work.</li>
+                <li>
+                  W11 opens at a readable activity scale; Focus activity
+                  restores it, Fit shows the whole record.
+                </li>
+                <li>Zoom, pan, cursors and edge stepping work.</li>
               </ul>
             </article>
           </div>
@@ -490,8 +515,14 @@ python tools\\run.py jtag-zynq`}</Cmd>
                   <strong>Arm</strong>.
                 </li>
                 <li>
-                  Click Slot 0 <strong>Start</strong>; require events up and the{' '}
+                  Click Slot 0 <strong>Start</strong>; require real high/low
+                  traces, decoded bytes aligned beneath them, events up, and the{' '}
                   <strong>client</strong> drop count to remain zero.
+                </li>
+                <li>
+                  Use <strong>Pause view</strong> to freeze a bounded snapshot,
+                  <strong> Follow</strong> to resume, and Fit history/zoom to
+                  inspect. Missing ranges stay blank and are counted.
                 </li>
                 <li>
                   Click Slot 0 <strong>Stop</strong>; require session idle.
@@ -505,7 +536,14 @@ python tools\\run.py jtag-zynq`}</Cmd>
             a capture before starting live. Host capture decode needs the native
             DLL; device-side live decode does not. The bounded replay ring may
             discard old history after it fills; a rising ring count alone does
-            not mean the active browser lost events.
+            not mean the active browser lost events. Live sampling uses the
+            server startup rate (100 MS/s by default), not the Capture Rate
+            dropdown. The W11 live waveform is exact preview, not a lossless
+            recording: under pressure the newest preview may drop and ranges
+            stay visibly blank. Use burst export to retain a complete record.
+            <strong> Reset UI</strong> stops/cancels work, disconnects, clears
+            unexported session data and saved UI preferences, and restores
+            defaults; reconnect afterward.
           </p>
         </section>
 
@@ -781,10 +819,15 @@ python tools\\run.py jtag-zynq`}</Cmd>
               The 1209:0001 development identity is not a final release USB
               identity.
             </li>
-            <li>The physical SD boot and final release tag remain open.</li>
             <li>
-              Automated UI browser and bench gates pass; the human visual
-              click-through remains open.
+              W11 physical SD boot, USB UI E2E 6/6 and external UART browser
+              checks 10/10 passed on 18 October 2026; the release tag and public
+              USB identity remain open.
+            </li>
+            <li>
+              The original walkthrough was author-confirmed on 12 October; the
+              user accepted the W11 view on 18 October. Automatic checks are not
+              presented as a scored human walkthrough.
             </li>
           </ul>
           <p className="doc-scope">

@@ -15,20 +15,77 @@ type SystemNode = {
 };
 
 const NODES: SystemNode[] = [
-  { slug: 'physical-io', order: '01', name: 'Signals and physical I/O', role: 'Eight 3.3 V inputs, pattern outputs and board wiring.', status: 'bench-verified', statusNote: 'JE→JC loopback 18/18' },
-  { slug: 'fpga-capture', order: '02', name: 'FPGA capture pipeline', role: 'Sample, trigger, keep history, encode and packetize at fabric speed.', status: 'bench-verified', statusNote: 'Exact captures at 1/10/100 MS/s' },
-  { slug: 'dma-memory', order: '03', name: 'AXI DMA and DDR', role: 'Move complete packets into bounded DDR buffers with ordinary SG descriptors.', status: 'bench-verified', statusNote: 'Multi-BD and live segments' },
-  { slug: 'zynq-rtos', order: '04', name: 'Zynq FreeRTOS control', role: 'Coordinate acquisition, commands, transmission, status and ownership.', status: 'bench-verified', statusNote: 'Burst and live paths' },
-  { slug: 'protocol-link', order: '05', name: 'Framed UART + SPI link', role: 'CRC-protected frames for commands, events and capture chunks.', status: 'blocked', statusNote: 'SPI drain gate waits on the S3 port' },
-  { slug: 'esp32-gateway', order: '06', name: 'ESP32 wireless gateway', role: 'Relay to one Wi-Fi TCP client and serve the live web view.', status: 'known-issue', statusNote: 'Wi-Fi drain measured at ~0.28 MB/s' },
-  { slug: 'host-tools', order: '07', name: 'Host tools and capture files', role: 'Configure, validate, reconstruct and export captures; stream live events.', status: 'host-tested', statusNote: 'Burst and live used on bench' },
+  {
+    slug: 'physical-io',
+    order: '01',
+    name: 'Signals and physical I/O',
+    role: 'Eight 3.3 V inputs, pattern outputs and board wiring.',
+    status: 'bench-verified',
+    statusNote: 'JE→JC loopback 18/18',
+  },
+  {
+    slug: 'fpga-capture',
+    order: '02',
+    name: 'FPGA capture pipeline',
+    role: 'Sample, trigger, keep history, encode and packetize at fabric speed.',
+    status: 'bench-verified',
+    statusNote: 'Exact captures at 1/10/100 MS/s',
+  },
+  {
+    slug: 'dma-memory',
+    order: '03',
+    name: 'AXI DMA and DDR',
+    role: 'Move complete packets into bounded DDR buffers with ordinary SG descriptors.',
+    status: 'bench-verified',
+    statusNote: 'Multi-BD and live segments',
+  },
+  {
+    slug: 'zynq-rtos',
+    order: '04',
+    name: 'Zynq FreeRTOS control',
+    role: 'Coordinate acquisition, commands, transmission, status and ownership.',
+    status: 'bench-verified',
+    statusNote: 'Burst and live paths',
+  },
+  {
+    slug: 'protocol-link',
+    order: '05',
+    name: 'Framed UART + SPI link',
+    role: 'CRC-protected frames for commands, events and capture chunks.',
+    status: 'blocked',
+    statusNote: 'SPI drain gate waits on the S3 port',
+  },
+  {
+    slug: 'esp32-gateway',
+    order: '06',
+    name: 'ESP32 wireless gateway',
+    role: 'Relay to one Wi-Fi TCP client and serve the live web view.',
+    status: 'known-issue',
+    statusNote: 'Wi-Fi drain measured at ~0.28 MB/s',
+  },
+  {
+    slug: 'host-tools',
+    order: '07',
+    name: 'Host tools and capture files',
+    role: 'Configure, validate, reconstruct and export captures; draw real live waveforms with aligned decode.',
+    status: 'bench-verified',
+    statusNote: 'Burst, live and W11 SD UI verified',
+  },
 ];
 
 const FLOWS = [
   {
     id: 'capture',
     label: 'Capture data',
-    order: ['physical-io', 'fpga-capture', 'dma-memory', 'zynq-rtos', 'protocol-link', 'esp32-gateway', 'host-tools'],
+    order: [
+      'physical-io',
+      'fpga-capture',
+      'dma-memory',
+      'zynq-rtos',
+      'protocol-link',
+      'esp32-gateway',
+      'host-tools',
+    ],
     steps: [
       'A signal arrives on a JC pin and is synchronized into the 100 MHz fabric clock domain.',
       'The FPGA samples, qualifies the trigger, keeps pre-trigger history and packs the samples.',
@@ -43,7 +100,13 @@ const FLOWS = [
   {
     id: 'commands',
     label: 'Commands',
-    order: ['host-tools', 'esp32-gateway', 'protocol-link', 'zynq-rtos', 'fpga-capture'],
+    order: [
+      'host-tools',
+      'esp32-gateway',
+      'protocol-link',
+      'zynq-rtos',
+      'fpga-capture',
+    ],
     steps: [
       'The host builds a typed frame (CONFIG, ARM, ABORT, live setup) with a sequence number.',
       'The ESP32 forwards it verbatim to the UART; the host waits for the matching ACK.',
@@ -56,7 +119,14 @@ const FLOWS = [
   {
     id: 'status',
     label: 'Status/errors',
-    order: ['fpga-capture', 'dma-memory', 'zynq-rtos', 'protocol-link', 'esp32-gateway', 'host-tools'],
+    order: [
+      'fpga-capture',
+      'dma-memory',
+      'zynq-rtos',
+      'protocol-link',
+      'esp32-gateway',
+      'host-tools',
+    ],
     steps: [
       'The PL raises DONE, TRIGGERED or OVERFLOW; the DMA raises completion and error interrupts.',
       'ISRs acknowledge the hardware and notify tasks; they never process payloads.',
@@ -88,12 +158,21 @@ export function SystemDiagram() {
           </button>
         ))}
       </fieldset>
-      <ul className="doc-system-diagram" aria-label="Level 1 system architecture">
+      <ul
+        className="doc-system-diagram"
+        aria-label="Level 1 system architecture"
+      >
         {NODES.map((node) => {
           const index = position.get(node.slug);
           const active = index !== undefined;
-          const from = index !== undefined && index > 0 ? NODES.find((item) => item.slug === flow.order[index - 1]) : undefined;
-          const to = index !== undefined && index < flow.order.length - 1 ? NODES.find((item) => item.slug === flow.order[index + 1]) : undefined;
+          const from =
+            index !== undefined && index > 0
+              ? NODES.find((item) => item.slug === flow.order[index - 1])
+              : undefined;
+          const to =
+            index !== undefined && index < flow.order.length - 1
+              ? NODES.find((item) => item.slug === flow.order[index + 1])
+              : undefined;
           return (
             <li key={node.slug} style={{ display: 'contents' }}>
               <a
@@ -103,7 +182,9 @@ export function SystemDiagram() {
                 href={`/subsystems/${node.slug}`}
               >
                 <span className="order">{node.order}</span>
-                {index !== undefined ? <span className="doc-system-step">Step {index + 1}</span> : null}
+                {index !== undefined ? (
+                  <span className="doc-system-step">Step {index + 1}</span>
+                ) : null}
                 <strong>{node.name}</strong>
                 <p>{node.role}</p>
                 <StatusBadge status={node.status} />
@@ -115,7 +196,9 @@ export function SystemDiagram() {
                     {to ? `sends to ${to.name}` : 'ends the flow'}
                   </p>
                 ) : (
-                  <p className="doc-system-route">not part of the “{flow.label}” flow</p>
+                  <p className="doc-system-route">
+                    not part of the “{flow.label}” flow
+                  </p>
                 )}
               </a>
             </li>

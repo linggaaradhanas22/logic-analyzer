@@ -15,7 +15,7 @@ try {
     $app = New-Object -ComObject PowerPoint.Application
     $deck = $app.Presentations.Open((Join-Path $out $DeckName), -1, 0, 0)
     if ($deck.SlideShowSettings.NamedSlideShows.Count -ne 2) { throw 'Expected two subsystem custom slide shows' }
-    $expectedShows = @{ 'FPGA system' = 22; 'Embedded system' = 25 }
+    $expectedShows = @{ 'FPGA system' = 23; 'Embedded system' = 26 }
     for ($j = 1; $j -le $deck.SlideShowSettings.NamedSlideShows.Count; $j++) {
         $show = $deck.SlideShowSettings.NamedSlideShows.Item($j)
         # The COM SAFEARRAY exposes a leading zero slot through PowerShell.
@@ -23,7 +23,7 @@ try {
         $ids = @($show.SlideIDs | Where-Object { $_ -gt 0 })
         'Native custom show: {0} ({1} slides)' -f $show.Name, $ids.Count
         if (-not $expectedShows.ContainsKey($show.Name) -or $ids.Count -ne $expectedShows[$show.Name]) { throw ('Unexpected native custom show route: {0}, count {1}' -f $show.Name, $ids.Count) }
-        if ($show.Name -eq 'FPGA system') { $positions = @(1..18) + @(34..37) } else { $positions = @(1..6) + @(19..37) }
+        if ($show.Name -eq 'FPGA system') { $positions = @(1..18) + @(34..38) } else { $positions = @(1..6) + @(19..38) }
         $expectedIds = @(foreach ($position in $positions) { $deck.Slides.Item($position).SlideID })
         if (($ids -join ',') -ne ($expectedIds -join ',')) { throw 'Native custom show has the wrong slide sequence' }
     }

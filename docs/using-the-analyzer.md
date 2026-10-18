@@ -5,11 +5,13 @@ unpowered Zybo Z7-10, brings up the default direct-Zynq USB profile, checks the
 hardware through the unified browser UI, and then moves from internal self-test
 signals to a real target.
 
-The verified development path is **JP5 = JTAG**, J12 for board power/JTAG/
-console, J10 for analyzer data, and `python tools/run.py jtag-zynq`. The
-USB-profile SD boot (JP5 = SD) was verified on 2026-09-26 as the release
-startup path; see section 2. The ESP32 gateway is still supported, but it is
-optional and is not a supported connection target for the unified UI.
+Normal bench startup now uses the **W11 SD image, JP5 = SD**, verified on
+18 October 2026. Development uses **JP5 = JTAG**, J12 for power/JTAG/console,
+J10 for analyzer data and `python tools/run.py jtag-zynq`. See section 2 and
+[current-handover.md](current-handover.md) for image identity and current state.
+The ESP32 gateway is still supported, but it is optional and is not a supported
+connection target for the unified UI. The current ESP32-S3 runs the standalone
+UART demonstration from `fw-esp32/demo-uart/`.
 
 All commands below run from the project root in PowerShell. Electrical details
 are in `docs/wiring.md`, current limits are in `docs/limits.md`, and development
@@ -21,7 +23,7 @@ environment setup is in `docs/windows-dev.md`.
 
 | Item | Current direct-USB setting | Why |
 |---|---|---|
-| Zybo boot jumper | **JP5 = JTAG** | Development boot; **JP5 = SD** starts the verified release image from the card (section 2). Power-cycle once after moving JP5. |
+| Zybo boot jumper | **JP5 = SD** for normal startup; **JP5 = JTAG** for development | SD runs the verified W11 image; JTAG is for `jtag-zynq` development loads. Power-cycle once after moving JP5. |
 | Zybo power select | **JP6 = USB** | J12 supplies board power on the recorded bench setup. |
 | USB host jumpers | **JP1 open, JP2 open** | Required for the documented J10 device-mode setup. |
 | USB host connector | **J11 unused** | J10, not J11, is the analyzer device port. |
@@ -84,16 +86,23 @@ port is a debug console, **not** the analyzer data endpoint.
 
 ### SD boot (release image, JP5 = SD)
 
-Verified 2026-09-26 for the USB profile:
+Latest USB/W11 image installed and cold-boot verified **2026-10-18**:
 
 1. Build the image if needed: `python tools\run.py boot`.
 2. Copy `build\release\BOOT.BIN` to the FAT32 root of the SD card.
 3. With power removed, set **JP5 = SD** (JP6 = USB) and insert the card.
 4. Power on; J10 enumerates as `1209:0001`. Continue with section 3.
 
+The installed BOOT.BIN is **2,415,152 bytes**, SHA-256
+`6cb120ccc53c573edf9188a82d2fe1622def58836ffa46fdc40224eca847b892`.
+Expected firmware is **0x000A0000**, PL **0x4C410002**, UI **w11**. Card
+read-back, cold identity, SD UI E2E 6/6 and external UART browser 10/10 passed;
+reports/backups are in `build/reports/sd-w11/`. JTAG loading is not needed
+after normal power cycling. The earlier September SD image is historical.
+
 JTAG (above) remains the development path; the SD boot runs the same USB
 profile and data endpoint, with no JTAG cable or `jtag-zynq` step. The gate
-evidence is recorded in `docs/status.md`.
+evidence is recorded in `docs/status.md` and `docs/current-handover.md`.
 
 ## 3. Find the analyzer COM port
 
@@ -140,13 +149,22 @@ In the UI:
    do not run `la-cli` or `la-web` against the same port concurrently.
 3. Confirm the link pill changes from `offline` to **`linked`**.
 4. Confirm the header displays firmware and PL identities. The current checkout
-   reports firmware `0x00090000` and PL `0x4C410002`.
+    reports firmware `0x000A0000` and PL `0x4C410002` with the W11 live-waveform
+    build. Older SD images may still report `0x00090000` (event-only live view).
 5. Click **Ping**. A success toast includes the same IDs and a nonzero uptime.
 6. Check the bottom bar before testing: `session idle`, `events 0`, `drops 0`,
    with no warning text.
 
 **Stop here if Connect or Ping fails.** A capture made before the identity check
 does not prove that the UI is talking to the intended device image.
+
+**Reset UI** (top right) stops acquisition, cancels pending work, disconnects
+the analyzer and clears in-memory captures, decoded/live history, trace view,
+cursors, channel layout and this UI's saved browser settings. Forms return to
+10 MS/s, 64k raw, no trigger, Pre 0, Patgen off and the default UART decoder
+text; all eight channels are shown. Export captures you want to retain first.
+Reset does not erase exported files or reflash/reset either board. Select the
+analyzer port and Connect again afterward.
 
 ## 5. Run the first self-test
 
@@ -185,6 +203,12 @@ section. Do not proceed to real-signal debugging with an unproven base path.
 ## 6. Learn the waveform controls
 
 Use the counter capture to check the viewer before connecting a target:
+
+New captures open at a readable time scale around the first visible signal
+activity. **Focus activity** restores that view. **Fit** or double-click shows
+the full record with continuous high/low rails; dense activity is represented
+by a min/max band when exact samples cannot fit. Labels are suppressed rather
+than overlapped at wide zoom. Neither control changes the recorded samples.
 
 1. Scroll over the waveform to zoom around the pointer.
 2. Drag the waveform to pan; double-click it or click **Fit** to show all data.
@@ -249,16 +273,39 @@ For a UART live self-test:
 2. Click **Apply live config**. Slot 0 should become configured.
 3. In **Pattern generator**, select `uart` and click **Arm**.
 4. In the Slot 0 live pane, click **Start**.
-5. Confirm decoded events move across the timeline, `events` increases and the
+5. Confirm real high/low traces and decoded annotations update together, `events`
+   increases and the
    `client` count inside `drops ... (ring ..., client ...)` remains zero. The
    `ring` count may increase after the bounded replay history fills; that alone
    does not mean the active browser lost events.
 6. Click Slot 0 **Stop**. Confirm the session returns to `idle`.
 
-Up to three decoder slots can be configured. Each pane has independent Start
-and Stop controls; **Stop all** ends every running slot. The live panes retain
-up to 100,000 events per slot and show any older events discarded from that
-browser-side view.
+Up to three decoder slots can be configured. Each configured pane shows the
+protocol's actual input channels, with decoded annotations on the same time
+axis. Unconfigured panes are hidden. The W11 view requires USB firmware
+`0x000A0000` or newer; if an older SD image is running, the UI reports this
+instead of presenting decoded events as a waveform. The self-test still needs
+the real JE-to-JC loopback for live input; remove that jumper before connecting
+an external source to the same JC input.
+
+Each pane has independent Start/Stop controls; **Stop all** ends acquisition.
+**Pause view** freezes the displayed snapshot while acquisition keeps running;
+**Follow** resumes following recent activity, including holding the latest
+burst readable during idle gaps. Mouse-wheel zoom and drag pause the view for
+inspection; **Fit history** shows the retained interval. The browser retains
+at most two seconds or 16,384 actual runs and 10,000 annotations per slot.
+Missing preview ranges are blank and reported as gaps/omissions, not joined
+by invented edges. Preview is bounded and can be omitted under pressure while
+the decoder continues; use burst capture/export for a saved waveform record.
+
+The Capture Rate dropdown controls burst acquisition. Live sampling uses the
+UI server startup rate (100 MS/s by default; `la-ui --rate 10M` selects 10 MS/s).
+The live ruler uses the actual packet rate, not the Capture dropdown.
+
+The unified UI accepts up to four browser tabs on the same live feed; each tab
+receives the same events and waveform packets. A new live session clears stale
+server replay and queued frames. If the counters rise but a pane stays blank,
+reload the page, close excess tabs, and start the session again.
 
 Qualified inputs are 115200-baud UART and 10 kHz SPI/I2C. A 1 MHz SPI event
 stream is an intentional overload case and should report an overrun rather than
@@ -370,6 +417,7 @@ It is not a replacement for the acquisition waveform.
 | Decode reports a missing native library | Run `python tools/run.py test-native`, restart the server and reconnect. |
 | Decode events are wrong | Check sample rate, channel mapping and protocol settings; verify the electrical idle levels. |
 | Live reports `client` drops or device overrun | Lower the input event rate, use fewer active slots, or treat the run as an honest overload result. A rising `ring` count alone is normal replay-history rollover. |
+| Live counters rise but pane is blank | Reload the page and close excess browser tabs (up to four are supported); press **Stop all**, then start live again. A stale tab can no longer hold the only feed after the W11 multi-tab fix. |
 | UI says `server error` | Confirm that `la-ui` is still running in PowerShell. If it stopped, restart it; then reload the browser and reconnect the hardware. |
 
 ## 14. Scripted CLI equivalents
@@ -412,7 +460,9 @@ limitations are in `docs/wiring.md`, `docs/spi-link.md` and `docs/limits.md`.
 - Pre-trigger depth is limited to 32,768 samples.
 - The current USB development identity `1209:0001` is for in-house testing; the
   release USB identity remains an open gate.
-- The USB-profile SD boot was verified on 2026-09-26; the final release tag
-  remains open.
-- The UI is supported in Chrome/Edge. The automated browser and bench gates
-  pass, but the recorded `[HUMAN]` visual click-through remains open.
+- The current W11 USB-profile SD boot was verified on 2026-10-18; public USB
+  identity and final release tag/publication remain open.
+- The UI is supported in Chrome/Edge. The original walkthrough was
+  author-confirmed on 12 October; the user accepted W11's new view on
+  18 October. Automated SD/browser checks are separate 6/6 and 10/10 evidence,
+  not an invented scored human walkthrough.

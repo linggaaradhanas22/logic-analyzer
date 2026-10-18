@@ -6,19 +6,64 @@ export const hostToolsComponents: ComponentDoc[] = [
     name: 'la-cli commands',
     codeName: 'la-cli',
     subsystem: 'host-tools',
-    summary: 'The Click command group that exposes ports, ping, status, capture, abort, live, trace and link over an explicit target URI and writes the selected export format.',
+    summary:
+      'The Click command group that exposes ports, ping, status, capture, abort, live, trace and link over an explicit target URI and writes the selected export format.',
     why: 'A capture workflow needs one scriptable entry point that validates options before touching the wire, reports failures honestly and leaves a standard file behind for a viewer.',
-    upstream: ['host-transport (target URI)', 'analyzer-client (command flows)', 'host-live-client (live session)', 'capture-export (file writers)'],
-    downstream: ['capture files (.sr/.vcd/.png)', 'text and CSV live output', 'PulseView / GTKWave (external viewers)'],
+    upstream: [
+      'host-transport (target URI)',
+      'analyzer-client (command flows)',
+      'host-live-client (live session)',
+      'capture-export (file writers)',
+    ],
+    downstream: [
+      'capture files (.sr/.vcd/.png)',
+      'text and CSV live output',
+      'PulseView / GTKWave (external viewers)',
+    ],
     inputs: [
-      { name: 'Command and options', direction: 'input', form: 'click arguments', description: 'Command name plus --target and per-command options; --out is required for capture.' },
-      { name: 'Analyzer replies', direction: 'input', form: 'typed frames', description: 'PONG, STATUS, ACK/NAK, decoded events, LOG lines and burst chunks.' },
+      {
+        name: 'Command and options',
+        direction: 'input',
+        form: 'click arguments',
+        description:
+          'Command name plus --target and per-command options; --out is required for capture.',
+      },
+      {
+        name: 'Analyzer replies',
+        direction: 'input',
+        form: 'typed frames',
+        description:
+          'PONG, STATUS, ACK/NAK, decoded events, LOG lines and burst chunks.',
+      },
     ],
     outputs: [
-      { name: 'Console reports', direction: 'output', form: 'text lines', description: 'Pong/status/capture/live/trace/link summaries and LOG passthrough.' },
-      { name: 'Capture files', direction: 'output', form: '.sr, .vcd or .png', description: 'Written by capture-export for the capture command.' },
-      { name: 'Live rows', direction: 'output', form: 'text or CSV', description: 'Decoded events with t=, slot=, kind and data, plus overrun lines.' },
-      { name: 'Exit status', direction: 'output', form: 'process exit code', description: '0 on success; a handled ClickException exits 1 and a usage error exits 2.' },
+      {
+        name: 'Console reports',
+        direction: 'output',
+        form: 'text lines',
+        description:
+          'Pong/status/capture/live/trace/link summaries and LOG passthrough.',
+      },
+      {
+        name: 'Capture files',
+        direction: 'output',
+        form: '.sr, .vcd or .png',
+        description: 'Written by capture-export for the capture command.',
+      },
+      {
+        name: 'Live rows',
+        direction: 'output',
+        form: 'text or CSV',
+        description:
+          'Decoded events with t=, slot=, kind and data, plus overrun lines.',
+      },
+      {
+        name: 'Exit status',
+        direction: 'output',
+        form: 'process exit code',
+        description:
+          '0 on success; a handled ClickException exits 1 and a usage error exits 2.',
+      },
     ],
     steps: [
       'Resolve the required --target through open_uri; a missing or malformed target is refused before any I/O.',
@@ -55,8 +100,10 @@ export const hostToolsComponents: ComponentDoc[] = [
     evidence: [
       {
         status: 'host-tested',
-        summary: 'The CLI scenarios pass against the mock analyzer: ports, ping, status, capture raw/txn, NAK reporting, bad rate/channel, unknown target, abort, live text/CSV/compact/stop-on and trace commands.',
-        scope: 'test_cli.py and the CLI cases in test_live.py and test_trace.py; part of the 107/107 host suite after the V02/V03 live-web bridge. Mocks do not prove target timing.',
+        summary:
+          'The CLI scenarios pass against the mock analyzer: ports, ping, status, capture raw/txn, NAK reporting, bad rate/channel, unknown target, abort, live text/CSV/compact/stop-on and trace commands.',
+        scope:
+          'test_cli.py and the CLI cases in test_live.py and test_trace.py; part of the 107/107 host suite after the V02/V03 live-web bridge. Mocks do not prove target timing.',
         date: '13 Sep 2026',
         sources: [
           { label: 'CLI tests', path: 'host/tests/test_cli.py', kind: 'test' },
@@ -65,39 +112,97 @@ export const hostToolsComponents: ComponentDoc[] = [
       },
       {
         status: 'bench-verified',
-        summary: 'la-cli ping/status/capture/live/trace/link drove the P6-P9 bench sessions, including the stop-on check that printed "stop-on match at sample 69386".',
-        scope: 'Recorded bench rows from 2026-09-10 through 2026-09-14; the SPI bulk jumpers were not connected in the last reassembly.',
+        summary:
+          'la-cli ping/status/capture/live/trace/link drove the P6-P9 bench sessions, including the stop-on check that printed "stop-on match at sample 69386".',
+        scope:
+          'Recorded bench rows from 2026-09-10 through 2026-09-14; the SPI bulk jumpers were not connected in the last reassembly.',
         date: '13 Sep 2026',
-        sources: [{ label: 'Bench evidence', path: 'docs/status.md', kind: 'doc' }],
+        sources: [
+          { label: 'Bench evidence', path: 'docs/status.md', kind: 'doc' },
+        ],
       },
     ],
     sources: [
-      { label: 'CLI commands', path: 'host/la_cli/commands.py', kind: 'source' },
+      {
+        label: 'CLI commands',
+        path: 'host/la_cli/commands.py',
+        kind: 'source',
+      },
       { label: 'CLI tests', path: 'host/tests/test_cli.py', kind: 'test' },
-      { label: 'Live CLI tests', path: 'host/tests/test_live.py', kind: 'test' },
-      { label: 'Protocol specification', path: 'docs/protocol.md', kind: 'spec' },
+      {
+        label: 'Live CLI tests',
+        path: 'host/tests/test_live.py',
+        kind: 'test',
+      },
+      {
+        label: 'Protocol specification',
+        path: 'docs/protocol.md',
+        kind: 'spec',
+      },
       { label: 'Package entry point', path: 'pyproject.toml', kind: 'source' },
     ],
-    related: ['host-transport', 'host-protocol', 'analyzer-client', 'capture-export', 'host-live-client', '/reference/protocol', '/tooling'],
+    related: [
+      'host-transport',
+      'host-protocol',
+      'analyzer-client',
+      'capture-export',
+      'host-live-client',
+      '/reference/protocol',
+      '/tooling',
+    ],
   },
   {
     slug: 'host-transport',
     name: 'TCP and serial transports',
     codeName: 'TcpTransport / SerialTransport',
     subsystem: 'host-tools',
-    summary: 'The byte-stream abstraction behind every command: tcp://host:port sockets, serial://COMx ports, URI parsing, COM10+ device-name normalization and USB-UART candidate listing.',
+    summary:
+      'The byte-stream abstraction behind every command: tcp://host:port sockets, serial://COMx ports, URI parsing, COM10+ device-name normalization and USB-UART candidate listing.',
     why: 'The protocol layer must not care whether bytes arrive over Wi-Fi or a COM port, and Windows COM10 and above fail without the device-path prefix.',
     upstream: ['host-cli (target URI)', 'analyzer-client (send/recv calls)'],
     downstream: ['analyzer-client (byte stream)', 'mock-analyzer (test peer)'],
     inputs: [
-      { name: 'Target URI', direction: 'input', form: 'string', description: 'tcp://host:port, serial://COMx or a bare COM name; anything else raises TransportError.' },
-      { name: 'Outgoing bytes', direction: 'input', form: 'whole encoded frames', description: 'Sent by the client with send().' },
-      { name: 'Port metadata', direction: 'input', form: 'serial.tools.list_ports', description: 'VID, PID, serial number and description for candidate filtering.' },
+      {
+        name: 'Target URI',
+        direction: 'input',
+        form: 'string',
+        description:
+          'tcp://host:port, serial://COMx or a bare COM name; anything else raises TransportError.',
+      },
+      {
+        name: 'Outgoing bytes',
+        direction: 'input',
+        form: 'whole encoded frames',
+        description: 'Sent by the client with send().',
+      },
+      {
+        name: 'Port metadata',
+        direction: 'input',
+        form: 'serial.tools.list_ports',
+        description:
+          'VID, PID, serial number and description for candidate filtering.',
+      },
     ],
     outputs: [
-      { name: 'Incoming byte chunks', direction: 'output', form: 'up to max_bytes or b"" on timeout', description: 'Fed incrementally into the frame parser.' },
-      { name: 'Candidate list', direction: 'output', form: 'text lines', description: 'Index, device, description, VID:PID and serial number.' },
-      { name: 'eof flag', direction: 'output', form: 'boolean', description: 'Permanent for stream sockets; always false for serial ports.' },
+      {
+        name: 'Incoming byte chunks',
+        direction: 'output',
+        form: 'up to max_bytes or b"" on timeout',
+        description: 'Fed incrementally into the frame parser.',
+      },
+      {
+        name: 'Candidate list',
+        direction: 'output',
+        form: 'text lines',
+        description: 'Index, device, description, VID:PID and serial number.',
+      },
+      {
+        name: 'eof flag',
+        direction: 'output',
+        form: 'boolean',
+        description:
+          'Permanent for stream sockets; always false for serial ports.',
+      },
     ],
     steps: [
       'Match the URI against TCP_URI or SERIAL_URI; a bare COM name is accepted as serial.',
@@ -132,55 +237,134 @@ export const hostToolsComponents: ComponentDoc[] = [
     evidence: [
       {
         status: 'host-tested',
-        summary: 'open_uri error cases, the mock TCP flows, timeout/EOF handling and the kill hook all pass in the host suite.',
-        scope: 'test_client_mock.py and test_live.py; part of the 107/107 host suite after the V02/V03 live-web bridge.',
+        summary:
+          'open_uri error cases, the mock TCP flows, timeout/EOF handling and the kill hook all pass in the host suite.',
+        scope:
+          'test_client_mock.py and test_live.py; part of the 107/107 host suite after the V02/V03 live-web bridge.',
         date: '13 Sep 2026',
         sources: [
-          { label: 'Client/mock tests', path: 'host/tests/test_client_mock.py', kind: 'test' },
-          { label: 'Live client tests', path: 'host/tests/test_live.py', kind: 'test' },
+          {
+            label: 'Client/mock tests',
+            path: 'host/tests/test_client_mock.py',
+            kind: 'test',
+          },
+          {
+            label: 'Live client tests',
+            path: 'host/tests/test_live.py',
+            kind: 'test',
+          },
         ],
       },
       {
         status: 'bench-verified',
-        summary: 'Every bench session reached the analyzer over tcp:// through the ESP32 gateway, including the P10.1 web session on the phone hotspot.',
-        scope: 'TCP only; the Wi-Fi path is the recorded transport for all P5-P10 bench rows.',
+        summary:
+          'Every bench session reached the analyzer over tcp:// through the ESP32 gateway, including the P10.1 web session on the phone hotspot.',
+        scope:
+          'TCP only; the Wi-Fi path is the recorded transport for all P5-P10 bench rows.',
         date: '14 Sep 2026',
-        sources: [{ label: 'Bench evidence', path: 'docs/status.md', kind: 'doc' }],
+        sources: [
+          { label: 'Bench evidence', path: 'docs/status.md', kind: 'doc' },
+        ],
       },
       {
         status: 'implemented-unverified',
-        summary: 'The serial:// path has no automated hardware test: the P4.10 HIL USB-UART adapter was never attached and that row is BLOCKED in the ledger.',
-        scope: 'SerialTransport and the COM10+ normalization are implemented but no test or bench run opens a real serial port.',
+        summary:
+          'The serial:// path has no automated hardware test: the P4.10 HIL USB-UART adapter was never attached and that row is BLOCKED in the ledger.',
+        scope:
+          'SerialTransport and the COM10+ normalization are implemented but no test or bench run opens a real serial port.',
         date: '13 Sep 2026',
-        sources: [{ label: 'P4.10 HIL preflight', path: 'docs/status.md', kind: 'doc' }],
+        sources: [
+          { label: 'P4.10 HIL preflight', path: 'docs/status.md', kind: 'doc' },
+        ],
       },
     ],
     sources: [
-      { label: 'Transport module', path: 'host/la_cli/transport.py', kind: 'source' },
-      { label: 'Client/mock tests', path: 'host/tests/test_client_mock.py', kind: 'test' },
-      { label: 'Live client tests', path: 'host/tests/test_live.py', kind: 'test' },
+      {
+        label: 'Transport module',
+        path: 'host/la_cli/transport.py',
+        kind: 'source',
+      },
+      {
+        label: 'Client/mock tests',
+        path: 'host/tests/test_client_mock.py',
+        kind: 'test',
+      },
+      {
+        label: 'Live client tests',
+        path: 'host/tests/test_live.py',
+        kind: 'test',
+      },
       { label: 'CLI plan (P6.1)', path: 'docs/plan.md', kind: 'spec' },
     ],
-    related: ['host-cli', 'analyzer-client', 'tcp-server', 'zynq-uart-driver', 'jd-uart-wiring', '/tooling'],
+    related: [
+      'host-cli',
+      'analyzer-client',
+      'tcp-server',
+      'zynq-uart-driver',
+      'jd-uart-wiring',
+      '/tooling',
+    ],
   },
   {
     slug: 'host-protocol',
     name: 'Python protocol mirror',
     codeName: 'la_cli.protocol',
     subsystem: 'host-tools',
-    summary: 'The Python mirror of the shared C protocol library: message constants, CRC-16/CCITT-FALSE and CRC-32/IEEE, frame encode/decode, the incremental parser and typed pack/unpack for every fixed payload including EVT_BLOCK.',
+    summary:
+      'The Python mirror of the shared C protocol library: message constants, CRC-16/CCITT-FALSE and CRC-32/IEEE, frame encode/decode, the incremental parser and typed pack/unpack for every fixed payload including EVT_BLOCK.',
     why: 'The host must produce and accept the exact bytes the Zynq and ESP32 use; a second implementation checked against fixed vectors catches accidental wire changes on either side.',
-    upstream: ['docs/protocol.md (normative specification)', 'shared-protocol-library (C reference)'],
-    downstream: ['analyzer-client', 'mock-analyzer', 'capture-export (DATA_END CRC check)'],
+    upstream: [
+      'docs/protocol.md (normative specification)',
+      'shared-protocol-library (C reference)',
+    ],
+    downstream: [
+      'analyzer-client',
+      'mock-analyzer',
+      'capture-export (DATA_END CRC check)',
+    ],
     inputs: [
-      { name: 'Frame bytes', direction: 'input', form: 'byte stream', description: 'Fed one byte at a time or in chunks into FrameParser.' },
-      { name: 'Typed values to pack', direction: 'input', form: 'Python ints and bytes', description: 'CONFIG fields, DECODER_CFG channels, PATGEN_CFG, TRACE_CTRL, EVT_CFG and LINK_CFG.' },
+      {
+        name: 'Frame bytes',
+        direction: 'input',
+        form: 'byte stream',
+        description: 'Fed one byte at a time or in chunks into FrameParser.',
+      },
+      {
+        name: 'Typed values to pack',
+        direction: 'input',
+        form: 'Python ints and bytes',
+        description:
+          'CONFIG fields, DECODER_CFG channels, PATGEN_CFG, TRACE_CTRL, EVT_CFG and LINK_CFG.',
+      },
     ],
     outputs: [
-      { name: 'Encoded frames', direction: 'output', form: 'bytes', description: 'SOF 0xA5, type, sequence, little-endian length, payload and little-endian CRC16.' },
-      { name: 'Parser callbacks', direction: 'output', form: '(type, sequence, payload)', description: 'Complete CRC-valid frames only; the payload is valid until the next feed.' },
-      { name: 'Typed results', direction: 'output', form: 'dicts and event tuples', description: 'PONG, STATUS, DATA_BEGIN, EVT_DECODED and EVT_BLOCK records as (slot, kind, t_sample, data).' },
-      { name: 'Parser counters', direction: 'output', form: 'frames, crc_errors, format_errors, dropped_bytes', description: 'Reported with every result.' },
+      {
+        name: 'Encoded frames',
+        direction: 'output',
+        form: 'bytes',
+        description:
+          'SOF 0xA5, type, sequence, little-endian length, payload and little-endian CRC16.',
+      },
+      {
+        name: 'Parser callbacks',
+        direction: 'output',
+        form: '(type, sequence, payload)',
+        description:
+          'Complete CRC-valid frames only; the payload is valid until the next feed.',
+      },
+      {
+        name: 'Typed results',
+        direction: 'output',
+        form: 'dicts and event tuples',
+        description:
+          'PONG, STATUS, DATA_BEGIN, EVT_DECODED and EVT_BLOCK records as (slot, kind, t_sample, data).',
+      },
+      {
+        name: 'Parser counters',
+        direction: 'output',
+        form: 'frames, crc_errors, format_errors, dropped_bytes',
+        description: 'Reported with every result.',
+      },
     ],
     steps: [
       'encode() builds TYPE + SEQ + LEN + payload and appends the CRC16 of that body.',
@@ -214,48 +398,122 @@ export const hostToolsComponents: ComponentDoc[] = [
     evidence: [
       {
         status: 'host-tested',
-        summary: 'test_protocol.py covers CRC reference vectors, encode layout, parser round trip/resync/oversized length, CONFIG/STATUS/PATGEN/EVT_CFG/LINK_CFG layouts, EVT_BLOCK round trip and DATA_BEGIN/END; test_live.py adds the per-decoder pack layouts.',
-        scope: 'Part of the 107/107 host suite after the V02/V03 live-web bridge. This proves the Python mirror, not the C ABI, which has its own native test.',
+        summary:
+          'test_protocol.py covers CRC reference vectors, encode layout, parser round trip/resync/oversized length, CONFIG/STATUS/PATGEN/EVT_CFG/LINK_CFG layouts, EVT_BLOCK round trip and DATA_BEGIN/END; test_live.py adds the per-decoder pack layouts.',
+        scope:
+          'Part of the 107/107 host suite after the V02/V03 live-web bridge. This proves the Python mirror, not the C ABI, which has its own native test.',
         date: '13 Sep 2026',
         sources: [
-          { label: 'Protocol tests', path: 'host/tests/test_protocol.py', kind: 'test' },
-          { label: 'Live pack tests', path: 'host/tests/test_live.py', kind: 'test' },
+          {
+            label: 'Protocol tests',
+            path: 'host/tests/test_protocol.py',
+            kind: 'test',
+          },
+          {
+            label: 'Live pack tests',
+            path: 'host/tests/test_live.py',
+            kind: 'test',
+          },
         ],
       },
       {
         status: 'bench-verified',
-        summary: 'Frames produced and parsed by this module were accepted by the Zynq and ESP32 in every recorded bench session, and DATA_END CRC checks passed on the exact captures.',
-        scope: 'The bytes on the wire matched the firmware peers; the module itself is only exercised on the host.',
+        summary:
+          'Frames produced and parsed by this module were accepted by the Zynq and ESP32 in every recorded bench session, and DATA_END CRC checks passed on the exact captures.',
+        scope:
+          'The bytes on the wire matched the firmware peers; the module itself is only exercised on the host.',
         date: '13 Sep 2026',
-        sources: [{ label: 'Bench evidence', path: 'docs/status.md', kind: 'doc' }],
+        sources: [
+          { label: 'Bench evidence', path: 'docs/status.md', kind: 'doc' },
+        ],
       },
     ],
     sources: [
-      { label: 'Protocol mirror', path: 'host/la_cli/protocol.py', kind: 'source' },
-      { label: 'Protocol tests', path: 'host/tests/test_protocol.py', kind: 'test' },
-      { label: 'Protocol specification', path: 'docs/protocol.md', kind: 'spec' },
-      { label: 'C reference header', path: 'common/la_proto/include/la_proto.h', kind: 'source' },
+      {
+        label: 'Protocol mirror',
+        path: 'host/la_cli/protocol.py',
+        kind: 'source',
+      },
+      {
+        label: 'Protocol tests',
+        path: 'host/tests/test_protocol.py',
+        kind: 'test',
+      },
+      {
+        label: 'Protocol specification',
+        path: 'docs/protocol.md',
+        kind: 'spec',
+      },
+      {
+        label: 'C reference header',
+        path: 'common/la_proto/include/la_proto.h',
+        kind: 'source',
+      },
     ],
-    related: ['shared-protocol-library', 'frame-format', 'message-catalog', 'incremental-parser', 'analyzer-client', 'mock-analyzer', '/reference/protocol'],
+    related: [
+      'shared-protocol-library',
+      'frame-format',
+      'message-catalog',
+      'incremental-parser',
+      'analyzer-client',
+      'mock-analyzer',
+      '/reference/protocol',
+    ],
   },
   {
     slug: 'analyzer-client',
     name: 'Analyzer client',
     codeName: 'AnalyzerClient',
     subsystem: 'host-tools',
-    summary: 'The synchronous command client: one request/response exchange per command with ACK/NAK correlation, the burst collector with 16-chunk ACK batches and end-to-end size/CRC checks, and the live-session driver.',
+    summary:
+      'The synchronous command client: one request/response exchange per command with ACK/NAK correlation, the burst collector with 16-chunk ACK batches and end-to-end size/CRC checks, and the live-session driver.',
     why: 'Every host action must fail loudly on a NAK, chunk gap, timeout or CRC error instead of returning a plausible-looking capture.',
     upstream: ['host-transport', 'host-protocol'],
     downstream: ['host-cli', 'capture-export', 'host-live-client'],
     inputs: [
-      { name: 'Wire payloads', direction: 'input', form: 'bytes', description: 'CONFIG exactly 37 bytes, DECODER_CFG exactly 20 bytes; validated before sending.' },
-      { name: 'Analyzer frames', direction: 'input', form: 'byte stream', description: 'PONG, STATUS, ACK/NAK, DATA_*, EVT_*, LOG.' },
-      { name: 'Deadlines and hooks', direction: 'input', form: 'seconds and callbacks', description: 'timeout_s, read_stall_s, on_started, stop_on_overrun, collect_events, event_format and stop_on_match.' },
+      {
+        name: 'Wire payloads',
+        direction: 'input',
+        form: 'bytes',
+        description:
+          'CONFIG exactly 37 bytes, DECODER_CFG exactly 20 bytes; validated before sending.',
+      },
+      {
+        name: 'Analyzer frames',
+        direction: 'input',
+        form: 'byte stream',
+        description: 'PONG, STATUS, ACK/NAK, DATA_*, EVT_*, LOG.',
+      },
+      {
+        name: 'Deadlines and hooks',
+        direction: 'input',
+        form: 'seconds and callbacks',
+        description:
+          'timeout_s, read_stall_s, on_started, stop_on_overrun, collect_events, event_format and stop_on_match.',
+      },
     ],
     outputs: [
-      { name: 'CaptureData', direction: 'output', form: 'meta + bytes + chunk count + parser stats', description: 'Verified against total_words * 4 and the DATA_END CRC32 before it is returned.' },
-      { name: 'Live events and stats', direction: 'output', form: 'dicts and counters', description: 'slot, kind, t_sample, data and arrival; events/frames/wire_bytes/overruns; live_match_index.' },
-      { name: 'LOG lines and parser stats', direction: 'output', form: 'list and dict', description: 'Device LOG passthrough plus frames/crc_errors/format_errors/dropped_bytes.' },
+      {
+        name: 'CaptureData',
+        direction: 'output',
+        form: 'meta + bytes + chunk count + parser stats',
+        description:
+          'Verified against total_words * 4 and the DATA_END CRC32 before it is returned.',
+      },
+      {
+        name: 'Live events and stats',
+        direction: 'output',
+        form: 'dicts and counters',
+        description:
+          'slot, kind, t_sample, data and arrival; events/frames/wire_bytes/overruns; live_match_index.',
+      },
+      {
+        name: 'LOG lines and parser stats',
+        direction: 'output',
+        form: 'list and dict',
+        description:
+          'Device LOG passthrough plus frames/crc_errors/format_errors/dropped_bytes.',
+      },
     ],
     steps: [
       'Allocate a modulo-256 sequence number for each sent frame.',
@@ -288,50 +546,142 @@ export const hostToolsComponents: ComponentDoc[] = [
     evidence: [
       {
         status: 'host-tested',
-        summary: 'test_client_mock.py covers ping/status/PATGEN/LINK/ARM, raw and txn transfers, NAK, chunk gap, bad CRC, timeout and EOF; test_live.py and test_trace.py cover the live and trace client flows.',
-        scope: 'Part of the 83/83 host suite at the P7.7 close; mocks prove protocol and client logic only.',
+        summary:
+          'test_client_mock.py covers ping/status/PATGEN/LINK/ARM, raw and txn transfers, NAK, chunk gap, bad CRC, timeout and EOF; test_live.py and test_trace.py cover the live and trace client flows.',
+        scope:
+          'Part of the 83/83 host suite at the P7.7 close; mocks prove protocol and client logic only.',
         date: '13 Sep 2026',
         sources: [
-          { label: 'Client/mock tests', path: 'host/tests/test_client_mock.py', kind: 'test' },
-          { label: 'Live client tests', path: 'host/tests/test_live.py', kind: 'test' },
-          { label: 'Trace tests', path: 'host/tests/test_trace.py', kind: 'test' },
+          {
+            label: 'Client/mock tests',
+            path: 'host/tests/test_client_mock.py',
+            kind: 'test',
+          },
+          {
+            label: 'Live client tests',
+            path: 'host/tests/test_live.py',
+            kind: 'test',
+          },
+          {
+            label: 'Trace tests',
+            path: 'host/tests/test_trace.py',
+            kind: 'test',
+          },
         ],
       },
       {
         status: 'bench-verified',
-        summary: 'Exact counter captures, the 500-capture soak, the 60 s zero-drop live gate, the read-stall and TCP-kill fault injections and the P9.2 compact measurement all ran through this client.',
-        scope: 'Recorded bench rows from 2026-09-10 through 2026-09-14; the SPI bulk drain remains transport-blocked.',
+        summary:
+          'Exact counter captures, the 500-capture soak, the 60 s zero-drop live gate, the read-stall and TCP-kill fault injections and the P9.2 compact measurement all ran through this client.',
+        scope:
+          'Recorded bench rows from 2026-09-10 through 2026-09-14; the SPI bulk drain remains transport-blocked.',
         date: '13 Sep 2026',
-        sources: [{ label: 'Bench evidence', path: 'docs/status.md', kind: 'doc' }],
+        sources: [
+          { label: 'Bench evidence', path: 'docs/status.md', kind: 'doc' },
+        ],
       },
     ],
     sources: [
-      { label: 'Analyzer client', path: 'host/la_cli/client.py', kind: 'source' },
-      { label: 'Client/mock tests', path: 'host/tests/test_client_mock.py', kind: 'test' },
-      { label: 'Mock analyzer', path: 'host/tests/mock_analyzer.py', kind: 'test' },
-      { label: 'Protocol specification', path: 'docs/protocol.md', kind: 'spec' },
+      {
+        label: 'Analyzer client',
+        path: 'host/la_cli/client.py',
+        kind: 'source',
+      },
+      {
+        label: 'Client/mock tests',
+        path: 'host/tests/test_client_mock.py',
+        kind: 'test',
+      },
+      {
+        label: 'Mock analyzer',
+        path: 'host/tests/mock_analyzer.py',
+        kind: 'test',
+      },
+      {
+        label: 'Protocol specification',
+        path: 'docs/protocol.md',
+        kind: 'spec',
+      },
     ],
-    related: ['host-protocol', 'host-transport', 'host-cli', 'capture-export', 'host-live-client', 'burst-transfer', 'ack-window', 'protocol-errors', '/reference/protocol'],
+    related: [
+      'host-protocol',
+      'host-transport',
+      'host-cli',
+      'capture-export',
+      'host-live-client',
+      'burst-transfer',
+      'ack-window',
+      'protocol-errors',
+      '/reference/protocol',
+    ],
   },
   {
     slug: 'capture-export',
     name: 'Capture reconstruction and export',
     codeName: 'la_cli.convert',
     subsystem: 'host-tools',
-    summary: 'Streaming raw/transition reconstruction plus .sr, VCD and PNG writers, bounded by a 64 KiB spool and a 200,000-sample PNG cap.',
+    summary:
+      'Streaming raw/transition reconstruction plus .sr, VCD and PNG writers, bounded by a 64 KiB spool and a 200,000-sample PNG cap.',
     why: 'A transition capture can expand to millions of samples; reconstruction must stream so memory stays bounded, and the output must open in standard viewers.',
-    upstream: ['analyzer-client (CaptureData)', 'la-raw-packer (word layout)', 'la-txn-encoder (word layout)'],
-    downstream: ['PulseView 0.4.2 (.sr)', 'VCD viewers such as GTKWave', 'PNG image viewers'],
+    upstream: [
+      'analyzer-client (CaptureData)',
+      'la-raw-packer (word layout)',
+      'la-txn-encoder (word layout)',
+    ],
+    downstream: [
+      'PulseView 0.4.2 (.sr)',
+      'VCD viewers such as GTKWave',
+      'PNG image viewers',
+    ],
     inputs: [
-      { name: 'Capture bytes and encoding', direction: 'input', form: 'bytes plus encoding 0/1', description: 'From CaptureData; 0 raw packed words, 1 transition words.' },
-      { name: 'Sample rate', direction: 'input', form: 'integer Hz', description: 'Carried in DATA_BEGIN.' },
-      { name: 'Output path', direction: 'input', form: 'string', description: 'The extension selects .sr, .vcd or .png.' },
+      {
+        name: 'Capture bytes and encoding',
+        direction: 'input',
+        form: 'bytes plus encoding 0/1',
+        description:
+          'From CaptureData; 0 raw packed words, 1 transition words.',
+      },
+      {
+        name: 'Sample rate',
+        direction: 'input',
+        form: 'integer Hz',
+        description: 'Carried in DATA_BEGIN.',
+      },
+      {
+        name: 'Output path',
+        direction: 'input',
+        form: 'string',
+        description: 'The extension selects .sr, .vcd or .png.',
+      },
     ],
     outputs: [
-      { name: '.sr capture', direction: 'output', form: 'zip archive', description: 'version, metadata and logic-1-1; metadata declares capturefile=logic-1, total probes=8, probe1..8=CH0..CH7 and unitsize=1.' },
-      { name: 'VCD file', direction: 'output', form: 'text', description: 'Eight channels with a 1 ns or 1 ps timescale chosen from the sample rate.' },
-      { name: 'PNG image', direction: 'output', form: 'image', description: 'The first 200,000 samples stacked, one trace per channel, step where="post".' },
-      { name: 'Exported sample count', direction: 'output', form: 'integer', description: 'Printed by the capture command.' },
+      {
+        name: '.sr capture',
+        direction: 'output',
+        form: 'zip archive',
+        description:
+          'version, metadata and logic-1-1; metadata declares capturefile=logic-1, total probes=8, probe1..8=CH0..CH7 and unitsize=1.',
+      },
+      {
+        name: 'VCD file',
+        direction: 'output',
+        form: 'text',
+        description:
+          'Eight channels with a 1 ns or 1 ps timescale chosen from the sample rate.',
+      },
+      {
+        name: 'PNG image',
+        direction: 'output',
+        form: 'image',
+        description:
+          'The first 200,000 samples stacked, one trace per channel, step where="post".',
+      },
+      {
+        name: 'Exported sample count',
+        direction: 'output',
+        form: 'integer',
+        description: 'Printed by the capture command.',
+      },
     ],
     steps: [
       'Raw: each byte is one 8-bit sample, oldest byte first in la_raw_packer order. Transition: {run[23:0], sample[7:0]} expands to run copies of sample.',
@@ -363,48 +713,132 @@ export const hostToolsComponents: ComponentDoc[] = [
     evidence: [
       {
         status: 'host-tested',
-        summary: 'test_export.py covers raw/txn reconstruction round trips, .sr zip equality, VCD, PNG and unknown-extension rejection.',
-        scope: 'Part of the 83/83 host suite at the P7.7 close; the tests use synthetic captures.',
+        summary:
+          'test_export.py covers raw/txn reconstruction round trips, .sr zip equality, VCD, PNG and unknown-extension rejection.',
+        scope:
+          'Part of the 83/83 host suite at the P7.7 close; the tests use synthetic captures.',
         date: '13 Sep 2026',
-        sources: [{ label: 'Export tests', path: 'host/tests/test_export.py', kind: 'test' }],
+        sources: [
+          {
+            label: 'Export tests',
+            path: 'host/tests/test_export.py',
+            kind: 'test',
+          },
+        ],
       },
       {
         status: 'bench-verified',
-        summary: 'build/captures/p6-uart-1m.sr opened in PulseView 0.4.2 and rendered on CH0; the screenshot is tracked as docs/images/p6-pulseview-uart.png.',
-        scope: 'Recorded 2026-09-11 with a real 4 ms UART frame; the file came from a bench capture, not the mock.',
+        summary:
+          'build/captures/p6-uart-1m.sr opened in PulseView 0.4.2 and rendered on CH0; the screenshot is tracked as docs/images/p6-pulseview-uart.png.',
+        scope:
+          'Recorded 2026-09-11 with a real 4 ms UART frame; the file came from a bench capture, not the mock.',
         date: '11 Sep 2026',
         sources: [
-          { label: 'P6.4 PulseView evidence', path: 'docs/status.md', kind: 'doc' },
-          { label: 'PulseView screenshot', path: 'docs/images/p6-pulseview-uart.png', kind: 'doc' },
+          {
+            label: 'P6.4 PulseView evidence',
+            path: 'docs/status.md',
+            kind: 'doc',
+          },
+          {
+            label: 'PulseView screenshot',
+            path: 'docs/images/p6-pulseview-uart.png',
+            kind: 'doc',
+          },
         ],
       },
     ],
     sources: [
-      { label: 'Export module', path: 'host/la_cli/convert.py', kind: 'source' },
-      { label: 'Export tests', path: 'host/tests/test_export.py', kind: 'test' },
+      {
+        label: 'Export module',
+        path: 'host/la_cli/convert.py',
+        kind: 'source',
+      },
+      {
+        label: 'Export tests',
+        path: 'host/tests/test_export.py',
+        kind: 'test',
+      },
       { label: 'Bench evidence', path: 'docs/status.md', kind: 'doc' },
     ],
-    related: ['analyzer-client', 'burst-transfer', 'la-raw-packer', 'la-txn-encoder', 'host-cli', '/reference/protocol'],
+    related: [
+      'analyzer-client',
+      'burst-transfer',
+      'la-raw-packer',
+      'la-txn-encoder',
+      'host-cli',
+      '/reference/protocol',
+    ],
   },
   {
     slug: 'host-live-client',
     name: 'Live event client',
     codeName: 'AnalyzerClient.live',
     subsystem: 'host-tools',
-    summary: 'The live-session driver: EVT_CFG/DECODER_CFG/LIVE_START setup, event collection with count/deadline/overrun/stop-on stops, post-stop drain, the V02 on_event frame sink and text/CSV rendering.',
+    summary:
+      'The live-session driver: EVT_CFG/DECODER_CFG/LIVE_START setup, event collection with count/deadline/overrun/stop-on stops, post-stop drain, the V02 on_event frame sink and text/CSV rendering.',
     why: 'Live decode is a stream, not a transfer: the client must bound the session, keep the count exact, surface loss instead of hiding it and always stop the firmware cleanly.',
-    upstream: ['analyzer-client', 'decoder-config-payload', 'config-payload', 'status-and-events'],
-    downstream: ['host-cli (text and CSV)', 'host live-web bridge (SSE browser feed)', 'esp32-live-view (parallel browser display for the gateway profile)'],
+    upstream: [
+      'analyzer-client',
+      'decoder-config-payload',
+      'config-payload',
+      'status-and-events',
+    ],
+    downstream: [
+      'host-cli (text and CSV)',
+      'host live-web bridge (SSE browser feed)',
+      'esp32-live-view (parallel browser display for the gateway profile)',
+    ],
     inputs: [
-      { name: 'STREAM CONFIG', direction: 'input', form: '37 bytes', description: 'Required by the P7 firmware: STREAM control bit, transition encoding and nonzero live_flush_cycles.' },
-      { name: 'DECODER_CFG', direction: 'input', form: '20 bytes', description: 'Slot, type, stop_on_len plus pattern, and the type-specific channel/baud fields.' },
-      { name: 'Session bounds', direction: 'input', form: 'options', description: 'count, timeout_s, stop_on_match, stop_on_overrun, collect_events and event_format.' },
+      {
+        name: 'STREAM CONFIG',
+        direction: 'input',
+        form: '37 bytes',
+        description:
+          'Required by the P7 firmware: STREAM control bit, transition encoding and nonzero live_flush_cycles.',
+      },
+      {
+        name: 'DECODER_CFG',
+        direction: 'input',
+        form: '20 bytes',
+        description:
+          'Slot, type, stop_on_len plus pattern, and the type-specific channel/baud fields.',
+      },
+      {
+        name: 'Session bounds',
+        direction: 'input',
+        form: 'options',
+        description:
+          'count, timeout_s, stop_on_match, stop_on_overrun, collect_events and event_format.',
+      },
     ],
     outputs: [
-      { name: 'Decoded event list', direction: 'output', form: 'dicts', description: 'slot, kind, t_sample, data and arrival; overrun records carry dropped and stage.' },
-      { name: 'live_stats', direction: 'output', form: 'counters', description: 'events, frames, wire_bytes and overruns.' },
-      { name: 'live_match_index', direction: 'output', form: 'integer or null', description: 'The EVT_TRIGGERED sample index when a decoded stop pattern matched.' },
-      { name: 'on_event frames', direction: 'output', form: 'callback', description: 'V02 sink: each decoded event frame as dict records, including the LIVE_STOP drain; the bridge formats and publishes it.' },
+      {
+        name: 'Decoded event list',
+        direction: 'output',
+        form: 'dicts',
+        description:
+          'slot, kind, t_sample, data and arrival; overrun records carry dropped and stage.',
+      },
+      {
+        name: 'live_stats',
+        direction: 'output',
+        form: 'counters',
+        description: 'events, frames, wire_bytes and overruns.',
+      },
+      {
+        name: 'live_match_index',
+        direction: 'output',
+        form: 'integer or null',
+        description:
+          'The EVT_TRIGGERED sample index when a decoded stop pattern matched.',
+      },
+      {
+        name: 'on_event frames',
+        direction: 'output',
+        form: 'callback',
+        description:
+          'V02 sink: each decoded event frame as dict records, including the LIVE_STOP drain; the bridge formats and publishes it.',
+      },
     ],
     steps: [
       'Send the optional STREAM CONFIG and wait for its ACK.',
@@ -440,46 +874,119 @@ export const hostToolsComponents: ComponentDoc[] = [
     evidence: [
       {
         status: 'host-tested',
-        summary: 'test_live.py covers the decoder pack layouts, full collection with a stage-1 overrun, a stage-2 link overrun, the read-stall and kill hooks, early count stop, drain-past-overrun, collect_events=False, compact blocks, stop-on match and non-stop, and the CLI text/CSV/compact/stop-on paths.',
-        scope: 'Part of the 83/83 host suite at the P7.7 close; the mock cannot reproduce Wi-Fi jitter or firmware scheduling.',
+        summary:
+          'test_live.py covers the decoder pack layouts, full collection with a stage-1 overrun, a stage-2 link overrun, the read-stall and kill hooks, early count stop, drain-past-overrun, collect_events=False, compact blocks, stop-on match and non-stop, and the CLI text/CSV/compact/stop-on paths.',
+        scope:
+          'Part of the 83/83 host suite at the P7.7 close; the mock cannot reproduce Wi-Fi jitter or firmware scheduling.',
         date: '13 Sep 2026',
         sources: [
-          { label: 'Live client tests', path: 'host/tests/test_live.py', kind: 'test' },
-          { label: 'Mock analyzer', path: 'host/tests/mock_analyzer.py', kind: 'test' },
+          {
+            label: 'Live client tests',
+            path: 'host/tests/test_live.py',
+            kind: 'test',
+          },
+          {
+            label: 'Mock analyzer',
+            path: 'host/tests/mock_analyzer.py',
+            kind: 'test',
+          },
         ],
       },
       {
         status: 'bench-verified',
-        summary: 'The P7.5-P7.7 live gates used this client: the 60 s zero-drop UART run, the 10 kHz SPI/I2C decodes, the 428 us isolated-byte measurement, the stop-on match at sample 69386, and the P9.2 compact saving of 51.6/53.3% wire bytes.',
-        scope: 'Recorded bench rows on 2026-09-11 to 2026-09-13; the 60 s gate is repeatable at 2 Mbps with the 64 KiB relay ring.',
+        summary:
+          'The P7.5-P7.7 live gates used this client: the 60 s zero-drop UART run, the 10 kHz SPI/I2C decodes, the 428 us isolated-byte measurement, the stop-on match at sample 69386, and the P9.2 compact saving of 51.6/53.3% wire bytes.',
+        scope:
+          'Recorded bench rows on 2026-09-11 to 2026-09-13; the 60 s gate is repeatable at 2 Mbps with the 64 KiB relay ring.',
         date: '13 Sep 2026',
-        sources: [{ label: 'P7/P9.2 bench evidence', path: 'docs/status.md', kind: 'doc' }],
+        sources: [
+          {
+            label: 'P7/P9.2 bench evidence',
+            path: 'docs/status.md',
+            kind: 'doc',
+          },
+        ],
       },
     ],
     sources: [
-      { label: 'Live client implementation', path: 'host/la_cli/client.py', kind: 'source' },
-      { label: 'CLI live command', path: 'host/la_cli/commands.py', kind: 'source' },
-      { label: 'Live client tests', path: 'host/tests/test_live.py', kind: 'test' },
-      { label: 'Protocol specification', path: 'docs/protocol.md', kind: 'spec' },
+      {
+        label: 'Live client implementation',
+        path: 'host/la_cli/client.py',
+        kind: 'source',
+      },
+      {
+        label: 'CLI live command',
+        path: 'host/la_cli/commands.py',
+        kind: 'source',
+      },
+      {
+        label: 'Live client tests',
+        path: 'host/tests/test_live.py',
+        kind: 'test',
+      },
+      {
+        label: 'Protocol specification',
+        path: 'docs/protocol.md',
+        kind: 'spec',
+      },
     ],
-    related: ['analyzer-client', 'decoder-config-payload', 'config-payload', 'status-and-events', 'decoder-tasks', 'live-event-batch', 'esp32-live-view', '/reference/decoders'],
+    related: [
+      'analyzer-client',
+      'decoder-config-payload',
+      'config-payload',
+      'status-and-events',
+      'decoder-tasks',
+      'live-event-batch',
+      'esp32-live-view',
+      '/reference/decoders',
+    ],
   },
   {
     slug: 'mock-analyzer',
     name: 'Mock analyzer',
     codeName: 'MockAnalyzer',
     subsystem: 'host-tools',
-    summary: 'A device-side protocol peer over an ephemeral loopback TCP port that answers commands and streams deterministic captures and live events for the host tests.',
+    summary:
+      'A device-side protocol peer over an ephemeral loopback TCP port that answers commands and streams deterministic captures and live events for the host tests.',
     why: 'The client and CLI must be testable without a board; a real peer on the other end of a socket proves framing and command sequencing, not just isolated functions.',
-    upstream: ['host-protocol (same code as the device side)', 'conftest.py analyzer fixture'],
-    downstream: ['host tests for the client, CLI, export, live and trace modules'],
+    upstream: [
+      'host-protocol (same code as the device side)',
+      'conftest.py analyzer fixture',
+    ],
+    downstream: [
+      'host tests for the client, CLI, export, live and trace modules',
+    ],
     inputs: [
-      { name: 'Host frames', direction: 'input', form: 'byte stream', description: 'PING, CONFIG, ARM, ABORT, PATGEN_CFG, EVT_CFG, LINK_CFG, TRACE_CTRL, DECODER_CFG, LIVE_START/STOP and ACK.' },
-      { name: 'Scenario name', direction: 'input', form: 'string', description: 'ping, status, capture_raw, capture_txn, nak_config, silent, chunk_gap, chunk_bad_crc, noise_then_pong, stale_nak_status, close_on_ping, live, live_link_overrun, live_compact or live_stop_on.' },
+      {
+        name: 'Host frames',
+        direction: 'input',
+        form: 'byte stream',
+        description:
+          'PING, CONFIG, ARM, ABORT, PATGEN_CFG, EVT_CFG, LINK_CFG, TRACE_CTRL, DECODER_CFG, LIVE_START/STOP and ACK.',
+      },
+      {
+        name: 'Scenario name',
+        direction: 'input',
+        form: 'string',
+        description:
+          'ping, status, capture_raw, capture_txn, nak_config, silent, chunk_gap, chunk_bad_crc, noise_then_pong, stale_nak_status, close_on_ping, live, live_link_overrun, live_compact or live_stop_on.',
+      },
     ],
     outputs: [
-      { name: 'Device frames', direction: 'output', form: 'encoded frames', description: 'PONG, 52-byte STATUS, ACK/NAK, EVT_TRIGGERED, DATA_BEGIN/CHUNK/END, EVT_DECODED/EVT_BLOCK, EVT_OVERRUN and a LOG trace dump.' },
-      { name: 'Recorded host actions', direction: 'output', form: 'attributes', description: 'received_acks, last_config, last_patgen, last_decoder, last_trace_action, last_evt_format and last_link_transport.' },
+      {
+        name: 'Device frames',
+        direction: 'output',
+        form: 'encoded frames',
+        description:
+          'PONG, 52-byte STATUS, ACK/NAK, EVT_TRIGGERED, DATA_BEGIN/CHUNK/END, EVT_DECODED/EVT_BLOCK, EVT_OVERRUN and a LOG trace dump.',
+      },
+      {
+        name: 'Recorded host actions',
+        direction: 'output',
+        form: 'attributes',
+        description:
+          'received_acks, last_config, last_patgen, last_decoder, last_trace_action, last_evt_format and last_link_transport.',
+      },
     ],
     steps: [
       'Bind 127.0.0.1:0, listen for one connection and expose the resulting URI to the test.',
@@ -509,58 +1016,157 @@ export const hostToolsComponents: ComponentDoc[] = [
     evidence: [
       {
         status: 'host-tested',
-        summary: 'Every socket-backed case in test_client_mock.py, test_cli.py, test_live.py and test_trace.py runs against this peer; test_export.py exercises the writers directly.',
-        scope: 'Part of the 107/107 host suite after the V02/V03 live-web bridge. It proves host-side behavior; it is not target or bench evidence.',
+        summary:
+          'Every socket-backed case in test_client_mock.py, test_cli.py, test_live.py and test_trace.py runs against this peer; test_export.py exercises the writers directly.',
+        scope:
+          'Part of the 107/107 host suite after the V02/V03 live-web bridge. It proves host-side behavior; it is not target or bench evidence.',
         date: '13 Sep 2026',
         sources: [
-          { label: 'Mock analyzer', path: 'host/tests/mock_analyzer.py', kind: 'test' },
-          { label: 'Test fixture', path: 'host/tests/conftest.py', kind: 'test' },
+          {
+            label: 'Mock analyzer',
+            path: 'host/tests/mock_analyzer.py',
+            kind: 'test',
+          },
+          {
+            label: 'Test fixture',
+            path: 'host/tests/conftest.py',
+            kind: 'test',
+          },
           { label: 'Host test runs', path: 'docs/status.md', kind: 'doc' },
         ],
       },
     ],
     sources: [
-      { label: 'Mock analyzer', path: 'host/tests/mock_analyzer.py', kind: 'test' },
+      {
+        label: 'Mock analyzer',
+        path: 'host/tests/mock_analyzer.py',
+        kind: 'test',
+      },
       { label: 'Test fixture', path: 'host/tests/conftest.py', kind: 'test' },
-      { label: 'Client/mock tests', path: 'host/tests/test_client_mock.py', kind: 'test' },
+      {
+        label: 'Client/mock tests',
+        path: 'host/tests/test_client_mock.py',
+        kind: 'test',
+      },
     ],
-    related: ['host-protocol', 'analyzer-client', 'host-cli', 'host-live-client', '/verification'],
+    related: [
+      'host-protocol',
+      'analyzer-client',
+      'host-cli',
+      'host-live-client',
+      '/verification',
+    ],
   },
   {
     slug: 'unified-ui',
     name: 'Unified UI (la-ui)',
     codeName: 'la-ui / host.la_ui',
     subsystem: 'host-tools',
-    summary: 'The W00-W09 browser workspace: a stdlib HTTP API over the same analyzer client (connection, capture jobs, LAEN min/max envelopes and detail windows, host-side capture decode through the la_native C ABI, exports, trace and offline open) plus a vanilla-JS Canvas page with the waveform viewer, live event timelines and the legacy page at /legacy.',
-    why: 'One interactive surface replaces the split between la-cli, external PulseView and the three-pane live page: capture, inspect the signals, decode them and stream live events without leaving the page, while la-cli stays the scripted interface.',
-    upstream: ['host-cli (shared spec grammar)', 'analyzer-client (device flows)', 'host-live-client (live session)', 'capture-export (.sr/VCD writers)', 'la-native-decoders (C ABI DLL)', 'host live-web bridge (hub/SSE reuse)'],
-    downstream: ['Chrome/Edge workspace page', 'browser downloads (.sr/.vcd/CSV/PNG)', 'offline reopen of saved captures'],
+    summary:
+      'The W00-W11 browser workspace: a stdlib HTTP API over the same analyzer client (connection, capture jobs, LAEN min/max envelopes and detail windows, host-side capture decode through the la_native C ABI, exports, trace, real live waveform preview and offline open) plus a vanilla-JS Canvas page with activity-focused capture viewing, actual FPGA live traces with aligned decode, Reset UI and the legacy page at /legacy.',
+    why: 'One interactive surface replaces the split between la-cli, external PulseView and the three-pane live page: capture, inspect the signals, decode them and watch real live waveforms with protocol annotations without leaving the page, while la-cli stays the scripted interface.',
+    upstream: [
+      'host-cli (shared spec grammar)',
+      'analyzer-client (device flows)',
+      'host-live-client (live session)',
+      'capture-export (.sr/VCD writers)',
+      'la-native-decoders (C ABI DLL)',
+      'host live-web bridge (hub/SSE reuse)',
+    ],
+    downstream: [
+      'Chrome/Edge workspace page',
+      'browser downloads (.sr/.vcd/CSV/PNG)',
+      'offline reopen of saved captures',
+    ],
     inputs: [
-      { name: 'Target URI', direction: 'input', form: 'serial://COMx', description: 'Direct-USB profile only; the page connects through /api/connect.' },
-      { name: 'Capture options', direction: 'input', form: 'JSON', description: 'rate, words, pre, raw/txn, trigger rise/fall, patgen, timeout.' },
-      { name: 'Decoder specs', direction: 'input', form: 'CLI grammar strings', description: 'Up to three slots: uart:rx=CH,baud=BAUD | spi:... | i2c:....' },
-      { name: 'Saved captures', direction: 'input', form: '.sr / .vcd / .csv upload', description: 'Offline open without a device.' },
+      {
+        name: 'Target URI',
+        direction: 'input',
+        form: 'serial://COMx',
+        description:
+          'Direct-USB profile only; the page connects through /api/connect.',
+      },
+      {
+        name: 'Capture options',
+        direction: 'input',
+        form: 'JSON',
+        description:
+          'rate, words, pre, raw/txn, trigger rise/fall, patgen, timeout.',
+      },
+      {
+        name: 'Decoder specs',
+        direction: 'input',
+        form: 'CLI grammar strings',
+        description:
+          'Up to three slots: uart:rx=CH,baud=BAUD | spi:... | i2c:....',
+      },
+      {
+        name: 'Saved captures',
+        direction: 'input',
+        form: '.sr / .vcd / .csv upload',
+        description: 'Offline open without a device.',
+      },
     ],
     outputs: [
-      { name: 'Waveform view', direction: 'output', form: 'Canvas', description: 'Envelope at wide zoom, exact samples when zoomed in; zoom/pan, cursors A/B with measurements, channel layout, trigger and pre/post markers, edge/pattern search, screenshots.' },
-      { name: 'Decoded annotations', direction: 'output', form: 'JSON rows', description: 'UART/SPI/I²C events drawn under the signals, decoded by the same C decoders the device runs.' },
-      { name: 'Live timelines', direction: 'output', form: 'Canvas + SSE', description: 'Per-slot decoded events on a time axis with independent Start/Stop and bounded history.' },
-      { name: 'Exports', direction: 'output', form: 'downloads', description: '.sr and .vcd through the unchanged CLI writers, event CSV and sample CSV with a # la-ui metadata line, client-canvas PNG.' },
-      { name: 'Trace timeline', direction: 'output', form: 'Canvas', description: 'P8.3 task lanes, busy spans and queue/stream/mark/ISR markers.' },
+      {
+        name: 'Waveform view',
+        direction: 'output',
+        form: 'Canvas',
+        description:
+          'Captures open at a readable scale around first activity; Focus activity restores it and Fit shows the whole record with connected digital rails or activity bands. Zoom/pan, cursors A/B, layout, trigger markers, edge/pattern search and screenshots remain; dense labels are suppressed instead of overlapped.',
+      },
+      {
+        name: 'Decoded annotations',
+        direction: 'output',
+        form: 'JSON rows',
+        description:
+          'UART/SPI/I²C events drawn under the signals, decoded by the same C decoders the device runs.',
+      },
+      {
+        name: 'Live waveforms + timelines',
+        direction: 'output',
+        form: 'Canvas + SSE',
+        description:
+          'Actual FPGA run/sample words with camera-aligned decoded annotations per slot, independent Start/Stop, Pause/Follow, Fit history, zoom and visible gaps/omissions.',
+      },
+      {
+        name: 'Reset UI',
+        direction: 'input',
+        form: 'button + /api/reset',
+        description:
+          'Stops/cancels work, disconnects, clears session history and saved UI preferences, restores default forms/channels and leaves the device ready for reconnect.',
+      },
+      {
+        name: 'Exports',
+        direction: 'output',
+        form: 'downloads',
+        description:
+          '.sr and .vcd through the unchanged CLI writers, event CSV and sample CSV with a # la-ui metadata line, client-canvas PNG.',
+      },
+      {
+        name: 'Trace timeline',
+        direction: 'output',
+        form: 'Canvas',
+        description:
+          'P8.3 task lanes, busy spans and queue/stream/mark/ISR markers.',
+      },
     ],
     steps: [
       'la-ui (or la-cli ui) starts the UiServer on 127.0.0.1:8080 with an exclusive bind; the workspace starts idle and the page can connect later.',
       'The capture job stops any live session, latches the patgen, arms, verifies the transfer and stores the capture in session memory.',
-      'The page fetches a min/max envelope (LAEN) of about one bucket per pixel and exact sample windows only when the view span is small.',
+      'The page fetches a min/max envelope for wide views and exact sample windows when zoomed in; a new capture focuses the first visible activity.',
       'The Decode action runs the native UART/SPI/I²C decoders over the capture transitions on a worker job and returns annotation rows.',
-      'Live sessions reuse the V01-V09 hub/controller: SSE feed, per-slot Start/Stop, explicit slot set per session.',
+      'Live sessions reuse the V01-V09 hub/controller: SSE feed, per-slot Start/Stop, explicit slot set per session. W11 opts into exact EVT_WAVEFORM runs via WAVE_CFG; Pause freezes a bounded snapshot and Follow resumes.',
+      'Reset UI cancels capture/live/trace work (the capture worker sends ABORT itself), disconnects, clears session/browser state and restores defaults.',
       'Exports stream through the CLI writers via a temporary file; offline open parses .sr, .vcd or .csv into the same capture model.',
       'Settings (target, capture form, decoder specs, channel layout) persist in localStorage; the page header shows the page/server version marker.',
     ],
     state: [
       'Session-memory CaptureStore only; files are written only when the user exports.',
       'One JobRunner slot (capture/decode/trace/export) and one device owner; capture and live are mutually exclusive and auto-stop the other mode.',
-      'The hub keeps the 4096-message replay ring and the 100,000-event per-slot live bound in the page.',
+      'The hub keeps the 4096-message replay ring and a separate 16-packet waveform replay ring.',
+      'W11 browser live history is bounded to two seconds or 16,384 exact runs and 10,000 annotations per slot; omitted/gapped preview ranges are visible and counted.',
+      'Reset UI clears unexported captures, event/waveform/trace/job history, cursors and saved browser preferences; it does not erase exported files or board storage.',
     ],
     configuration: [
       'Bind 127.0.0.1:8080 by default; --bind/--port override; --target and repeated --decoder are optional.',
@@ -572,58 +1178,131 @@ export const hostToolsComponents: ComponentDoc[] = [
       'A missing connection, unknown capture, bad spec or second job returns 400/404/409 with a JSON error; device failures return 502.',
       'The VCD format cannot recover a trailing constant run; the opener warns and .sr remains the exact-count format.',
       'A second la-cli/la-web process cannot open the same serial port; the UI reports the transport error instead of retrying silently.',
-      'The [HUMAN] browser click-through and the bench E2E are recorded in docs/status.md, never assumed.',
+      'The [HUMAN] visual walkthrough and bench results are recorded with dates in docs/status.md/current-handover.md; automatic checks are not inflated into a scored human walkthrough.',
+      'Preview is lossy only under pressure/above 1019 words per segment: newest preview may drop and ranges stay blank; use burst capture/export for a lossless saved record.',
+      'UI w11 requires USB firmware 0x000A0000 for real live waveforms; an older SD image runs event-only and the page reports the version requirement.',
     ],
     ownership: [
       'UiState owns the AnalyzerClient, store, job runner and live controller for the server lifetime; the handler threads only serve.',
       'Device operations serialize on a device lock; the live pump owns the transport during a session and control requests are queued into it.',
+      'AcqTask copies exact preview words from a segment it owns into a static event block; preview uses handles/queues and never exposes a DMA pointer or steals decoder capacity.',
     ],
     evidence: [
       {
         status: 'host-tested',
-        summary: 'W01-W07 host suites cover the capture store, envelope parity, UART/SPI/I²C decode parity with tools/models/decoders.py, the /api/* routes against the mock analyzer, exports and offline round trips, the trace model, and the page DOM-stub run (node host/tests/page_check.mjs).',
-        scope: 'Part of the 165-passed host suite on 2026-09-20; the mock proves host logic only. A real headless-Chrome CDP smoke rendered the page with 3 live panes, 8 channel rows, 30,198 lit canvas pixels and zero console errors.',
-        date: '20 Sep 2026',
+        summary:
+          'W01-W11 host suites cover the capture store, envelope parity, UART/SPI/I²C decode parity, the /api/* routes against the mock analyzer, exports/offline round trips, trace, real-run waveform framing/callback routing/bounded fanout, cancellation and Reset, and the page DOM-stub run including gaps/frozen pause/history bounds.',
+        scope:
+          'W11 final: host 177/177 on 2026-10-17 plus PAGE CHECK and syntax checks. Mock/host checks prove host logic only; the real device/browser gates are separate evidence.',
+        date: '17 Oct 2026',
         sources: [
           { label: 'UI plan', path: 'docs/unified-ui-plan.md', kind: 'spec' },
-          { label: 'UI API tests', path: 'host/tests/test_ui_api.py', kind: 'test' },
-          { label: 'Page DOM-stub check', path: 'host/tests/page_check.mjs', kind: 'test' },
+          {
+            label: 'UI API tests',
+            path: 'host/tests/test_ui_api.py',
+            kind: 'test',
+          },
+          {
+            label: 'Live waveform tests',
+            path: 'host/tests/test_waveform_live.py',
+            kind: 'test',
+          },
+          {
+            label: 'Page DOM-stub check',
+            path: 'host/tests/page_check.mjs',
+            kind: 'test',
+          },
           { label: 'Execution ledger', path: 'docs/status.md', kind: 'doc' },
         ],
       },
       {
-        status: 'implemented-unverified',
-        summary: 'The bench E2E gates over serial://COM13 (1M-sample capture, decode, three live slots, trace dump, offline reopen) and the [HUMAN] browser click-through are scheduled with W09 and are not yet recorded.',
-        scope: 'No device or browser result is claimed for the unified UI until the W09 ledger entry exists.',
-        date: '20 Sep 2026',
-        sources: [{ label: 'UI plan W09', path: 'docs/unified-ui-plan.md', kind: 'spec' }],
+        status: 'bench-verified',
+        summary:
+          'W11 USB firmware 0x000A0000 / UI w11 passed native 18/18, the SD image cold-booted, test-e2e -k ui passed 6/6, and real-browser external ESP32 UART checks passed 10/10: activity focus/Fit, live waveform + aligned bytes, status, Pause/Follow, late-slot timestamps and Reset during streaming/armed capture.',
+        scope:
+          'Recorded on the bench 2026-10-17/18 over serial://COM13. External UART preview is verified; no new external SPI/I²C preview or overload qualification is claimed. Included in the completed USB-first class-project source.',
+        date: '18 Oct 2026',
+        sources: [
+          {
+            label: 'Current handover',
+            path: 'docs/current-handover.md',
+            kind: 'doc',
+          },
+          { label: 'UI E2E tests', path: 'tests/e2e/test_ui.py', kind: 'test' },
+          { label: 'Execution ledger', path: 'docs/status.md', kind: 'doc' },
+        ],
       },
     ],
     sources: [
-      { label: 'UI server and state', path: 'host/la_ui/server.py', kind: 'source' },
+      {
+        label: 'UI server and state',
+        path: 'host/la_ui/server.py',
+        kind: 'source',
+      },
       { label: 'Capture store', path: 'host/la_ui/store.py', kind: 'source' },
       { label: 'Host decode', path: 'host/la_ui/decode.py', kind: 'source' },
-      { label: 'Workspace page', path: 'host/la_ui/static/index.html', kind: 'source' },
-      { label: 'Waveform renderer', path: 'host/la_ui/static/waveform.js', kind: 'source' },
-      { label: 'UI API tests', path: 'host/tests/test_ui_api.py', kind: 'test' },
-      { label: 'Unified UI plan', path: 'docs/unified-ui-plan.md', kind: 'spec' },
+      {
+        label: 'Workspace page',
+        path: 'host/la_ui/static/index.html',
+        kind: 'source',
+      },
+      {
+        label: 'Waveform renderer',
+        path: 'host/la_ui/static/waveform.js',
+        kind: 'source',
+      },
+      {
+        label: 'UI API tests',
+        path: 'host/tests/test_ui_api.py',
+        kind: 'test',
+      },
+      {
+        label: 'Unified UI plan',
+        path: 'docs/unified-ui-plan.md',
+        kind: 'spec',
+      },
     ],
-    related: ['host-cli', 'analyzer-client', 'host-live-client', 'capture-export', 'mock-analyzer', '/using', '/tooling'],
+    related: [
+      'host-cli',
+      'analyzer-client',
+      'host-live-client',
+      'capture-export',
+      'mock-analyzer',
+      '/using',
+      '/tooling',
+    ],
   },
   {
     slug: 'sigrok-bridge',
     name: 'Optional SUMP bridge',
     codeName: 'la_sigrok_bridge (placeholder)',
     subsystem: 'host-tools',
-    summary: 'The optional P10.2 SUMP bridge placeholder: host/la_sigrok_bridge contains only a docstring, and the feature is deferred because no signed virtual-COM pair driver is installed. This is a documented deferral, not a partial implementation.',
+    summary:
+      'The optional P10.2 SUMP bridge placeholder: host/la_sigrok_bridge contains only a docstring, and the feature is deferred because no signed virtual-COM pair driver is installed. This is a documented deferral, not a partial implementation.',
     why: 'PulseView can already load .sr exports; a live SUMP path would add convenience, but the plan makes it conditional on a compatible signed virtual-COM driver so Windows driver and Secure Boot state are not changed.',
-    upstream: ['docs/sigrok-bridge.md (assessment)', 'docs/plan.md (P10.2)', 'capture-export (.sr remains the required integration)'],
+    upstream: [
+      'docs/sigrok-bridge.md (assessment)',
+      'docs/plan.md (P10.2)',
+      'capture-export (.sr remains the required integration)',
+    ],
     downstream: ['PulseView SUMP session (not implemented)'],
     inputs: [
-      { name: 'Planned SUMP requests', direction: 'input', form: 'virtual COM byte stream', description: 'Reset, ID, metadata, run, trigger configuration and sample reads; none of this is implemented.' },
+      {
+        name: 'Planned SUMP requests',
+        direction: 'input',
+        form: 'virtual COM byte stream',
+        description:
+          'Reset, ID, metadata, run, trigger configuration and sample reads; none of this is implemented.',
+      },
     ],
     outputs: [
-      { name: 'Planned SUMP sample blocks', direction: 'output', form: 'virtual COM byte stream', description: 'Capture samples only; the bridge could never stream the custom decoded events into PulseView.' },
+      {
+        name: 'Planned SUMP sample blocks',
+        direction: 'output',
+        form: 'virtual COM byte stream',
+        description:
+          'Capture samples only; the bridge could never stream the custom decoded events into PulseView.',
+      },
     ],
     steps: [
       'Planned: open the virtual COM pair and speak SUMP/OLS to PulseView.',
@@ -651,28 +1330,52 @@ export const hostToolsComponents: ComponentDoc[] = [
     evidence: [
       {
         status: 'planned',
-        summary: 'The intended design and the plan gate are recorded: a COM pair plus TCP bridge translating SUMP requests into analyzer transactions, covering capture only.',
-        scope: 'Design assessment in docs/sigrok-bridge.md; no partial bridge code exists.',
+        summary:
+          'The intended design and the plan gate are recorded: a COM pair plus TCP bridge translating SUMP requests into analyzer transactions, covering capture only.',
+        scope:
+          'Design assessment in docs/sigrok-bridge.md; no partial bridge code exists.',
         date: '14 Sep 2026',
         sources: [
-          { label: 'Bridge assessment', path: 'docs/sigrok-bridge.md', kind: 'spec' },
-          { label: 'Placeholder package', path: 'host/la_sigrok_bridge/__init__.py', kind: 'source' },
+          {
+            label: 'Bridge assessment',
+            path: 'docs/sigrok-bridge.md',
+            kind: 'spec',
+          },
+          {
+            label: 'Placeholder package',
+            path: 'host/la_sigrok_bridge/__init__.py',
+            kind: 'source',
+          },
         ],
       },
       {
         status: 'blocked',
-        summary: 'P10.2 is deferred by the precondition the plan sets: no compatible signed virtual-COM pair driver is installed, so the SUMP bridge cannot be verified without changing driver or security state.',
-        scope: 'docs/sigrok-bridge.md records the 2026-09-14 assessment and the missing signed virtual-COM driver; the decision is a documented deferral, not a failed implementation.',
+        summary:
+          'P10.2 is deferred by the precondition the plan sets: no compatible signed virtual-COM pair driver is installed, so the SUMP bridge cannot be verified without changing driver or security state.',
+        scope:
+          'docs/sigrok-bridge.md records the 2026-09-14 assessment and the missing signed virtual-COM driver; the decision is a documented deferral, not a failed implementation.',
         date: '14 Sep 2026',
         sources: [
-          { label: 'Bridge assessment', path: 'docs/sigrok-bridge.md', kind: 'spec' },
+          {
+            label: 'Bridge assessment',
+            path: 'docs/sigrok-bridge.md',
+            kind: 'spec',
+          },
           { label: 'P10.2 plan text', path: 'docs/plan.md', kind: 'spec' },
         ],
       },
     ],
     sources: [
-      { label: 'Bridge assessment', path: 'docs/sigrok-bridge.md', kind: 'spec' },
-      { label: 'Placeholder package', path: 'host/la_sigrok_bridge/__init__.py', kind: 'source' },
+      {
+        label: 'Bridge assessment',
+        path: 'docs/sigrok-bridge.md',
+        kind: 'spec',
+      },
+      {
+        label: 'Placeholder package',
+        path: 'host/la_sigrok_bridge/__init__.py',
+        kind: 'source',
+      },
       { label: 'P10.2 plan text', path: 'docs/plan.md', kind: 'spec' },
     ],
     related: ['capture-export', 'host-protocol', 'analyzer-client', '/tooling'],

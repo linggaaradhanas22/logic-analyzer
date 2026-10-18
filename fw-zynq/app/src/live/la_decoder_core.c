@@ -230,6 +230,18 @@ int la_decoder_core_feed_segment(la_decoder_core_t *core,
     return sink.events;
 }
 
+int la_decoder_core_feed_segment_at(la_decoder_core_t *core,
+    const uint32_t *words, uint32_t word_count, uint32_t sequence,
+    uint64_t first_sample, la_decode_event_callback callback, void *context)
+{
+    if (core != NULL && (core->have_sequence == 0u ||
+                        sequence != core->expected_sequence)) {
+        core->t_sample = first_sample;
+    }
+    return la_decoder_core_feed_segment(core, words, word_count, sequence,
+                                        callback, context);
+}
+
 const la_decoder_stats_t *la_decoder_core_stats(const la_decoder_core_t *core)
 {
     return core != NULL ? &core->stats : NULL;

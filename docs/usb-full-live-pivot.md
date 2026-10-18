@@ -1,5 +1,13 @@
 # Full-USB live pivot — implementation instructions
 
+**Current continuation (18 October 2026):** V00-V09 are implemented and the USB
+profile is the product default. W11 firmware 0x000A0000 / UI w11 add real live
+waveforms + decode, activity focus and Reset UI; the updated SD image passed
+cold boot, UI E2E 6/6 and external UART browser checks 10/10. Use
+[current-handover.md](current-handover.md) for current boot/wiring, hashes,
+evidence and source/publication state. The ordered pivot packets below are
+historical, not instructions to restart implementation.
+
 User-directed scope change (2026-09-19): the analyzer becomes **USB-first**.
 Direct Zynq PS USB0 is the primary host transport, and the live browser view is
 **hosted on the PC** instead of the ESP32. This document is the execution

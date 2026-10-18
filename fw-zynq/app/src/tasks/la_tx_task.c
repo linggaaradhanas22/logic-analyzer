@@ -442,7 +442,9 @@ static void tx_drain_events(la_tx_ctx_t *ctx)
         }
 #endif
         if (block != NULL && block->length != 0u) {
-            tx_track_latency(ctx, block);
+            if (block->type != LA_PROTO_EVT_WAVEFORM) {
+                tx_track_latency(ctx, block);
+            }
             (void)tx_write(ctx, block->type, la_app_next_sequence(ctx->app),
                            block->data, block->length);
         }

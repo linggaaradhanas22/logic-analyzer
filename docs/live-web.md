@@ -14,6 +14,15 @@ messages).
 legacy page at `/legacy`. `la-web` keeps serving the page below exactly as
 documented here; the acceptance checks in section 8 still apply to it.
 
+**W11 continuation (18 October 2026).** The unified `la-ui` now opts into real
+waveform preview on USB firmware 0x000A0000, verified after SD cold boot. The
+legacy event message/standalone `la-web` contract below is retained. Unified
+SSE additionally carries `{"waveform":...}` messages from exact FPGA runs,
+not reconstructed decoded bytes; stats add waveform packet/omission counts.
+Preview replay is bounded separately to 16 packets. `/api/reset` stops work,
+disconnects and clears session/browser state. See [protocol.md](protocol.md)
+and [current-handover.md](current-handover.md) for current limits and evidence.
+
 ## 1. Scope and ownership
 
 - The bridge runs on the PC, next to `la-cli`, and owns the analyzer target for

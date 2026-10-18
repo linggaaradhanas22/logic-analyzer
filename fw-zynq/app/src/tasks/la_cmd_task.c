@@ -227,6 +227,14 @@ static void cmd_post_ack_msg(la_cmd_ctx_t *ctx, const la_cmd_result_t *result){
 static void cmd_handle_outcome(la_cmd_ctx_t *ctx, const la_cmd_result_t *result)
 {
     switch (result->outcome) {
+    case LA_CMD_OUT_WAVE_CFG:
+#if LA_TRANSPORT_USB
+        ctx->app->waveform_enabled = result->action;
+        cmd_post_ack(ctx, result->type, result->sequence);
+#else
+        cmd_post_nak(ctx, result->type, result->sequence, LA_PROTO_ERROR_UNSUPPORTED);
+#endif
+        break;
     case LA_CMD_OUT_ACK:
         cmd_post_ack(ctx, result->type, result->sequence);
         break;

@@ -6,6 +6,17 @@ FreeRTOS capture/decoder tasks on the Zynq PS (burst mode MVP). This document
 records the implemented PL integration (P3), the measured resource usage and
 the constraint/CDC decisions behind it.
 
+## Current runtime handover (18 October 2026)
+
+Firmware 0x000A0000 / UI w11 are running from the updated SD image (JP5=SD),
+with SD USB UI E2E 6/6 and external ESP32 UART browser checks 10/10. See
+[current-handover.md](current-handover.md) for image hashes and source state.
+W11 copies exact transition words from owned DMA segments into bounded static
+event buffers, then sends them over USB/SSE beside decoded events. Absolute
+segment timestamps align slots started mid-stream and after decoder gaps.
+No RTL, register map, descriptors or SG mode changed; the routed PL evidence
+below retains its original dates, not a new synthesis signoff.
+
 ## PL Integration (P3.1, `fpga/scripts/build.tcl`)
 
 Single-fabric-clock design: everything PL runs on `FCLK_CLK0` at 100 MHz
@@ -120,12 +131,13 @@ signoff run replaces them.
   ESP32 gateway, its `la_web` page and the Wi-Fi drain (~0.28 MB/s, S3
   USB-OTG full-speed ceiling about 1.2 MB/s) remain a supported optional
   profile.
-- The unified UI (`host/la_ui`, W00-W09) is a host-only layer on top of that
+- The original unified UI (`host/la_ui`, W00-W09) was a host-only layer on top of that
   bridge: a stdlib HTTP API around the same `AnalyzerClient` (capture jobs,
   `LAEN` min/max envelopes and detail windows, host decoding through the
   `la_native` C ABI, exports, trace and offline open) plus a vanilla-JS
-  workspace page. No firmware, PL, register-map or protocol change; the
-  direct-USB profile is the only UI transport.
+  workspace page. W11 adds firmware/protocol real-transition preview and Reset
+  UI; the prior host-only boundary is historical. PL/register map are unchanged
+  and direct USB remains the supported UI product path.
 - Remaining honest caveats: PS DDR behavior with the board-preset negative
   DQS-to-CLK skew values is only verified at boot/bring-up on hardware;
   `IRQ_F2P` carries three sources (analyzer, DMA, SPI) and the drivers must

@@ -38,30 +38,32 @@ PLAN = {
 
 WEEKS = [
     ('15–21 September 2026', '21-09-2026', [
-        'Investigated the gateway and ESP32-S3 transport limitations and prepared the direct-Zynq-USB migration plan (17 September).',
-        'Implemented CDC-ACM, used numbered records/traces to investigate packet loss, and corrected endpoint setup/toggle behavior and transmit ownership/order handling (18–19 September).',
-        'Verified three aggregate 64 MiB drain trials at 1.62 MB/s with byte-exact data and CRC checks (19 September).',
-        'Adopted USB as the default and integrated device live events, host SSE, per-slot decoder controls and the unified waveform UI; recorded USB live/UI bench gates (20 September).',
-        'Class link: FPGA sampling/packing and AXI contract; Embedded system DMA, USB, RTOS coordination and decoder integration.'
+        'Defined the instrument specifications: eight 3.3 V input channels, sampling up to 100 MS/s, level/edge triggers, pre-trigger history, and UART/SPI/I2C decoding.',
+        'Designed the system architecture: FPGA sampling and triggering, AXI DMA transfer to DDR memory, FreeRTOS processing on the ARM CPU, and a PC waveform viewer.',
+        'Defined burst capture and live decoding modes, the register interface, sample encodings, and buffer ownership between DMA and software.',
+        'Compared the ESP32 gateway with direct Zynq USB and selected USB CDC-ACM for the final PC connection.',
+        'Created the implementation plan: develop and simulate the capture RTL, implement firmware tasks and drivers, integrate the host tools, then verify the complete instrument.'
     ]),
     ('22–28 September 2026', '28-09-2026', [
-        'Updated the direct-USB, UI-first operator runbook with power/jumper settings, COM identity, internal self-test, capture/live decoding, exports and troubleshooting (22 September).',
-        'Added and smoke-tested hidden Windows UI start/stop launchers for easier operation (26 September).',
-        'Cold-booted the USB-profile BOOT.BIN from SD; verified enumeration, ping/status and the 6/6 real-device UI E2E cases (26 September).',
-        'Class link: FPGA/firmware image integration and startup; Embedded system host connection, service lifecycle and operator usability.'
+        'Implemented the FPGA input synchronizers and sample-rate divider to record all eight channels on a common sampling clock.',
+        'Implemented level/edge trigger detection, the pre-trigger ring buffer, and the capture controller for arm, capture, timeout, and abort operations.',
+        'Implemented raw-sample packing, transition/run encoding, the output FIFO, and AXI-Stream packet boundaries for DMA.',
+        'Connected AXI-Lite control registers, AXI DMA, DDR access, interrupts, and Pmod pin constraints in the Vivado system.',
+        'Checked sample order, trigger position, packing, stalls, and overflow with self-checking RTL simulations; reviewed routed timing and resource use.'
     ]),
     ('29 September–5 October 2026', '05-10-2026', [
-        'Corrected step-pattern division so the counter self-test remains legible in the Fit view (1 October).',
-        'Changed waveform rendering to horizontal runs and vertical edges, and implemented exact forward/back cursor edge stepping (1 October).',
-        'Verified the recorded host regression (167 passed), JavaScript page checks and offline browser behavior with zero page/console errors; no new bench result is claimed for that run (1 October).',
-        'Class link: accurate presentation of FPGA-generated digital waveforms; Embedded system host controls, data interpretation and regression debugging.'
+        'Created the FreeRTOS acquisition, command, decoder, transmitter, USB, and status tasks with static stacks, queues, and buffers.',
+        'Implemented scatter-gather DMA descriptor handling, interrupt-to-task notifications, cache invalidation, and reference-counted reuse of live sample buffers.',
+        'Integrated the shared C UART/SPI/I2C decoders with three configurable live slots and queues for completed sample segments and decoded event blocks.',
+        'Implemented USB CDC-ACM command and data transfer, frame checksums, acknowledgements, retransmissions, and bounded handling of full queues.',
+        'Connected the Python host service and browser interface to capture controls, waveform display, decoded events, cursors, and file exports.'
     ]),
     ('6–12 October 2026', '12-10-2026', [
-        'Prepared and refined the final presentation with independent FPGA system and Embedded system routes and editable PowerPoint/PDF outputs (12 October).',
-        'Prepared a complete slide-by-slide speaking script and its Word/PDF/Markdown exports (12 October).',
-        'Reviewed the current source and dated reports, updated the project report, explained the actual RTOS tasks/ownership/queues/USB flow, and prepared current draw.io figures and weekly KCCI forms (12 October).',
-        'Recorded the sole author\'s confirmation that the visual walkthrough is complete; its execution date and additional measurements were not specified (confirmation received 12 October).',
-        'Class link: FPGA architecture/results and embedded RTOS implementation explained through one individual project.'
+        'Integrated the FPGA bitstream, FreeRTOS application, and host tools into the complete analyzer; prepared the BOOT.BIN image and checked SD startup.',
+        'Checked burst captures with internal patterns and external loopback, comparing sample counts, sample values, trigger positions, and checksums.',
+        'Checked live UART/SPI/I2C decoding, independent decoder slots, queue-overload reporting, stop/abort behavior, and USB transfer recovery.',
+        'Reviewed transfer throughput, live event-loss counts, FPGA timing, and resource use against the design requirements; documented the operating limits.',
+        'Refined waveform rendering and cursor controls, checked capture/export workflows, and completed the system diagrams, project report, presentation, and operating instructions.'
     ])
 ]
 
@@ -181,7 +183,8 @@ def build_variant(variant: str):
     workbook = ET.fromstring(parts['xl/workbook.xml'])
     sheets = workbook.find(q('sheets'))
     sheets[1].set('name', 'Project Log - Week 1')
-    # Scoring remains at its original index and original sheet ID/relationship.
+    # Keep scoring's sheet ID/relationship and XML; move its tab after the logs.
+    scoring = next(s for s in sheets if s.get('name') == 'Project Scoring Sheet')
     rels = ET.fromstring(parts['xl/_rels/workbook.xml.rels'])
     content = ET.fromstring(parts['[Content_Types].xml'])
     existing_ids = {r.get('Id') for r in rels}
@@ -198,7 +201,7 @@ def build_variant(variant: str):
                   'D5': '5 hours', 'B6': f'Embedded system + FPGA | {period}',
                   'A9': f'Period: {period}\n{member_line}\n\n' +
                         '\n\n'.join(f'{i}. {a}' for i, a in enumerate(activities, 1)) +
-                        '\n\nWeekly allocation: 5 hours. Activities summarized from the project ledger; dates are activity/evidence dates, not daily attendance.'}
+                         '\n\nWeekly allocation: 5 hours.'}
         for coordinate, value in values.items():
             base_style = baseline.worksheets[1][coordinate].style_id
             set_cell(sheet, coordinate, value, base_style if coordinate == 'A1' else wrap_style(base_style))
@@ -227,6 +230,26 @@ def build_variant(variant: str):
                 new_area.text = f"'Project Log - Week {week}'!$A$1:$D$10"
                 defined.append(new_area)
         parts[part] = xml_bytes(sheet)
+    # Local defined-name scopes are zero-based tab positions, not sheet IDs.
+    # Remap all scopes after moving scoring, including its original print area.
+    previous_order = list(sheets)
+    sheets.remove(scoring)
+    sheets.append(scoring)
+    new_positions = {s.get('sheetId'): i for i, s in enumerate(sheets)}
+    if defined is not None:
+        for name in defined:
+            old_index = name.get('localSheetId')
+            if old_index is not None:
+                sheet_id = previous_order[int(old_index)].get('sheetId')
+                name.set('localSheetId', str(new_positions[sheet_id]))
+    views = workbook.find(q('bookViews'))
+    if views is not None:
+        for view in views:
+            for attribute in ('activeTab', 'firstSheet'):
+                old_index = view.get(attribute)
+                if old_index is not None:
+                    sheet_id = previous_order[int(old_index)].get('sheetId')
+                    view.set(attribute, str(new_positions[sheet_id]))
     xfs.set('count', str(len(xfs)))
     parts['xl/styles.xml'] = xml_bytes(styles)
     parts['xl/workbook.xml'] = xml_bytes(workbook)
@@ -239,8 +262,8 @@ def build_variant(variant: str):
             package.writestr(name, data)
     reopened = load_workbook(dest)
     assert reopened.sheetnames == ['Project Implementation Plan', 'Project Log - Week 1',
-                                  'Project Scoring Sheet', 'Project Log - Week 2',
-                                  'Project Log - Week 3', 'Project Log - Week 4']
+                                  'Project Log - Week 2', 'Project Log - Week 3',
+                                  'Project Log - Week 4', 'Project Scoring Sheet']
     with zipfile.ZipFile(BACKUP) as old, zipfile.ZipFile(dest) as new:
         changed = [n for n in old.namelist() if old.read(n) != new.read(n)]
         allowed = {'xl/worksheets/sheet1.xml', 'xl/worksheets/sheet2.xml', 'xl/styles.xml',
@@ -256,6 +279,13 @@ def build_variant(variant: str):
         if ws.title.startswith('Project Log'):
             assert ws['D5'].value == '5 hours'
             assert ws['D4'].value is None and ws['B5'].value is None
+    for week, (period, date, activities) in enumerate(weeks, 1):
+        ws = reopened[f'Project Log - Week {week}']
+        assert ws['D2'].value == date
+        assert ws['B6'].value == f'Embedded system + FPGA | {period}'
+        assert all(activity in ws['A9'].value for activity in activities)
+        assert str(ws.print_area) == f"'Project Log - Week {week}'!$A$1:$D$10"
+    assert str(reopened['Project Scoring Sheet'].print_area) == str(baseline['Project Scoring Sheet'].print_area)
     assert reopened.worksheets[0]['B7'].value is None
     if variant == 'fpga':
         assert reopened.worksheets[0]['C10'].value == 'Alvin Hadar'
@@ -268,7 +298,9 @@ def build_variant(variant: str):
     report = {'status': 'PASS', 'variant': variant, 'sheets': reopened.sheetnames,
               'weeks': 4, 'hoursPerWeek': 5,
               'totalHours': 20, 'originalScoringSheetSha256': score_hash,
-              'scoringSheetXmlByteIdentical': True, 'existingStyleAndFontRecordsUnchanged': True,
+               'scoringSheetXmlByteIdentical': True, 'existingStyleAndFontRecordsUnchanged': True,
+               'scoringSheetLast': True, 'weeklyDatesAndActivitiesVerified': True,
+               'localPrintAreasVerified': True,
               'changedExistingPackageParts': changed,
               'allOtherOriginalPackagePartsByteIdentical': True, 'output': str(dest)}
     checks_name = 'workbook-checks.json' if variant == 'embedded' else f'workbook-checks-{variant}.json'

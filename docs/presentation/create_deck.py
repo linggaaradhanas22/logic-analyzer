@@ -364,6 +364,18 @@ CSS = """
 .s .screenshot{display:flex;flex-direction:column;justify-content:center;flex:1;gap:24px}
 .s .screenshot img{width:100%;height:auto;max-height:430px;object-fit:contain;display:block}
 .s .screenshot p{font:400 19px/1.4 Arial,sans-serif;margin:0}
+.s .decode-result{display:flex;flex-direction:column;gap:22px;width:100%}
+.s .decode-heading{font:700 21px/1.2 Arial,sans-serif;color:#173A56;margin:0}
+.s .decode-frame{display:block;width:100%;height:auto}
+.s .byte-map{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+.s .byte-card{background:#E8EDF1;padding:12px 15px}
+.s .byte-hex{font:700 30px/1.15 Arial,sans-serif;color:#173A56;margin:0 0 6px}
+.s .byte-char{font:400 23px/1.2 Arial,sans-serif;margin:0}
+.s .decode-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:30px;border-top:2px solid #173A56;padding-top:17px}
+.s .decode-facts h3{font:700 21px/1.2 Arial,sans-serif;color:#173A56;margin:0 0 9px}
+.s .decode-facts p{font:400 21px/1.4 Arial,sans-serif;margin:0}
+.s .demo-link{font:400 20px/1.3 Arial,sans-serif;margin:0}
+.s .demo-link a{color:#173A56;text-decoration:underline}
 .s .two ul{font:400 20px/1.35 Arial,sans-serif;margin:0;padding-left:21px;display:flex;flex-direction:column;justify-content:center;flex:1;gap:22px}
 .s .two li{margin:0;padding-left:3px}
 .s table{font:400 20px/1.3 Arial,sans-serif;width:100%;table-layout:fixed;border-collapse:collapse;flex:0 0 auto;height:auto}
@@ -398,10 +410,13 @@ def main():
     args = p.parse_args()
     assert (ROOT / "build").is_dir(), "Project build directory must exist"
     OUT.mkdir(exist_ok=True)
-    real_ui = ROOT / "docs" / "hardwarex" / "assets" / "uart-demo" / "uart-demo-capture.png"
-    if not real_ui.is_file():
-        raise FileNotFoundError(f"Real UART screenshot missing: {real_ui}")
-    shutil.copyfile(real_ui, OUT / "uart-demo-capture.png")
+    for filename in ("uart-demo-capture.png", "uart-demo-frame.png", "logic-analyzer-hardware.jpeg"):
+        assets = ROOT / "docs" / "hardwarex" / "assets"
+        source = (assets / filename if filename.endswith(".jpeg")
+                  else assets / "uart-demo" / filename)
+        if not source.is_file():
+            raise FileNotFoundError(f"Real UART screenshot missing: {source}")
+        shutil.copyfile(source, OUT / filename)
     base_content()
     from class_sections import build
     build(sys.modules[__name__],list(SLIDES))
@@ -425,7 +440,7 @@ def main():
     (OUT/"logic-analyzer-design.html").write_text(doc,encoding="utf-8")
     (OUT/"slides.json").write_text(json.dumps(SLIDES,indent=2,ensure_ascii=False),encoding="utf-8")
     (OUT/"routes.json").write_text(json.dumps(ROUTES,indent=2),encoding="utf-8")
-    notes = ['# Presenter notes and evidence map\n','One deck, two independent subsystem routes.\n','FPGA system: slides 1–18, then 34–37.\n','Embedded system: slides 1–6, then 19–37.\n','PowerPoint: Slide Show > Custom Slide Show > choose the subsystem.\n','Each route uses the shared overview and close. Budget about 20–25 minutes per route, plus Q&A.\n','Evidence baseline: b487413; no new hardware verification performed.\n']
+    notes = ['# Presenter notes and evidence map\n','One deck, two independent subsystem routes.\n','FPGA system: slides 1–18, then 34–38.\n','Embedded system: slides 1–6, then 19–38.\n','PowerPoint: Slide Show > Custom Slide Show > choose the subsystem.\n','Each route uses the shared overview and close. Budget about 20–25 minutes per route, plus Q&A.\n','Evidence: dated build/bench reports and the real 18 October 2026 UART capture; no new hardware test performed for this slide revision.\n']
     for i,s in enumerate(SLIDES,1):
         notes += [f'## Slide {i}: {s["title"]}\n',s['notes']+'\n',f'Sources: {s["source"] or "Presentation back cover"}\n']
     (OUT/"presenter-notes.md").write_text('\n'.join(notes),encoding="utf-8")

@@ -269,6 +269,20 @@ static int test_decoder_core_uart(void)
     CHECK(la_decoder_core_feed_segment(&core, words, word_count, 4u, log_event, &log) >= 0,
           "feed after the gap");
     CHECK(log.count == 8u, "decoding resumes after a gap");
+    CHECK(la_decoder_core_configure(&core, &config) == 0, "configure mid-stream slot");
+    memset(&log, 0, sizeof(log));
+    CHECK(la_decoder_core_feed_segment_at(&core, words, word_count, 100u,
+          UINT64_C(1000000000), log_event, &log) >= 0 && log.count == 8u,
+          "mid-stream slot decodes at acquisition epoch");
+    CHECK(log.events[0].t_sample == UINT64_C(1000000000) &&
+          log.events[7].t_sample == UINT64_C(1000000000) + 7u * 44u,
+          "decoded events align with absolute waveform samples");
+    memset(&log, 0, sizeof(log));
+    CHECK(la_decoder_core_feed_segment_at(&core, words, word_count, 102u,
+          UINT64_C(2000000000), log_event, &log) >= 0 && log.count == 9u &&
+          log.events[0].kind == LA_DECODE_EVENT_DISCONTINUITY &&
+          log.events[1].t_sample == UINT64_C(2000000000),
+          "queue gap is marked without losing waveform time alignment");
     return 0;
 }
 

@@ -7,10 +7,10 @@ import type {
 export const FRAME_SUMMARY: string[] = [
   'SOF is the single byte 0xA5 and starts every frame on the Zynq UART0, the ESP32 relay and the host TCP connection.',
   'TYPE selects the message, and SEQ is the sender-local sequence number modulo 256; a retransmission keeps the same SEQ.',
-  'LEN is an unsigned little-endian 16-bit payload length from 0 through 1024 bytes.',
+  'LEN is an unsigned little-endian 16-bit payload length from 0 through 4096 bytes.',
   'PAYLOAD is the type-specific body; every multi-byte field inside it is unsigned little-endian unless stated otherwise.',
   'CRC16 is CRC-16/CCITT-FALSE (initial 0xFFFF, polynomial 0x1021, no reflection, final XOR 0x0000) over TYPE, SEQ, both LEN bytes and every payload byte.',
-  'The maximum encoded frame is 1031 bytes: 7 bytes of overhead plus the payload (LEN + 7).',
+  'The maximum encoded frame is 4103 bytes: 7 bytes of overhead plus the payload (LEN + 7).',
   'A byte equal to 0xA5 in a header, payload or CRC has no special meaning; only the parser SOF-search state gives SOF special meaning.',
   'The parser is incremental and checks length first, then CRC; on a bad length or CRC it returns to the search state and treats the offending byte as a possible new SOF.',
 ];
@@ -22,7 +22,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'host → Zynq',
     group: 'discovery',
     payload: 'empty',
-    support: 'Implemented and bench-verified: la-cli ping returned PONG through the ESP32 TCP gateway on every bench session.',
+    support:
+      'Implemented and bench-verified: la-cli ping returned PONG through the ESP32 TCP gateway on every bench session.',
     supportStatus: 'bench-verified',
   },
   {
@@ -31,7 +32,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'Zynq → host',
     group: 'discovery',
     payload: 'fw_version:u32, pl_id:u32, uptime_ms:u64',
-    support: 'Implemented and bench-verified: the PING reply carried the firmware version, PL ID and uptime in every gateway session.',
+    support:
+      'Implemented and bench-verified: the PING reply carried the firmware version, PL ID and uptime in every gateway session.',
     supportStatus: 'bench-verified',
   },
   {
@@ -40,7 +42,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'host → Zynq',
     group: 'discovery',
     payload: '37-byte acquisition configuration',
-    support: 'Implemented and bench-verified: the 37-byte payload drove exact counter captures (P4/P6) and the live STREAM configuration (P7).',
+    support:
+      'Implemented and bench-verified: the 37-byte payload drove exact counter captures (P4/P6) and the live STREAM configuration (P7).',
     supportStatus: 'bench-verified',
   },
   {
@@ -49,7 +52,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'host → Zynq',
     group: 'discovery',
     payload: 'empty',
-    support: 'Implemented and bench-verified: armed captures reached exact word counts; abort while armed and abort mid-capture both pass (P4.6 7/7).',
+    support:
+      'Implemented and bench-verified: armed captures reached exact word counts; abort while armed and abort mid-capture both pass (P4.6 7/7).',
     supportStatus: 'bench-verified',
   },
   {
@@ -58,7 +62,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'host → Zynq',
     group: 'discovery',
     payload: 'empty',
-    support: 'Implemented and bench-verified: abort while armed and abort mid-capture recover cleanly through the PL datapath soft-reset.',
+    support:
+      'Implemented and bench-verified: abort while armed and abort mid-capture recover cleanly through the PL datapath soft-reset.',
     supportStatus: 'bench-verified',
   },
   {
@@ -67,7 +72,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'host → Zynq',
     group: 'discovery',
     payload: 'empty',
-    support: 'Implemented and bench-verified: la-cli status returns the 52-byte snapshot; live and burst gates assert IDLE and zero dropped segments.',
+    support:
+      'Implemented and bench-verified: la-cli status returns the 52-byte snapshot; live and burst gates assert IDLE and zero dropped segments.',
     supportStatus: 'bench-verified',
   },
   {
@@ -76,7 +82,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'host → Zynq',
     group: 'discovery',
     payload: 'patgen_ctrl:u32 (additive v1 extension)',
-    support: 'Implemented and bench-verified: selects all six pattern-generator modes that drive the P6 burst matrices and the P7 live gates.',
+    support:
+      'Implemented and bench-verified: selects all six pattern-generator modes that drive the P6 burst matrices and the P7 live gates.',
     supportStatus: 'bench-verified',
   },
   {
@@ -85,7 +92,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'host → Zynq',
     group: 'discovery',
     payload: 'action:u8, reserved[3] (additive v1 extension)',
-    support: 'Implemented and bench-verified: START/STOP/DUMP produced the P8.3 trace sessions and the annotated live-UART trace.',
+    support:
+      'Implemented and bench-verified: START/STOP/DUMP produced the P8.3 trace sessions and the annotated live-UART trace.',
     supportStatus: 'bench-verified',
   },
   {
@@ -93,8 +101,20 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     name: 'LINK_CFG',
     direction: 'host → Zynq',
     group: 'discovery',
-    payload: 'transport:u8, spi_clock_mhz:u8, reserved[2] (additive v1 extension)',
-    support: 'Implemented and bench-verified: selects UART or SPI burst transport and a 1-50 MHz SPI clock; the P9.1 sweep switched rates without a reflash.',
+    payload:
+      'transport:u8, spi_clock_mhz:u8, reserved[2] (additive v1 extension)',
+    support:
+      'Implemented and bench-verified: selects UART or SPI burst transport and a 1-50 MHz SPI clock; the P9.1 sweep switched rates without a reflash.',
+    supportStatus: 'bench-verified',
+  },
+  {
+    type: '0x1C',
+    name: 'WAVE_CFG',
+    direction: 'host → Zynq',
+    group: 'live',
+    payload: 'version:u8=1, enabled:u8, reserved[2]',
+    support:
+      'Implemented and verified on the W11 USB SD build (2026-10-18): opts into exact FPGA transition preview for the unified live waveform. Idle only; NAKed BUSY during acquisition and UNSUPPORTED by the optional gateway profile.',
     supportStatus: 'bench-verified',
   },
   {
@@ -103,7 +123,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'host → Zynq',
     group: 'live',
     payload: '20-byte decoder slot configuration',
-    support: 'Implemented and bench-verified: 20-byte slot configurations drove the 115200 UART, 10 kHz SPI/I2C and 1 MHz SPI overload gates.',
+    support:
+      'Implemented and bench-verified: 20-byte slot configurations drove the 115200 UART, 10 kHz SPI/I2C and 1 MHz SPI overload gates.',
     supportStatus: 'bench-verified',
   },
   {
@@ -112,7 +133,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'host → Zynq',
     group: 'live',
     payload: 'empty',
-    support: 'Implemented and bench-verified: starts the transition-encoded live stream from IDLE; the P7 live suite runs on it.',
+    support:
+      'Implemented and bench-verified: starts the transition-encoded live stream from IDLE; the P7 live suite runs on it.',
     supportStatus: 'bench-verified',
   },
   {
@@ -121,7 +143,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'host → Zynq',
     group: 'live',
     payload: 'empty',
-    support: 'Implemented and bench-verified: ends the live session and returns the view to IDLE; it is an idempotent ACK when already IDLE.',
+    support:
+      'Implemented and bench-verified: ends the live session and returns the view to IDLE; it is an idempotent ACK when already IDLE.',
     supportStatus: 'bench-verified',
   },
   {
@@ -130,7 +153,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'Zynq → host',
     group: 'live',
     payload: 'zero or more event records',
-    support: 'Implemented and bench-verified: carried the exact decoded UART, SPI and I2C event streams in the P7 live gates.',
+    support:
+      'Implemented and bench-verified: carried the exact decoded UART, SPI and I2C event streams in the P7 live gates.',
     supportStatus: 'bench-verified',
   },
   {
@@ -139,7 +163,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'Zynq → host',
     group: 'live',
     payload: 'dropped:u32, stage:u8, reserved[3]',
-    support: 'Implemented and bench-verified: stage 1 (decoder) and stage 2 (link) loss reports appeared in the P8.4 overload and stall injections.',
+    support:
+      'Implemented and bench-verified: stage 1 (decoder) and stage 2 (link) loss reports appeared in the P8.4 overload and stall injections.',
     supportStatus: 'bench-verified',
   },
   {
@@ -148,7 +173,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'host → Zynq',
     group: 'live',
     payload: 'format:u8, reserved[3] (additive v1 extension)',
-    support: 'Implemented and bench-verified: format 1 selected the compact EVT_BLOCK encoding, measured at 51.6-53.3% fewer live wire bytes (P9.2).',
+    support:
+      'Implemented and bench-verified: format 1 selected the compact EVT_BLOCK encoding, measured at 51.6-53.3% fewer live wire bytes (P9.2).',
     supportStatus: 'bench-verified',
   },
   {
@@ -157,7 +183,18 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'Zynq → host',
     group: 'live',
     payload: 'versioned compact event block (v1)',
-    support: 'Implemented and bench-verified: the compact encoding carried identical decoded data in the P9.2 compact live runs.',
+    support:
+      'Implemented and bench-verified: the compact encoding carried identical decoded data in the P9.2 compact live runs.',
+    supportStatus: 'bench-verified',
+  },
+  {
+    type: '0x25',
+    name: 'EVT_WAVEFORM',
+    direction: 'Zynq → host',
+    group: 'live',
+    payload: 'v1 header + exact {run,sample} transition words',
+    support:
+      'Implemented and verified on the W11 USB SD build (2026-10-18): 20-byte header (version, encoding, count, rate, absolute first sample, cumulative omitted ranges) followed by unchanged FPGA words. The browser draws these real runs beneath aligned decoded bytes; preview is bounded and never reconstructed from protocol events.',
     supportStatus: 'bench-verified',
   },
   {
@@ -166,7 +203,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'Zynq → host',
     group: 'state',
     payload: 'status snapshot, 52 bytes in v1',
-    support: 'Implemented and bench-verified: la-cli status and the live/burst gates read state, counters and per-decoder statistics from it.',
+    support:
+      'Implemented and bench-verified: la-cli status and the live/burst gates read state, counters and per-decoder statistics from it.',
     supportStatus: 'bench-verified',
   },
   {
@@ -175,7 +213,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'Zynq → host',
     group: 'state',
     payload: 'trig_index:u64',
-    support: 'Implemented and bench-verified: the P7.7 stop-on gate reported the matching "LA" sample index through this frame.',
+    support:
+      'Implemented and bench-verified: the P7.7 stop-on gate reported the matching "LA" sample index through this frame.',
     supportStatus: 'bench-verified',
   },
   {
@@ -184,7 +223,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'Zynq → host',
     group: 'state',
     payload: 'UTF-8 text, no trailing NUL',
-    support: 'Implemented and bench-verified: notices and trace dumps arrive as LOG text; the trace dump is best-effort and can drop records under relay pressure (P8.3/P9.4).',
+    support:
+      'Implemented and bench-verified: notices and trace dumps arrive as LOG text; the trace dump is best-effort and can drop records under relay pressure (P8.3/P9.4).',
     supportStatus: 'bench-verified',
   },
   {
@@ -193,7 +233,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'Zynq → host',
     group: 'burst',
     payload: 'burst metadata',
-    support: 'Implemented and bench-verified: metadata framed every P4/P6 UART capture and the P9.1 SPI bulk transfers.',
+    support:
+      'Implemented and bench-verified: metadata framed every P4/P6 UART capture and the P9.1 SPI bulk transfers.',
     supportStatus: 'bench-verified',
   },
   {
@@ -201,8 +242,9 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     name: 'DATA_CHUNK',
     direction: 'Zynq → host',
     group: 'burst',
-    payload: 'offset:u32 plus up to 1016 data bytes',
-    support: 'Implemented and bench-verified: offset chunks reassembled every sample exactly, including the 1M-sample chain and the 4 MiB SPI capture.',
+    payload: 'offset:u32 plus up to 4092 data bytes',
+    support:
+      'Implemented and bench-verified: offset chunks reassembled every sample exactly, including the 1M-sample chain, the 4 MiB SPI capture and the 64 MiB direct-USB drain.',
     supportStatus: 'bench-verified',
   },
   {
@@ -211,7 +253,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'Zynq → host',
     group: 'burst',
     payload: 'reconstructed-data crc32:u32',
-    support: 'Implemented and bench-verified: the host verified the reconstructed CRC32 on every burst gate.',
+    support:
+      'Implemented and bench-verified: the host verified the reconstructed CRC32 on every burst gate.',
     supportStatus: 'bench-verified',
   },
   {
@@ -220,7 +263,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'host ↔ Zynq',
     group: 'reliability',
     payload: 'acknowledged TYPE:u8, SEQ:u8',
-    support: 'Implemented and bench-verified: chunk ACKs paced every burst through the 16-chunk window, and commands are ACKed on all transports.',
+    support:
+      'Implemented and bench-verified: chunk ACKs paced every burst through the 16-chunk window, and commands are ACKed on all transports.',
     supportStatus: 'bench-verified',
   },
   {
@@ -229,7 +273,8 @@ export const PROTOCOL_MESSAGES: ProtocolMessageDoc[] = [
     direction: 'host ↔ Zynq',
     group: 'reliability',
     payload: 'TYPE:u8, SEQ:u8, error:u8',
-    support: 'Implemented and bench-verified: capacity, bad-field and bad-state rejections were observed, and stale NAKs are ignored by type and sequence.',
+    support:
+      'Implemented and bench-verified: capacity, bad-field and bad-state rejections were observed, and stale NAKs are ignored by type and sequence.',
     supportStatus: 'bench-verified',
   },
 ];
@@ -250,7 +295,8 @@ export const PROTOCOL_ERRORS: ProtocolErrorDoc[] = [
   {
     code: '2',
     name: 'BAD_FIELD',
-    meaning: 'A field value is out of range, undefined or a reserved byte is nonzero.',
+    meaning:
+      'A field value is out of range, undefined or a reserved byte is nonzero.',
     where: 'Payload validators and the typed command dispatcher.',
   },
   {
@@ -262,26 +308,30 @@ export const PROTOCOL_ERRORS: ProtocolErrorDoc[] = [
   {
     code: '4',
     name: 'UNSUPPORTED',
-    meaning: 'The peer does not implement the type or the command in this build.',
+    meaning:
+      'The peer does not implement the type or the command in this build.',
     where: 'Typed command dispatcher (for example ARM with STREAM set).',
   },
   {
     code: '5',
     name: 'BUSY',
-    meaning: 'The receiver cannot accept the command now because a queue or resource is busy.',
+    meaning:
+      'The receiver cannot accept the command now because a queue or resource is busy.',
     where: 'Typed command dispatcher and queue admission.',
   },
   {
     code: '6',
     name: 'OVERFLOW',
-    meaning: 'Capacity or buffer exhaustion refused the request before it could start.',
+    meaning:
+      'Capacity or buffer exhaustion refused the request before it could start.',
     where: 'Command dispatch and capture-capacity checks.',
   },
   {
     code: '7',
     name: 'CRC',
     meaning: 'The frame CRC16 did not match, so the frame was discarded.',
-    where: 'Incremental framing parser; the corrupt frame is never delivered or NAKed.',
+    where:
+      'Incremental framing parser; the corrupt frame is never delivered or NAKed.',
   },
 ];
 
@@ -293,7 +343,8 @@ export const PAYLOAD_LAYOUTS: PayloadLayoutDoc[] = [
       {
         field: 'ctrl_flags',
         bytes: 'offset 0, 4 bytes',
-        meaning: 'Control bits; only SELFTEST_EN and STREAM are accepted (ARM, ABORT and SOFT_RESET are commands, not CONFIG bits).',
+        meaning:
+          'Control bits; only SELFTEST_EN and STREAM are accepted (ARM, ABORT and SOFT_RESET are commands, not CONFIG bits).',
       },
       {
         field: 'sample_div',
@@ -353,7 +404,8 @@ export const PAYLOAD_LAYOUTS: PayloadLayoutDoc[] = [
       {
         field: 'live_flush_cycles',
         bytes: 'offset 33, 4 bytes',
-        meaning: 'Live flush interval in fabric cycles; must be nonzero when STREAM is set.',
+        meaning:
+          'Live flush interval in fabric cycles; must be nonzero when STREAM is set.',
       },
     ],
     note: 'All multi-byte fields are unsigned little-endian. The receiver validates every field before accepting ARM or LIVE_START, and the C packer refuses invalid values instead of truncating them.',
@@ -375,7 +427,8 @@ export const PAYLOAD_LAYOUTS: PayloadLayoutDoc[] = [
       {
         field: 'stop_on_len',
         bytes: 'byte 2',
-        meaning: 'P7.7 decoded-pattern length, 0 disables; the first matching BYTE sequence stops the live acquisition.',
+        meaning:
+          'P7.7 decoded-pattern length, 0 disables; the first matching BYTE sequence stops the live acquisition.',
       },
       {
         field: 'reserved',
@@ -385,17 +438,20 @@ export const PAYLOAD_LAYOUTS: PayloadLayoutDoc[] = [
       {
         field: 'UART union',
         bytes: 'bytes 4-19',
-        meaning: 'Bytes 4-8: rx_channel, data_bits, parity (0 none, 1 even, 2 odd), stop_bits, inverted; bytes 9-11: stop pattern (max 3 bytes); bytes 12-15: baud_hz; bytes 16-19: sample_rate_hz.',
+        meaning:
+          'Bytes 4-8: rx_channel, data_bits, parity (0 none, 1 even, 2 odd), stop_bits, inverted; bytes 9-11: stop pattern (max 3 bytes); bytes 12-15: baud_hz; bytes 16-19: sample_rate_hz.',
       },
       {
         field: 'SPI union',
         bytes: 'bytes 4-19',
-        meaning: 'Bytes 4-7: signed sck, mosi, miso, cs (-1 means absent); bytes 8-12: cpol, cpha, word_size (8 or 16), lsb_first, cs_active; bytes 13-19: stop pattern (max 7 bytes). SCK and at least one data channel are required.',
+        meaning:
+          'Bytes 4-7: signed sck, mosi, miso, cs (-1 means absent); bytes 8-12: cpol, cpha, word_size (8 or 16), lsb_first, cs_active; bytes 13-19: stop pattern (max 7 bytes). SCK and at least one data channel are required.',
       },
       {
         field: 'I2C union',
         bytes: 'bytes 4-19',
-        meaning: 'Bytes 4-5: signed scl and sda; bytes 6-19: stop pattern (max 14 bytes). Both channels are required and distinct.',
+        meaning:
+          'Bytes 4-5: signed scl and sda; bytes 6-19: stop pattern (max 14 bytes). Both channels are required and distinct.',
       },
     ],
     note: 'The stop pattern lives in the type reserved region in decode order; bytes beyond stop_on_len must be zero and an oversized length is rejected with NAK bad-field. The command is only accepted in IDLE.',
@@ -442,7 +498,8 @@ export const PAYLOAD_LAYOUTS: PayloadLayoutDoc[] = [
       {
         field: 'decoder records',
         bytes: 'offsets 28, 36, 44, 8 bytes each',
-        meaning: 'Three {events:u32, dropped_segments:u32} records in UART, SPI, I2C order.',
+        meaning:
+          'Three {events:u32, dropped_segments:u32} records in UART, SPI, I2C order.',
       },
     ],
     note: 'Fixed v1 layout. The isolated-byte latency value (live_max_us) is console-only and is not part of this payload.',
@@ -486,7 +543,8 @@ export const PAYLOAD_LAYOUTS: PayloadLayoutDoc[] = [
       {
         field: 'data',
         bytes: 'bytes 4-1019',
-        meaning: 'Up to 1016 payload data bytes; the last chunk may be shorter.',
+        meaning:
+          'Up to 1016 payload data bytes; the last chunk may be shorter.',
       },
     ],
     note: 'The host ACKs every 16 DATA_CHUNK frames (or sooner when its receive window is full), and the sender may have at most 16 unacknowledged chunks. Reassembly is by offset, not arrival order.',
@@ -498,7 +556,8 @@ export const PAYLOAD_LAYOUTS: PayloadLayoutDoc[] = [
       {
         field: 'crc32',
         bytes: 'offset 0, 4 bytes',
-        meaning: 'CRC32/IEEE of the concatenated data bytes with initial 0xFFFFFFFF, reflected polynomial 0xEDB88320 and final XOR 0xFFFFFFFF.',
+        meaning:
+          'CRC32/IEEE of the concatenated data bytes with initial 0xFFFFFFFF, reflected polynomial 0xEDB88320 and final XOR 0xFFFFFFFF.',
       },
     ],
     note: 'A per-capture check separate from the per-frame CRC16; a mismatch rejects the whole capture. An incomplete burst is discarded after timeout, disconnect or NAK.',

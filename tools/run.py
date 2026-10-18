@@ -36,6 +36,9 @@ TARGETS = (
     "fw-zynq",
     "jtag-zynq",
     "fw-esp32",
+    "demo-esp32-uart",
+    "demo-esp32-protocols",
+    "setup-esp32",
     "boot",
     "package",
     "program",
@@ -184,7 +187,7 @@ def _import_idf_environment(environment: dict[str, str]) -> None:
     _set_environment_value(environment, "IDF_TOOLS_PATH", str(tools_root))
     try:
         result = subprocess.run(
-            [sys.executable, str(idf_tools), "export", "--format=key-value"],
+            [str(_idf_python()), str(idf_tools), "export", "--format=key-value"],
             cwd=idf_root,
             env=environment,
             capture_output=True,
@@ -194,10 +197,13 @@ def _import_idf_environment(environment: dict[str, str]) -> None:
             timeout=120,
             check=False,
         )
-    except (OSError, subprocess.TimeoutExpired):
-        return
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"ESP-IDF environment export could not run: {exc}") from exc
     if result.returncode != 0:
-        return
+        raise RuntimeError(
+            "ESP-IDF environment export failed. Run `python tools/run.py setup-esp32` "
+            "and retry.\n" + result.stdout + result.stderr
+        )
     current_path = next(
         (value for key, value in environment.items() if key.lower() == "path"),
         "",
@@ -211,6 +217,25 @@ def _import_idf_environment(environment: dict[str, str]) -> None:
         if name.upper() == "PATH":
             value = value.replace("%PATH%", current_path)
         _set_environment_value(environment, name, value)
+
+
+def _prefer_esp32_native_port(environment: dict[str, str]) -> None:
+    """Avoid scanning unrelated serial devices when one native ESP port exists."""
+    if environment.get("ESPPORT"):
+        return
+    script = (
+        "import json; from serial.tools.list_ports import comports; "
+        "print(json.dumps([p.device for p in comports() "
+        "if (p.vid, p.pid) == (0x303a, 0x1001)]))"
+    )
+    result = subprocess.run(
+        [str(_idf_python()), "-c", script], cwd=PROJECT_ROOT, env=environment,
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    if result.returncode == 0:
+        ports = json.loads(result.stdout)
+        if len(ports) == 1:
+            environment["ESPPORT"] = ports[0]
 
 
 def _environment(target: str | None = None) -> dict[str, str]:
@@ -238,8 +263,10 @@ def _environment(target: str | None = None) -> dict[str, str]:
     ).rstrip(os.pathsep)
     if target in {"test-native", "test-esp32-mocks", "release"}:
         _import_msvc_environment(environment)
-    if target in {"fw-esp32", "test-esp32-target"}:
+    if target in {"fw-esp32", "test-esp32-target", "demo-esp32-uart", "demo-esp32-protocols"}:
         _import_idf_environment(environment)
+    if target in {"demo-esp32-uart", "demo-esp32-protocols"}:
+        _prefer_esp32_native_port(environment)
     if target == "fw-esp32":
         _set_environment_value(environment, "SDKCONFIG", str(BUILD_ROOT / "esp32" / "sdkconfig"))
     return environment
@@ -356,8 +383,33 @@ def _blocked(target: str, reason: str) -> int:
     return 2
 
 
+def _archive_relocated_idf_build(build_dir: Path, source_dir: Path) -> None:
+    """Preserve a relocated demo workspace and let IDF configure a fresh one."""
+    idf_root, _ = _idf_paths()
+    for directory, source in (
+        (build_dir, source_dir),
+        (build_dir / "bootloader", idf_root / "components" / "bootloader" / "subproject"),
+    ):
+        cache = directory / "CMakeCache.txt"
+        if not cache.is_file():
+            continue
+        expected = {"CMAKE_CACHEFILE_DIR": directory, "CMAKE_HOME_DIRECTORY": source}
+        for line in cache.read_text(encoding="utf-8", errors="replace").splitlines():
+            key, separator, value = line.partition("=")
+            name = key.split(":", 1)[0]
+            if separator and name in expected:
+                if os.path.normcase(os.path.normpath(value)) != os.path.normcase(str(expected[name])):
+                    archive = build_dir.with_name(f"{build_dir.name}-relocated-{time.time_ns()}")
+                    build_dir.rename(archive)
+                    print(f"[ESP-IDF] Archived relocated workspace: {archive}")
+                    return
+
+
 def _run_steps(target: str, steps: Sequence[tuple[Sequence[str], Path]], *, timeout: float | None = 3600.0) -> int:
-    environment = _environment(target)
+    try:
+        environment = _environment(target)
+    except RuntimeError as exc:
+        return _blocked(target, str(exc))
     log_path = REPORT_ROOT / f"{target}.log"
     started = time.monotonic()
     records: list[dict[str, Any]] = []
@@ -642,6 +694,51 @@ def _run_target(target: str, forwarded: Sequence[str]) -> int:
             )
         command = _command(xsdb, [str(script), str(PROJECT_ROOT), *forwarded])
         return _run_steps(target, [(command, BUILD_ROOT / "vitis")], timeout=120.0)
+    if target == "setup-esp32":
+        idf_root, _ = _idf_paths()
+        idf_tools = idf_root / "tools" / "idf_tools.py"
+        if not idf_tools.is_file():
+            return _blocked(target, "ESP-IDF is missing; provision .deps/esp-idf first")
+        return _run_steps(target, [
+            ([str(_idf_python()), str(idf_tools), "install", "--targets=esp32s3"], PROJECT_ROOT),
+            ([str(_idf_python()), str(idf_tools), "install-python-env"], PROJECT_ROOT),
+        ])
+    if target == "demo-esp32-uart":
+        idf = _tool("idf.py")
+        if idf is None:
+            return _blocked(target, "native ESP-IDF is missing; provision .deps/esp-idf and set IDF_PATH")
+        build_dir = BUILD_ROOT / "esp32-uart-demo"
+        _archive_relocated_idf_build(build_dir, PROJECT_ROOT / "fw-esp32" / "demo-uart")
+        command = _command(
+            idf,
+            [
+                "-B", str(build_dir),
+                "-D", f"SDKCONFIG={build_dir / 'sdkconfig'}",
+                "-D", "IDF_TARGET=esp32s3",
+                *forwarded,
+                "build",
+            ],
+            python_executable=_idf_python(),
+        )
+        return _run_steps(target, [(command, PROJECT_ROOT / "fw-esp32" / "demo-uart")])
+    if target == "demo-esp32-protocols":
+        idf = _tool("idf.py")
+        if idf is None:
+            return _blocked(target, "native ESP-IDF is missing; provision .deps/esp-idf and set IDF_PATH")
+        build_dir = BUILD_ROOT / "esp32-protocols-demo"
+        _archive_relocated_idf_build(build_dir, PROJECT_ROOT / "fw-esp32" / "demo-protocols")
+        command = _command(
+            idf,
+            [
+                "-B", str(build_dir),
+                "-D", f"SDKCONFIG={build_dir / 'sdkconfig'}",
+                "-D", "IDF_TARGET=esp32s3",
+                *forwarded,
+                "build",
+            ],
+            python_executable=_idf_python(),
+        )
+        return _run_steps(target, [(command, PROJECT_ROOT / "fw-esp32" / "demo-protocols")])
     if target == "fw-esp32":
         idf = _tool("idf.py")
         if idf is None:

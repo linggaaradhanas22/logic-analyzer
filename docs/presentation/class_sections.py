@@ -26,11 +26,27 @@ def build(d, original):
             ['Shared overview','The problem, device, signal path and hardware–software boundary','1–6'],
             ['FPGA system','Capture RTL, AXI interfaces, hardware integration and FPGA tests','7–18'],
             ['Embedded system','FreeRTOS, DMA driver, buffers, decoders, USB and firmware tests','19–33'],
-            ['Shared results','The user interface, SD boot, limits and conclusion','34–37'],
+            ['Shared results','The user interface, decoded UART frame, limits and conclusion','34–38'],
         ],[25,56,19]),1,'Classroom presentation routes',
-        'For the FPGA system route, present slides 1–18, then 34–37. For the Embedded system route, present slides 1–6, then 19–37. The numbers here are actual PowerPoint slide numbers, not printed body-page numbers. Named custom slide shows skip the other detailed section automatically. Click the FPGA system or Embedded system row to jump to its opening boundary diagram.')
+        'For the FPGA system route, present slides 1–18, then 34–38. For the Embedded system route, present slides 1–6, then 19–38. The numbers here are actual PowerPoint slide numbers, not printed body-page numbers. Named custom slide shows skip the other detailed section automatically. Click the FPGA system or Embedded system row to jump to its opening boundary diagram.')
     reuse(2,1)
     reuse(3,1)
+    d.SLIDES[-1]['body']=columns('Logic analyzer hardware on the bench',
+        '<div class="screenshot"><img src="logic-analyzer-hardware.jpeg" '
+        'alt="Powered Zybo Z7-10 logic analyzer with USB cables and acquisition leads"></div>',
+        'Board connections',[
+            '<b>Zybo Z7-10:</b> the FPGA captures digital inputs and the ARM processor runs FreeRTOS.',
+            '<b>J10 USB:</b> analyzer data connection to the PC.',
+            '<b>J12 USB:</b> board power, programming, and console connection.',
+            '<b>JC inputs:</b> eight 3.3 V channels with a common ground to the target.',
+        ])
+    d.SLIDES[-1]['source'] += '; user-provided hardware photograph, 18 October 2026'
+    d.SLIDES[-1]['notes'] = (
+        'The photograph shows the assembled Zybo-based analyzer with USB cables '
+        'and acquisition leads. J10 carries analyzer data; J12 provides power, '
+        'programming, and console access. The connected leads carry the target '
+        'signals into JC. Keep a common ground and use 3.3 V signals. '
+        'The target circuit is outside the photograph.')
     reuse(4,1)
     add('DMA hardware and its firmware driver have different jobs',
         table(['Function','FPGA / hardware','ARM / firmware'],[
@@ -325,15 +341,46 @@ def build(d, original):
             'On 2026-09-26, the USB-profile image booted from SD without a JTAG load; all six UI end-to-end tests passed on that image.',
         ])
     reuse(16,4,'Shared close: this is the user-facing result of the hardware and firmware working together. The UART screenshot is a real 18 October 2026 capture from firmware 0x000A0000; the SD boot and six API/SSE workflows remain the dated 26 September 2026 evidence.',result)
+    add('The decoded UART bytes match the transmitted message',
+        '<div class="decode-result">'
+        '<h3 class="decode-heading">Captured UART frame · CH0 · 10 MS/s</h3>'
+        '<img class="decode-frame" src="uart-demo-frame.png" '
+        'alt="Close-up of the real UART waveform with decoded bytes 4C 41 2D 53 33 0A">'
+        '<div class="byte-map">' + ''.join(
+            f'<div class="byte-card"><p class="byte-hex">{value}</p>'
+            f'<p class="byte-char">{character}</p></div>'
+            for value,character in [('4C','L'),('41','A'),('2D','-'),
+                                    ('53','S'),('33','3'),('0A','Newline')]) + '</div>'
+        '<div class="decode-facts">'
+        '<div><h3>UART settings</h3><p>115200 baud · 8 data bits<br>No parity · 1 stop bit</p></div>'
+        '<div><h3>Bit timing</h3><p>8.68 µs per bit<br>About 87 samples per bit</p></div>'
+        '<div><h3>Decoded message</h3><p><b>LA-S3 + newline</b><br>All six bytes match the stimulus</p></div>'
+        '</div><p class="demo-link">Video demonstration: '
+        '<a href="https://youtu.be/1xx84Ndi4vQ?si=ldsuYEWvYVqu2u6-">'
+        'youtu.be/1xx84Ndi4vQ</a></p></div>',
+        4,'docs/hardwarex/assets/uart-demo/uart-demo-frame.png; '
+        'build/reports/uart-demo-ui/screenshots.json; 18 October 2026',
+        'This is an enlarged crop of the real external ESP32-S3 UART capture, '
+        'not a generated waveform. Read the six decoded hexadecimal bytes from '
+        'left to right: 4C is L, 41 is A, 2D is the ASCII hyphen, 53 is S, '
+        '33 is 3, and 0A is a line feed. Together they reproduce LA-S3 followed '
+        'by a newline. The upper trace shows the sampled input, and slot 0 '
+        'places decoded-byte labels at their sample positions. UART sends a '
+        'start bit, eight data bits least-significant bit first, and one stop '
+        'bit in this 8N1 configuration. At 115200 baud a bit lasts approximately '
+        '8.68 microseconds; 10 MS/s gives approximately 87 samples per bit. '
+        'These timing values are calculated from the configured rates, not a '
+        'separate jitter measurement. This checks that the complete acquisition '
+        'and decoding path recovers the known six-byte message.')
     reuse(21,4)
     reuse(22,4)
     d.SLIDES[-1]['body']=d.SLIDES[-1]['body'].replace('1.62 MB/s transfer tests and working UI flows after SD boot','1.62 MB/s acquire–transfer–verify throughput; UI tests passed after SD boot')
     d.SLIDES[-1]['body'] += '<p class="route-link">Fast sampling is buffered in DDR; full-rate raw data is not streamed continuously over USB.</p>'
     reuse(23,None)
 
-    assert len(d.SLIDES)==37
+    assert len(d.SLIDES)==38
     overview=list(range(1,7)); fpga=list(range(7,19))
-    embedded=list(range(19,34)); close=list(range(34,38))
+    embedded=list(range(19,34)); close=list(range(34,39))
     d.ROUTES={'FPGA system':overview+fpga+close,
               'Embedded system':overview+embedded+close}
     d.SLIDES[1]['jumps']={'FPGA system':7,'Embedded system':19,'Shared results':34}

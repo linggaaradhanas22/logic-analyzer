@@ -1,9 +1,12 @@
 # Final project design presentation
 
 > **Handover status (18 October 2026):** the deck was rebuilt with the real
-> UART demo capture on slide 34. Two variants exist: Embedded (Lingga Aradhana
+> UART demo capture on slide 34 and its decoding close-up on slide 35.
+> Slide 4 includes the hardware photograph, and slide 35 links to the video
+> demonstration. Both the PPTX and PDF companions retain the clickable link.
+> Two variants exist: Embedded (Lingga Aradhana
 > Sahadewa only) and FPGA (Lingga Aradhana Sahadewa, Alvin Hadar, Bagas Budhi
-> Permana). Both keep all 37 slides and both custom shows. The internal
+> Permana). Both keep all 38 slides and both custom shows. The internal
 > `../deliverables/` copy is the Embedded variant; the FPGA variant is in the
 > FPGA class delivery folder. Current firmware `0x000A0000`, UI `w11`, SD boot
 > and source state are in [`../current-handover.md`](../current-handover.md) and
@@ -33,7 +36,8 @@ The revised headings and slide explanations use plain English for presenting
 aloud. Technical task names, signal names, register fields and measured values
 are retained where needed to explain the implementation accurately.
 
-Status: WIP documentation deliverable; commit/push awaits user authorization.
+Status: complete class deliverable. The user authorized source commit/push on
+18 October 2026; final publication verification is recorded in `docs/status.md`.
 
 ## Deliverables
 
@@ -42,7 +46,7 @@ Status: WIP documentation deliverable; commit/push awaits user authorization.
   paragraphs, pointing cues, likely questions, and a term sheet; each slide is
   tagged with its route and skipped-slide notes. Source of truth:
   `docs/presentation/presentation-script.md`.
-- `../deliverables/logic-analyzer-design.pptx`: 37 slides, editable text,
+- `../deliverables/logic-analyzer-design.pptx`: 38 slides, editable text,
   embedded presenter notes; diagrams and UI screenshot are embedded images.
 - `../deliverables/logic-analyzer-design.pdf`: native Microsoft
   PowerPoint render of that PPTX; preferred PDF companion.
@@ -70,10 +74,10 @@ usual project-root output rule.
 | Shared overview | 1–6 |
 | FPGA system | 7–18 |
 | Embedded system | 19–33 |
-| Shared results and conclusion | 34–37 |
+| Shared results and conclusion | 34–38 |
 
-- FPGA system route: **1–18, then 34–37**; 22 slides.
-- Embedded system route: **1–6, then 19–37**; 25 slides.
+- FPGA system route: **1–18, then 34–38**; 23 slides.
+- Embedded system route: **1–6, then 19–38**; 26 slides.
 - In PowerPoint choose **Slide Show > Custom Slide Show** and select
   **FPGA system** or **Embedded system**. Both named shows are embedded in the
   same PPTX. The menu rows link to the subsystem boundaries; the FPGA recap
@@ -88,6 +92,20 @@ The slide 34 image is the real 18 October 2026 UART demo capture from firmware
 `0x000A0000`: 10 MS/s, 64k raw, CH0 only, slot 0 `uart:rx=0,baud=115200`, decoded
 bytes `4C 41 2D 53 33 0A` (`LA-S3` newline). It is the same UI used in the
 HardwareX-style report, not the older synthetic offline illustration.
+
+Slide 35 enlarges `uart-demo-frame.png` across the slide and maps each decoded
+hexadecimal byte to its character: `4C 41 2D 53 33 0A` → `LA-S3` plus newline.
+It includes the 115200-baud 8N1 settings and calculated bit timing (8.68 µs,
+approximately 87 samples at 10 MS/s). Both custom shows include this result.
+The separate 12 October speaking script remains the earlier 37-slide version;
+the PPTX notes and current presenter-notes file cover the new slide.
+
+The shared hardware photo is stored at
+`docs/hardwarex/assets/logic-analyzer-hardware.jpeg` and appears on slide 4.
+The demonstration URL is
+`https://youtu.be/1xx84Ndi4vQ?si=ldsuYEWvYVqu2u6-`. The presentation exporter
+preserves the HTML link as a PowerPoint hyperlink, and delivery checks verify
+the target in both the PPTX and native PowerPoint PDF.
 
 ## Regenerate and verify
 
@@ -128,7 +146,7 @@ node docs\presentation\render_deck.mjs
 
 `check_delivery.py` now verifies the real UART screenshot and its SHA-256 copy
 in staging instead of the old synthetic-image assertion. The two named custom
-shows remain 22 and 25 slides.
+shows contain 23 and 26 slides, including the decoding close-up.
 
 Inspect the native PowerPoint PDF and `build/presentation/previews/powerpoint-*.png`
 slides after the check-only command and before running the final command. The

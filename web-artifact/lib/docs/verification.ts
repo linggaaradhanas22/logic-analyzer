@@ -48,7 +48,7 @@ export const TEST_LAYERS: TestLayerDoc[] = [
     tool: 'Register generation, native precheck, profile-aware bootgen BOOT.BIN and optional bin/wheel staging',
     target: 'release, boot',
     boundary:
-      'Packaging and precheck only. The [HUMAN] SD boot and the v1.0 tag remain separate gates.',
+      'Packaging and precheck only. The W11 USB SD boot is verified (18 Oct 2026); the v1.0 tag/publication and public USB identity remain separate gates.',
   },
 ];
 
@@ -59,16 +59,19 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
       'Regenerates the C header, SystemVerilog package, Python constants and docs/regmap.md from docs/regmap.yaml, then runs the generator again with --check to prove the generated views are current.',
     requires: 'Project Python environment only; no hardware or licensed tool.',
     report: 'build/reports/gen.json (ignored local)',
-    evidence: 'PASS 2026-09-06; re-confirmed gen --check up to date 2026-09-12 (P8.5 gates).',
+    evidence:
+      'PASS 2026-09-06; re-confirmed gen --check up to date 2026-09-12 (P8.5 gates).',
     status: 'host-tested',
   },
   {
     target: 'sim',
     validates:
       'Runs all 12 self-checking Questa testcases (11 RTL blocks plus the top-level integration) and checks each per-test PASS result marker.',
-    requires: 'Questa FPGA Starter Edition 2025.2 (licensed tool); run after lint, sequentially.',
+    requires:
+      'Questa FPGA Starter Edition 2025.2 (licensed tool); run after lint, sequentially.',
     report: 'build/reports/sim.json (ignored local)',
-    evidence: 'PASS 12/12 testcases on 2026-09-11 after the patgen single-shot mode.',
+    evidence:
+      'PASS 12/12 testcases on 2026-09-11 after the patgen single-shot mode.',
     status: 'simulation-tested',
   },
   {
@@ -114,8 +117,10 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
     target: 'bit',
     validates:
       'Runs the Vivado batch build: block design validation, synthesis, implementation, timing, DRC, bitstream and XSA generation.',
-    requires: 'AMD Vivado 2026.1 (licensed tool); the build itself needs no board.',
-    report: 'build/reports/bit.json; signoff files under build/release (ignored local)',
+    requires:
+      'AMD Vivado 2026.1 (licensed tool); the build itself needs no board.',
+    report:
+      'build/reports/bit.json; signoff files under build/release (ignored local)',
     evidence:
       'PASS 2026-09-13 with zero failing endpoints (WNS +0.247 ns, WHS +0.019 ns), DRC 0 errors, LUT 36.74 %, BRAM 61.67 %; that bitstream is loaded on the bench.',
     status: 'bench-verified',
@@ -124,7 +129,8 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
     target: 'fw-zynq',
     validates:
       'Runs the Vitis Python platform/app build from the XSA and emits the selected profile ELF (la_app_usb by default; la_app for --profile gateway) with the pinned linker script and FreeRTOS policy.',
-    requires: 'AMD Vitis 2026.1 (licensed tool) and an XSA produced by the bit target.',
+    requires:
+      'AMD Vitis 2026.1 (licensed tool) and an XSA produced by the bit target.',
     report: 'build/reports/fw-zynq.json (ignored local)',
     evidence:
       'PASS 2026-09-19 for both profiles (USB la_app_usb text 209072 / data 3720 / bss 294784; gateway la_app text 191144 / data 3688 / bss 243936); USB is the default profile since the 2026-09-20 V00 pivot.',
@@ -138,7 +144,7 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
       'AMD Vitis XSDB, a Zybo Z7-10 on JTAG with its FTDI attached, and the bit/ELF artifacts; [HUMAN] bench access.',
     report: 'build/reports/jtag-zynq.json (ignored local)',
     evidence:
-      'PASS 2026-09-13 (gateway profile, fw 0x00090000) and repeated USB-profile loads through the U03-U05 sessions; the default profile flipped to USB in V00.',
+      'PASS 2026-09-13 for the gateway profile and repeated USB-profile loads; the default profile flipped to USB in V00. W11 USB firmware 0x000A0000 was also JTAG-loaded on 2026-10-17 before the verified SD image replaced the need for normal JTAG reloads.',
     status: 'bench-verified',
   },
   {
@@ -147,36 +153,42 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
       'Builds the ESP-IDF gateway (la_board, la_proto, la_link, la_net, la_web and main) for the classic ESP32 and emits la_gateway.bin.',
     requires:
       'Native ESP-IDF v5.5.2 provisioned under .deps; the first build needs registry access for the pinned espressif/mdns component.',
-    report: 'build/reports/fw-esp32.json; build output under build/esp32 (ignored local)',
+    report:
+      'build/reports/fw-esp32.json; build output under build/esp32 (ignored local)',
     evidence:
-      'PASS 2026-09-14 with the P10.1 la_web image (la_gateway.bin 0xde2d0, 13 % partition free); that image is flashed and serving the web view on the bench.',
+      'PASS 2026-09-14 with the P10.1 la_web image (la_gateway.bin 0xde2d0) and retained as the optional gateway profile. The current bench ESP32-S3 runs the standalone `demo-esp32-uart` GPIO17 stimulus instead, flashed 2026-10-17 with verified hashes; it is not the gateway image.',
     status: 'bench-verified',
   },
   {
     target: 'boot',
     validates:
       'Packages fsbl.elf, the selected profile application (la_app_usb by default; la_app with --profile gateway) and logic_analyzer.bit into BOOT.BIN with bootgen and verifies the sync header.',
-    requires: 'Python plus Bootgen from Vitis 2026.1; the ELF and bit artifacts from fw-zynq and bit.',
-    report: 'build/reports/boot.json; BOOT.BIN under build/release (ignored local)',
+    requires:
+      'Python plus Bootgen from Vitis 2026.1; the ELF and bit artifacts from fw-zynq and bit.',
+    report:
+      'build/reports/boot.json; BOOT.BIN under build/release (ignored local)',
     evidence:
-      'PASS 2026-09-14 with the gateway profile (BOOT.BIN 2,389,904 bytes) and profile-aware since the 2026-09-20 V00 pivot; tooling evidence only, the [HUMAN] SD boot is not performed.',
-    status: 'host-tested',
+      'W11 USB BOOT.BIN PASS 2026-10-18: 2,415,152 bytes, SHA-256 6cb120cc...a847b892, containing the verified 0x000A0000 application. It was installed on the bench card with matching read-back and cold-booted with JP5=SD; USB UI E2E 6/6 and browser/external-UART checks 10/10 passed.',
+    status: 'bench-verified',
   },
   {
     target: 'package',
     validates:
       'Builds the host Python wheel (including the V02 live-web bridge) and, for the selected profile, stages the optional ESP32 flash set (bootloader.bin, partition-table.bin, la_gateway.bin); verifies the wheel contents and writes release-manifest.json with sizes and SHA-256 hashes.',
-    requires: 'Python venv plus the BOOT.BIN artifact; the ESP32 build is required only for --profile gateway.',
-    report: 'build/reports/package.json; artifacts and release-manifest.json under build/release (ignored local)',
+    requires:
+      'Python venv plus the BOOT.BIN artifact; the ESP32 build is required only for --profile gateway.',
+    report:
+      'build/reports/package.json; artifacts and release-manifest.json under build/release (ignored local)',
     evidence:
-      'PASS 2026-09-14 for the gateway profile (bootloader 26,304 B, partition table 3,072 B, gateway 910,032 B, wheel 57,811 B); profile-aware since V00.',
+      'W11 USB package PASS 2026-10-18: BOOT.BIN 2,415,152 B, host wheel 139,198 B and release-manifest.json; the optional gateway bin set is staged but is not the external ESP32 UART demonstration.',
     status: 'host-tested',
   },
   {
     target: 'program',
     validates:
       'Refuses to guess: it reports BLOCKED and requires JP5=JTAG, the Zybo FTDI and a confirmed target before the documented Vivado program.tcl command is run by hand.',
-    requires: '[HUMAN] hardware gate: USB-JTAG, JP5=JTAG and a confirmed board.',
+    requires:
+      '[HUMAN] hardware gate: USB-JTAG, JP5=JTAG and a confirmed board.',
     report: 'build/reports/program.json (blocked record; ignored local)',
     evidence:
       'Not run as a runner target in this checkout; PL programming was performed through jtag-zynq (2026-09-10, LD0 blink observed).',
@@ -186,10 +198,11 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
     target: 'flash-esp',
     validates:
       'Refuses to guess a port: it reports BLOCKED and requires the exact ESP32 COM port and module confirmation before idf.py flash monitor is run by hand.',
-    requires: '[HUMAN] hardware gate: ESP32 module, COM port and the manual BOOT/EN download mode.',
+    requires:
+      '[HUMAN] hardware gate: ESP32 module, COM port and the manual BOOT/EN download mode.',
     report: 'build/reports/flash-esp.json (blocked record; ignored local)',
     evidence:
-      'Not run as a runner target in this checkout; the P10.1 gateway image was flashed by hand on 2026-09-14 (earlier flashes verified by hash on 2026-09-10/11).',
+      'Not run as a runner target in this checkout; gateway images were flashed by hand on 2026-09-14. The current standalone ESP32-S3 UART demo was flashed through the native ROM USB port (COM10) on 2026-10-17 with esptool hash verification.',
     status: 'blocked',
   },
   {
@@ -199,7 +212,8 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
     requires:
       'Project Python environment with pyserial, numpy, pyvcd, click, pyyaml, pytest and matplotlib; no hardware.',
     report: 'build/reports/test-host.json (ignored local)',
-    evidence: 'PASS 114/114 on 2026-09-20 with the V02-V09 live-web bridge and per-slot control cases.',
+    evidence:
+      'W11 final PASS 177/177 on 2026-10-17, including real-run waveform framing/routing, bounded fanout, cancellation and Reset; earlier V02-V09 cases remain covered. Pre-existing matplotlib warnings/pytest temp-link cleanup notices are recorded in the ledger.',
     status: 'host-tested',
   },
   {
@@ -210,7 +224,7 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
       '[HUMAN] bench: powered Zybo with loaded firmware, the required jumpers and (for the gateway gates) the ESP32 gateway on the network; LA_E2E_TARGET or --target.',
     report: 'build/reports/test-e2e.json (ignored local)',
     evidence:
-      'PASS 55 passed + 3 skipped on the P7.7 live suite (2026-09-13), 2/2 for the P10.1 web gate (2026-09-14) and 8/8 for the V04 bridge gates over serial://COM13 (2026-09-20); without a target the runner reports BLOCKED.',
+      'PASS 55 passed + 3 skipped on the P7.7 live suite (2026-09-13), 2/2 for the P10.1 web gate (2026-09-14), 8/8 for the V04 bridge gates over serial://COM13 (2026-09-20), and **6/6** for the W11 unified-UI gates on the cold-booted SD image (2026-10-18); without a target the runner reports BLOCKED.',
     status: 'bench-verified',
   },
   {
@@ -229,7 +243,7 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
     validates:
       'Release precheck: regenerates the registers, configures and builds the native tree, and runs the full CTest suite.',
     requires:
-      'MSVC x64, CMake and Ninja; no hardware. The final BOOT.BIN, the [HUMAN] SD boot and the v1.0 tag are separate steps.',
+      'MSVC x64, CMake and Ninja; no hardware. The W11 SD boot is verified; the v1.0 tag/publication remains a separate step.',
     report: 'build/reports/release.json (ignored local)',
     evidence: 'PASS 18/18 on 2026-09-13 (P7.7 local gates).',
     status: 'host-tested',
@@ -249,7 +263,8 @@ export const RUNNER_TARGETS: RunnerTargetDoc[] = [
     validates:
       'Queries the installed Digilent board files and Xilinx device data through Vivado and can update tools/board-lock.json with the board part and source commit.',
     requires: 'AMD Vivado 2026.1 (licensed tool).',
-    report: 'build/reports/query-board.json and board-query.json (ignored local)',
+    report:
+      'build/reports/query-board.json and board-query.json (ignored local)',
     evidence:
       'PASS 2026-09-06; board part digilentinc.com:zybo-z7-10:part0:1.2 and the vivado-boards commit are locked.',
     status: 'host-tested',
@@ -266,7 +281,8 @@ export const RTL_TESTS: RtlTestDoc[] = [
   {
     block: 'la_sampler',
     testbench: 'tb_la_sampler',
-    covers: 'DIV in {0, 1, 9, 99} period checks, chan_en masking, aligned sample_valid and reset.',
+    covers:
+      'DIV in {0, 1, 9, 99} period checks, chan_en masking, aligned sample_valid and reset.',
   },
   {
     block: 'la_trigger',

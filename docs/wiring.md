@@ -152,9 +152,16 @@ ribbon removed.
 
 ## Power and Operating Rules
 
+- **Current W11 bench (2026-10-18): JP5 = SD, JP6 = USB.** The verified SD image
+  starts firmware 0x000A0000 without JTAG. JP5 = JTAG is only for development
+  loading; power-cycle after changing it. See `docs/current-handover.md`.
+- **Current external UART demonstration:** ESP32-S3 GPIO17 -> JC-1 (CH0) and
+  ESP32 GND -> JC-5 or JC-11, at 115200 8N1. Power both boards independently;
+  never connect either board's VCC to the other. Remove any JE-1 -> JC-1
+  self-test jumper before driving JC-1 externally. The S3 runs
+  `fw-esp32/demo-uart/`, not the optional gateway.
 - Keep the ESP32 on its own USB or approved 3.3 V supply and connect signal ground.
 - Do not power an ESP32 GPIO from a 5 V rail.
 - Keep acquisition leads short; inspect idle levels before enabling a patgen output.
-- JP5 is JTAG for development and SD for release. Power-cycle after changing it.
 - `[HUMAN]` Confirm the board revision, header pin numbering and ground pin from the Zybo schematic.
 - `[HUMAN]` Verify continuity, common ground, RTS/CTS direction, 3.3 V levels and no 5 V exposure before `program`, `flash-esp` or HIL.

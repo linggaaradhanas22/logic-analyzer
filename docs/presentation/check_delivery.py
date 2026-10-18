@@ -10,6 +10,7 @@ import sys
 from pptx import Presentation
 from pptx.oxml.ns import qn
 from PIL import Image, ImageDraw
+import pymupdf
 from publish_deck import main as publish
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -38,7 +39,7 @@ def main():
     slides=json.loads((OUT/'slides.json').read_text(encoding='utf-8'))
     routes=json.loads((OUT/'routes.json').read_text(encoding='utf-8'))
     count=len(slides)
-    assert len(deck.slides)==count==37
+    assert len(deck.slides)==count==38
     assert all(slide.notes_slide.notes_text_frame.text for slide in deck.slides)
     forbidden=('consulting-pptx-skill','final direct-usb design','sources:','fpga class','embedded systems class','embedded system class')
     for index,slide in enumerate(deck.slides,1):
@@ -71,6 +72,20 @@ def main():
     assert hashlib.sha256(real_ui.read_bytes()).hexdigest()==hashlib.sha256(staged_ui.read_bytes()).hexdigest(),'Staged UART screenshot differs from source'
     html_source=(OUT/'logic-analyzer-design.html').read_text(encoding='utf-8')
     assert 'uart-demo-capture.png' in html_source,'Deck does not reference the real UART screenshot'
+    frame=ROOT/'docs/hardwarex/assets/uart-demo/uart-demo-frame.png'
+    assert hashlib.sha256(frame.read_bytes()).digest()==hashlib.sha256((OUT/frame.name).read_bytes()).digest(),'Staged decoding close-up differs from source'
+    assert frame.name in slides[34]['body'],'Slide 35 is missing the decoding close-up'
+    assert all(35 in route for route in routes.values()),'Decoding close-up missing from a class show'
+    hardware=ROOT/'docs/hardwarex/assets/logic-analyzer-hardware.jpeg'
+    assert hashlib.sha256(hardware.read_bytes()).digest()==hashlib.sha256((OUT/hardware.name).read_bytes()).digest(),'Staged hardware photo differs from source'
+    assert hardware.name in slides[3]['body'],'Hardware photo missing from board-connections slide'
+    video='https://youtu.be/1xx84Ndi4vQ?si=ldsuYEWvYVqu2u6-'
+    assert any(run.hyperlink.address == video for shape in deck.slides[34].shapes
+               if shape.has_text_frame for paragraph in shape.text_frame.paragraphs
+               for run in paragraph.runs),'Video hyperlink missing from PPTX slide 35'
+    with pymupdf.open(OUT/'logic-analyzer-design-powerpoint.pdf') as pdf:
+        assert len(pdf)==count,'Native presentation PDF slide count differs'
+        assert any(link.get('uri')==video for link in pdf[34].get_links()),'Video hyperlink missing from native PowerPoint PDF'
     ui=json.loads((OUT/'ui-screenshot-evidence.json').read_text(encoding='utf-8'))
     assert not ui['errors'],'Offline UI illustration produced page errors'
     original=json.loads((ROOT/'build/reports/presentation-delivery/comparison.json').read_text(encoding='utf-8'))

@@ -816,11 +816,32 @@ static int test_streaming_crc32(void)
     return 0;
 }
 
+static int test_waveform_payload(void)
+{
+    uint8_t words[] = {0x01u, 100u, 0u, 0u, 0x00u, 87u, 0u, 0u};
+    uint8_t output[28];
+    CHECK(la_proto_pack_waveform(UINT64_C(0x0102030405060708), 10000000u,
+                                 3u, words, sizeof(words), output, sizeof(output)) == 28u,
+          "waveform packs complete exact run words");
+    CHECK(output[0] == 1u && output[1] == 1u && output[2] == 2u && output[3] == 0u &&
+          output[8] == 8u && output[15] == 1u && output[16] == 3u &&
+          memcmp(output + 20, words, sizeof(words)) == 0,
+          "waveform header little-endian and unchanged FPGA data");
+    CHECK(la_proto_pack_waveform(0u, 100u, 0u, words, 8u, output, 27u) == 0u,
+          "waveform never emits a partial frame");
+    CHECK(la_proto_pack_waveform(0u, 100u, 0u, words, 7u, output, 28u) == 0u,
+          "unaligned waveform rejected");
+    words[1] = 0u;
+    CHECK(la_proto_pack_waveform(0u, 100u, 0u, words, 8u, output, 28u) == 0u,
+          "zero-length waveform run rejected");
+    return 0;
+}
+
 int main(void)
 {
     if (test_protocol() != 0 || test_typed_protocol_payloads() != 0 ||
         test_uart_decoder() != 0 || test_spi_decoder() != 0 || test_i2c_decoder() != 0 ||
-        test_segment_pool() != 0 || test_streaming_crc32() != 0) {
+        test_segment_pool() != 0 || test_streaming_crc32() != 0 || test_waveform_payload() != 0) {
         return 1;
     }
     puts("PASS: la_native_tests");

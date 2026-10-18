@@ -63,7 +63,7 @@ for (let i = 0; i < n; i++) {
         }
         for (const q of ranges) {
           if (!q.text.trim()) continue;
-          texts.push({x:q.x-sr.x,y:q.y-sr.y,w:q.right-q.x,h:q.h,text:q.text,font:st.fontFamily,size:parseFloat(st.fontSize),weight:st.fontWeight,color:st.color,italic:st.fontStyle==='italic', title:!!el.closest('h1')});
+          texts.push({x:q.x-sr.x,y:q.y-sr.y,w:q.right-q.x,h:q.h,text:q.text,font:st.fontFamily,size:parseFloat(st.fontSize),weight:st.fontWeight,color:st.color,italic:st.fontStyle==='italic', title:!!el.closest('h1'),href:el.closest('a[href]')?.getAttribute('href')});
         }
       }
       if (el.tagName==='LI') {

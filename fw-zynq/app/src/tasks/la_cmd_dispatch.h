@@ -96,7 +96,8 @@ typedef enum la_cmd_outcome {
     LA_CMD_OUT_LIVE_START,
     LA_CMD_OUT_LIVE_STOP,
     LA_CMD_OUT_TRACE,
-    LA_CMD_OUT_LINK_CFG
+    LA_CMD_OUT_LINK_CFG,
+    LA_CMD_OUT_WAVE_CFG
 } la_cmd_outcome_t;
 
 typedef struct la_cmd_result {

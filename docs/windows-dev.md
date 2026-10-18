@@ -185,6 +185,13 @@ monitor log and `ping la-esp32.local`. The burst E2E gate then runs as
 
 ### Unified UI (la-ui)
 
+Current SD/bench state is in [current-handover.md](current-handover.md): JP5=SD,
+W11 firmware 0x000A0000, UI w11, cold boot verified 18 October 2026. Rebuild the
+USB image with `python tools/run.py boot` and package with
+`python tools/run.py package`; card replacement and cold verification are
+separate physical steps. Normal startup no longer requires a JTAG reload. Use
+JP5=JTAG plus power-cycle only for development loading.
+
 The unified workspace is `la-ui` (or `la-cli ui`), served on
 `http://127.0.0.1:8080/` with the legacy page at `/legacy`:
 
@@ -199,8 +206,16 @@ with **Stop LA UI** or `wscript.exe tools\win\la-ui-stop.vbs`.
 It needs Chrome or Edge, the project `.venv`, and (for capture decoding) the
 native decoder DLL built by `python tools\run.py test-native`. Host tests:
 `python tools\run.py test-host`; the page checks also need Node
-(`node host\tests\page_check.mjs`). See `docs/using-the-analyzer.md` section 7
-and the W00-W09 package `docs/unified-ui-plan.md`.
+(`node host\tests\page_check.mjs`). See `docs/using-the-analyzer.md` section 5-9
+and `docs/current-handover.md`.
+
+W11 adds automatic activity focus, actual live waveforms + annotations,
+Pause/Follow and Reset UI. Reset clears in-memory work/browser preferences and
+disconnects. Live rate is the server startup rate, independent of Capture Rate.
+The ESP32-S3 external demo uses GPIO17/115200 8N1 and can be built/flashed via
+`python tools/run.py demo-esp32-uart -- -p COMx flash`; it is not the gateway
+application. Native ROM programming on COM10 and the subsequent plain RESET
+were verified for this bench. See `fw-esp32/demo-uart/README.md`.
 
 ### Live web view (legacy la-web)
 

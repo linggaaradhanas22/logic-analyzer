@@ -16,11 +16,15 @@ aligned live decoding, activity-focused capture rendering and Reset UI. Firmware
 The W11 BOOT.BIN was installed with read-back verification and cold-booted from
 SD on 18 October (USB UI E2E 6/6, external UART browser checks 10/10).
 
-JP5 now remains SD for normal operation. ESP32-S3 is the GPIO17 UART stimulus,
-not the transport gateway. No RTL/register-map/SG-mode change was needed for
-W11. Source is local WIP over b487413; no commit, push, website deployment or
-release tag is implied. Earlier proposed/dated sections below preserve the
-original decisions and phase evidence, not current execution instructions.
+**Project complete, 18 October 2026:** the USB-first class project and both
+class deliverable sets are finished. The user authorized committing all pending
+source and pushing origin/main; see the current closeout in [status.md](status.md).
+JP5 remains SD for normal operation. ESP32-S3 runs the combined UART/SPI/I²C
+stimulus, not the transport gateway. No RTL/register-map/SG-mode change was
+needed for W11. Website deployment, public USB identity, a tagged product
+release, gateway tuning, SUMP and 200 MS/s are deferred beyond this completion
+scope. Earlier proposed/dated sections preserve the original decisions and
+phase evidence, not current execution instructions.
 
 ### Proposed direct USB migration (2026-09-17)
 

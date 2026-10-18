@@ -73,8 +73,13 @@ def main():
                 run.font.color.rgb=rgb(obj['color'])
                 run.font.bold=int(obj['weight'])>=600
                 run.font.italic=obj.get('italic',False)
+                if obj.get('href'):
+                    run.hyperlink.address = obj['href']
+                    run.font.underline = True
             if obj.get('text','').strip() in s.get('jumps',{}):
                 jumps.append((shape,s['jumps'][obj['text'].strip()]))
+            if obj.get('href'):
+                shape.click_action.hyperlink.address = obj['href']
         slide.notes_slide.notes_text_frame.text = s['title']+'\n\n'+s['notes']+'\n\nSources: '+s['source']
     for shape,target in jumps:
         shape.click_action.target_slide=deck.slides[target-1]

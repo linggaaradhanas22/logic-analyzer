@@ -86,8 +86,14 @@ def check_pdf(variant: str, manifest: dict) -> dict:
             require(x0 >= 40 and y0 >= 40 and
                     x1 <= page.rect.width - 40 and y1 <= page.rect.height - 40,
                     f"{variant}: content outside 1.5 cm margins: {bbox}")
-    require(image_count >= 7,
-            f"{variant}: expected at least 7 images (4 diagrams + 3 UART), got {image_count}")
+    require(image_count >= 8,
+            f"{variant}: expected at least 8 images (hardware + 4 diagrams + 3 UART), got {image_count}")
+    video = "https://youtu.be/1xx84Ndi4vQ?si=ldsuYEWvYVqu2u6-"
+    require(any(link.get("uri") == video for page in doc for link in page.get_links()),
+            f"{variant}: demonstration video hyperlink missing")
+    require("Video demonstration" in compact(doc[1].get_text()) and
+            any(link.get("uri") == video for link in doc[1].get_links()),
+            f"{variant}: specifications-table video row or hyperlink missing")
     page_text = [page.get_text() for page in doc]
     full = "\n".join(page_text)
     flat = compact(full)
@@ -97,7 +103,7 @@ def check_pdf(variant: str, manifest: dict) -> dict:
                    "Live UART decoding in slot 0", "4C 41 2D 53 33 0A",
                    "Rp 13,954,700", "Weekly project activity summary",
                    "linggaaradhanas@gmail.com", "KCCI",
-                   "Specifications table", "References"):
+                    "Specifications table", "References", "Logic analyzer hardware assembly"):
         require(phrase in flat, f"{variant}: missing report content: {phrase}")
     for phrase in FORBIDDEN:
         require(phrase not in full, f"{variant}: template/journal field leaked: {phrase}")
@@ -120,8 +126,9 @@ def check_pdf(variant: str, manifest: dict) -> dict:
                 "fpga: author order is not Lingga, Alvin, Bagas")
         require("lead author and contributor" in flat,
                 "fpga: lead-contributor statement missing")
-        require("Alvin Hadar and Bagas Budhi Permana contributed the RTL design roles" in flat,
-                "fpga: RTL credit statement missing")
+        require("Alvin Hadar developed the RTL capture FIFO/buffer and sample packing" in flat
+                and "Bagas Budhi Permana developed trigger and edge detection" in flat,
+                 "fpga: RTL credit statement missing")
         require("sole author and contributor" not in flat,
                 "fpga: sole-contributor statement leaked")
     return {

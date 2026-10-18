@@ -300,6 +300,11 @@ class AnalyzerClient:
         self._send(p.PATGEN_CFG, p.pack_patgen_cfg(patgen_ctrl))
         self._expect_ack(p.PATGEN_CFG, "PATGEN_CFG", deadline)
 
+    def configure_waveform(self, enabled: bool, timeout_s: float = 5.0) -> None:
+        deadline = time.monotonic() + timeout_s
+        self._send(p.WAVE_CFG, bytes((1, int(bool(enabled)), 0, 0)))
+        self._expect_ack(p.WAVE_CFG, "WAVE_CFG", deadline)
+
     def configure_decoder(self, config_payload: bytes,
                           timeout_s: float = 5.0) -> None:
         """Sends one DECODER_CFG payload and waits for its ACK.
@@ -433,7 +438,7 @@ class AnalyzerClient:
         return lines
 
     def capture(self, config: bytes, timeout_s: float = 30.0,
-                recv_cap: float = 0.02) -> CaptureData:
+                recv_cap: float = 0.02, cancel_event=None) -> CaptureData:
         """Arms a burst capture with a wire CONFIG payload and collects the
         DATA_BEGIN/CHUNK*/END transfer, ACKing every self.ack_batch chunks.
 
@@ -502,7 +507,13 @@ class AnalyzerClient:
                 self._log_lines.append(payload.decode("utf-8", errors="replace"))
             return False
 
-        self._pump(deadline, on_data, recv_cap=recv_cap)
+        self._pump(deadline, on_data, recv_cap=recv_cap,
+                   stop_check=(cancel_event.is_set if cancel_event is not None else None))
+        if cancel_event is not None and cancel_event.is_set():
+            # The capture worker remains the sole reader. An HTTP reset/Abort
+            # must never race a second ACK pump against this transfer.
+            self.abort(timeout_s=2.0)
+            raise AnalyzerError("capture cancelled")
         return CaptureData(meta, bytes(collected), chunks, self._parser_stats())
 
     def live(self, decoder_config: bytes, config: bytes | None = None,
@@ -512,7 +523,8 @@ class AnalyzerClient:
              collect_events: bool = True,
              event_format: int = p.EVT_FORMAT_RECORDS,
              stop_on_match: bool = False,
-             on_event=None, stop_event=None, command_queue=None) -> list[dict]:
+              on_event=None, stop_event=None, command_queue=None,
+              on_waveform=None) -> list[dict]:
         """Configures the live stream and collects decoded events (P7.5).
 
         `config` is an optional 37-byte STREAM CONFIG payload sent before the
@@ -601,6 +613,10 @@ class AnalyzerClient:
 
         def on_live(message_type, sequence, payload):
             nonlocal stop_requested, start_acknowledged, decoded_seen
+            if message_type == p.EVT_WAVEFORM:
+                if on_waveform is not None:
+                    on_waveform(p.unpack_waveform(payload))
+                return False
             if message_type == p.ACK:
                 acked_type, _acked_sequence = payload[0], payload[1]
                 if acked_type == p.LIVE_START:
@@ -679,6 +695,10 @@ class AnalyzerClient:
         def on_stop(message_type, sequence, payload):
             """Keeps collecting while waiting for the LIVE_STOP ACK: the final
             batches and any EVT_OVERRUN report may still be in flight."""
+            if message_type == p.EVT_WAVEFORM:
+                if on_waveform is not None:
+                    on_waveform(p.unpack_waveform(payload))
+                return False
             if message_type == p.ACK:
                 return payload[0] == p.LIVE_STOP
             account_frame(message_type, payload)

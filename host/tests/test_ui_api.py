@@ -134,6 +134,38 @@ def test_status_keeps_legacy_fields(ui):
 # -- connection --------------------------------------------------------------
 
 
+def test_reset_clears_session_and_disconnects(ui):
+    state, server = ui
+    from host.la_ui.store import Capture
+    with MockAnalyzer("ping") as mock:
+        assert _json(server, "POST", "/api/connect", {"target": mock.uri})[0] == 200
+        state.store.add(Capture(encoding=0, sample_rate_hz=10_000_000, data=b"\x01\x00"))
+        state.trace_model = {"summary": {}}
+        state.hub.publish_frame([{"slot": 0, "kind": 1, "t_sample": 1, "data": b"L"}])
+        status, snapshot = _json(server, "POST", "/api/reset", {})
+        assert status == 200
+        assert not snapshot["connected"] and snapshot["captures"] == []
+        assert snapshot["decoder_specs"] == ["", "", ""]
+        assert snapshot["stats"]["events"] == 0 and not snapshot["trace_ready"]
+        assert not state.trace_model and mock.decoder_history[-1][1] == 0
+
+
+def test_reset_cancels_background_work_before_clearing(ui):
+    state, server = ui
+    started = threading.Event()
+    def work(cancel, progress):
+        started.set()
+        cancel.wait(2)
+        return {"stopped": True}
+    job = state.jobs.submit("decode", work)
+    assert started.wait(1)
+    status, snapshot = _json(server, "POST", "/api/reset", {})
+    assert status == 200 and snapshot["job"] is None
+    assert job.state == "cancelled"
+    with pytest.raises(KeyError):
+        state.jobs.get(job.id)
+
+
 def test_connect_ping_and_disconnect(ui):
     _state, server = ui
     with MockAnalyzer("ping") as mock:

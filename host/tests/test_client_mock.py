@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import threading
 
 import pytest
 
@@ -134,6 +135,22 @@ def test_capture_txn_transfer(analyzer) -> None:
     runs = [(int.from_bytes(w, "little") >> 8) for w in words]
     assert sum(runs) == 1310
     assert result.parser_stats["crc_errors"] == 0
+
+
+def test_capture_cancel_has_one_reader_and_leaves_connection_usable(analyzer):
+    mock = analyzer("ping")  # ACK ARM, then wait without sending capture data.
+    client = _client(mock.uri)
+    cancel = threading.Event()
+    timer = threading.Timer(0.1, cancel.set)
+    timer.start()
+    try:
+        with pytest.raises(AnalyzerError, match="capture cancelled"):
+            client.capture(p.pack_config(post_samples=64000), timeout_s=5, cancel_event=cancel)
+        assert client.ping()["pl_id"] == 0x4C410002
+        assert client.parser.crc_errors == client.parser.format_errors == 0
+    finally:
+        timer.cancel()
+        client.close()
 
 
 def test_nak_config_rejected(analyzer) -> None:

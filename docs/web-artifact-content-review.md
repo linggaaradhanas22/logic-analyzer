@@ -1,5 +1,12 @@
 # Web artifact content review and implementation handoff
 
+> **Current continuation (18 October 2026):** this is the historical September
+> review. The portal snapshot/status content has since been synchronized locally
+> with W11 firmware 0x000A0000, UI w11 and the verified SD cold boot. No website
+> deployment was performed. The class project is complete; source publication
+> is recorded in `status.md`. Current
+> operational handover: [`current-handover.md`](current-handover.md).
+
 Review date: 2026-09-11, Asia/Jakarta.
 
 Artifact: [Inside the RTOS Logic Analyzer](https://rtos-logic-analyzer-explained.linggaaradhanas.chatgpt.site).

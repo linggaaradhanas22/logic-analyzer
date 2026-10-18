@@ -8,7 +8,7 @@
 (function () {
   "use strict";
 
-  const PAGE_VERSION = "w10";
+  const PAGE_VERSION = "w11";
   const SETTINGS_KEY = "la-ui.settings.v1";
   const CHANNELS_KEY = "la-ui.channels.v1";
   const PATGEN_MODES = ["off", "counter", "walking", "prbs", "uart", "spi",
@@ -39,6 +39,9 @@
     detailKey: null,
     lastCaptureId: null,
     edgePending: false,
+    liveFeedWarned: false,
+    generation: 0,
+    resetting: false,
   };
 
   function $(id) {
@@ -333,10 +336,20 @@
       pane.appendChild(canvas);
       pane.appendChild(foot);
       container.appendChild(pane);
-      const timeline = new window.LATimeline.LiveTimeline(slot, {
-        sampleRate: 100000000,
-      });
-      timeline.attach(canvas);
+      const timeline = new window.LATimeline.LiveWaveform(canvas, slot);
+      timeline.onInfo = message => text("live-last-" + slot, message);
+      const controls = document.createElement("div");
+      controls.className = "row wrap live-controls";
+      for (const [label, action] of [["Pause view", () => timeline.pause()],
+        ["Follow", () => timeline.resume()], ["Fit history", () => timeline.fit()],
+        ["+", () => timeline.zoom(0.5)], ["−", () => timeline.zoom(2)]]) {
+        const button = document.createElement("button");
+        button.className = "ghost";
+        button.textContent = label;
+        button.addEventListener("click", action);
+        controls.appendChild(button);
+      }
+      pane.appendChild(controls);
       state.live.push(timeline);
     }
   }
@@ -357,6 +370,7 @@
     on("btn-connect", "click", connect);
     on("btn-disconnect", "click", disconnect);
     on("btn-ping", "click", ping);
+    on("btn-reset-ui", "click", resetUi);
     on("btn-capture", "click", startCapture);
     on("btn-abort", "click", abortJob);
     on("btn-decode", "click", decodeCapture);
@@ -381,6 +395,7 @@
     on("btn-trace-dump", "click", traceDump);
     on("btn-patgen", "click", armPatgen);
     on("btn-fit", "click", () => state.waveform.fit());
+    on("btn-focus", "click", () => state.waveform.focusActivity());
     on("btn-zoom-in", "click", () => state.waveform.zoom(0.8));
     on("btn-zoom-out", "click", () => state.waveform.zoom(1.25));
     on("btn-zoom-cursors", "click", () => state.waveform.zoomToCursors());
@@ -446,6 +461,7 @@
     state.session = snapshot.session || "idle";
     state.slots = snapshot.slots || state.slots;
     state.slotLabels = snapshot.slot_labels || state.slotLabels;
+    state.waveformSupported = snapshot.waveform_supported;
     text("page-version", `page ${PAGE_VERSION} | server ${snapshot.version}`);
 
     setClass("link-pill", "on", state.connected);
@@ -466,6 +482,7 @@
     setDisabled("btn-trace-dump", !state.connected || state.session !== "idle");
     setDisabled("btn-patgen", !state.connected || state.session !== "idle");
     applySlots();
+    if (snapshot.stats) updateStats(snapshot.stats);
     text("sb-session", `session ${state.session}`);
     if (state.job) {
       text("cap-status", `${state.job.label}: ${Math.round(
@@ -493,6 +510,9 @@
       }
       text("live-label-" + slot, state.slotLabels[slot] || "slot " + slot +
         " (unconfigured)");
+      if (state.live[slot]) state.live[slot].configure(state.slotLabels[slot] || "");
+      const pane = $("live-pane-" + slot);
+      if (pane) pane.style.display = state.slotLabels[slot] ? "" : "none";
       setDisabled("live-start-" + slot,
         !state.connected || !state.slotLabels[slot] ||
         slotState === "streaming");
@@ -503,8 +523,10 @@
   }
 
   async function refreshState() {
+    const generation = state.generation;
     try {
       const snapshot = await api("/api/state");
+      if (generation !== state.generation || state.resetting) return;
       updateFromState(snapshot);
     } catch (error) {
       setServerError(error);
@@ -536,6 +558,7 @@
   }
 
   async function connect() {
+    const generation = state.generation;
     const target = value("target-input").trim();
     if (!target) {
       toast("select a port or type serial://COMx", "warn");
@@ -545,6 +568,7 @@
     try {
       const payload = await api("/api/connect", { method: "POST",
                                                   body: { target } });
+      if (generation !== state.generation) return;
       state.connected = true;
       state.pong = payload.pong;
       saveSettings();
@@ -567,6 +591,63 @@
     }
   }
 
+  async function resetUi() {
+    if (state.resetting) return;
+    state.resetting = true;
+    state.generation++;
+    setDisabled("btn-reset-ui", true);
+    clearInterval(state.jobTimer);
+    clearTimeout(state.detailTimer);
+    state.jobTimer = state.detailTimer = null;
+    if (state.events) state.events.close();
+    state.events = null;
+    try {
+      const snapshot = await api("/api/reset", { method: "POST", body: {} });
+      state.capture = state.job = state.detailPending = state.detailKey = null;
+      state.lastCaptureId = null;
+      state.channels = window.LAWaveform.defaultChannels();
+      state.settings = { target: "", capture: { rate: "10M", words: "64k", mode: "raw",
+        pre: 0, trig_rise: null, trig_fall: null, patgen: "off", timeout: 30 },
+        decoders: ["uart:rx=0,baud=115200", "", ""], patgen: "off" };
+      try {
+        window.localStorage.removeItem(SETTINGS_KEY);
+        window.localStorage.removeItem(CHANNELS_KEY);
+      } catch (error) { /* private mode */ }
+      $("target-input").value = "";
+      $("port-select").value = "";
+      $("search-pattern").value = "";
+      $("open-file").value = "";
+      applySettingsToForm();
+      state.waveform.selectedChannel = 0;
+      state.waveform.pattern = "";
+      state.waveform.setChannels(state.channels);
+      state.waveform.setCapture(null, null);
+      state.traceTimeline.setModel(null);
+      buildChannelList();
+      for (const timeline of state.live) timeline.clear();
+      for (let slot = 0; slot < 3; slot++) text("live-last-" + slot, "no events");
+      for (const [id, message] of Object.entries({ "capture-title": "no capture",
+        "capture-sub": "", "cap-status": "idle", "decode-status": "no capture",
+        "view-status": "", "measure-text": "no capture", "export-status": "",
+        "trace-status": "no dump", "trace-summary": "no dump", "patgen-status": "",
+        "sb-warning": "", "live-summary": "idle", "sb-events": "events 0",
+        "sb-drops": "drops 0" })) text(id, message);
+      $("wave-empty").className = "empty";
+      $("trace-empty").className = "empty";
+      setExportEnabled(false);
+      setDisabled("btn-decode", true);
+      updateFromState(snapshot);
+      toast("UI reset to defaults — select the analyzer port to reconnect");
+    } catch (error) {
+      toast(`reset: ${error.message}`, "error");
+    } finally {
+      state.resetting = false;
+      setDisabled("btn-reset-ui", false);
+      connectEvents();
+      refreshState();
+    }
+  }
+
   async function ping() {
     try {
       const payload = await api("/api/ping");
@@ -582,6 +663,7 @@
   // -- capture ----------------------------------------------------------------
 
   function watchJob(jobId, label, onDone) {
+    const generation = state.generation;
     state.job = { id: jobId, label, progress: 0 };
     if (state.jobTimer) clearInterval(state.jobTimer);
     setDisabled("btn-abort", false);
@@ -589,6 +671,7 @@
       let job;
       try {
         job = await api(`/api/jobs/${jobId}`);
+        if (generation !== state.generation) return;
       } catch (error) {
         clearInterval(state.jobTimer);
         state.jobTimer = null;
@@ -612,6 +695,7 @@
   }
 
   async function startCapture() {
+    const generation = state.generation;
     if (!state.connected) return;
     saveSettings();
     if (state.session !== "idle") {
@@ -623,6 +707,7 @@
     try {
       payload = await api("/api/capture", { method: "POST",
                                             body: captureOptions() });
+      if (generation !== state.generation) return;
     } catch (error) {
       toast(`capture: ${error.message}`, "error");
       return;
@@ -652,6 +737,7 @@
   }
 
   async function loadCapture(meta) {
+    const generation = state.generation;
     state.capture = meta;
     state.detailKey = null;
     state.lastCaptureId = meta.id;
@@ -667,12 +753,16 @@
         toast(`envelope: ${error.message}`, "error");
       }
     }
+    if (generation !== state.generation || state.capture !== meta) return;
     state.waveform.setCapture(meta, envelope);
+    await state.waveform.focusActivity();
+    if (generation !== state.generation || state.capture !== meta) return;
     text("capture-title", `${meta.name} — ${meta.total_samples} samples ` +
       `@ ${meta.sample_rate_hz} Hz (${meta.encoding ? "txn" : "raw"})`);
     text("view-status", "");
     text("measure-text", "no cursors");
     const annotations = await fetchAnnotations(meta.id);
+    if (generation !== state.generation || state.capture !== meta) return;
     state.waveform.setAnnotations(annotations);
     const eventCount = Object.values(annotations).reduce(
       (total, events) => total + events.length, 0);
@@ -702,6 +792,7 @@
   }
 
   async function decodeCapture() {
+    const generation = state.generation;
     if (!state.capture) {
       toast("capture something first", "warn");
       return;
@@ -711,6 +802,7 @@
       const payload = await api(
         `/api/captures/${state.capture.id}/decode`,
         { method: "POST", body: { specs } });
+      if (generation !== state.generation) return;
       text("decode-status", "decoding…");
       watchJob(payload.job.id, "decode", async (job) => {
         const counts = job.result.counts || {};
@@ -734,12 +826,14 @@
   }
 
   async function openFile(file) {
+    const generation = state.generation;
     text("export-status", `opening ${file.name}…`);
     try {
       const buffer = await file.arrayBuffer();
       const payload = await api(
         `/api/open?name=${encodeURIComponent(file.name)}`,
         { method: "POST", body: buffer, raw: true });
+      if (generation !== state.generation) return;
       toast(`opened ${file.name}`);
       text("export-status", `opened ${file.name}`);
       await loadCapture(payload.capture);
@@ -755,6 +849,9 @@
     if (state.events || typeof window.EventSource !== "function") return;
     const source = new window.EventSource("/events");
     state.events = source;
+    source.onopen = () => {
+      state.liveFeedWarned = false;
+    };
     source.onmessage = (event) => {
       let message;
       try {
@@ -764,6 +861,12 @@
       }
       if (message.stats) {
         updateStats(message.stats);
+        return;
+      }
+      if (message.waveform) {
+        for (let slot = 0; slot < 3; slot++) {
+          if (state.slotLabels[slot] && state.live[slot]) state.live[slot].addWaveform(message.waveform);
+        }
         return;
       }
       if (typeof message.s === "number" && Array.isArray(message.e)) {
@@ -777,7 +880,12 @@
         }
       }
     };
-    source.onerror = () => { /* EventSource reconnects automatically */ };
+    source.onerror = () => {
+      if (!state.liveFeedWarned) {
+        state.liveFeedWarned = true;
+        toast("Live feed disconnected; close extra UI tabs or reload the page", "warn");
+      }
+    };
   }
 
   function updateStats(stats) {
@@ -790,13 +898,20 @@
       `(ring ${stats.ring_dropped || 0}, client ${stats.client_dropped || 0})`);
     text("live-summary", state.session === "streaming"
       ? `streaming — ${stats.events || 0} events` : "idle");
+    text("live-wave-status", stats.error || (stats.waveform_frames
+      ? `${stats.waveform_frames} real waveform packets`
+      : state.connected && state.waveformSupported === false
+        ? "Live waveform requires firmware 0x000A0000 or newer"
+        : "waiting for real waveform data"));
   }
 
   async function applyLiveConfig() {
+    const generation = state.generation;
     const specs = decoderSpecs();
     try {
       const payload = await api("/api/live/config",
-                                { method: "POST", body: { specs } });
+                                 { method: "POST", body: { specs } });
+      if (generation !== state.generation) return;
       state.slotLabels = payload.slot_labels;
       saveSettings();
       toast("live decoder config applied");
@@ -809,7 +924,7 @@
   async function liveStart(slot) {
     try {
       if (state.session === "idle" && state.live[slot]) {
-        state.live[slot].clear();
+        for (const timeline of state.live) timeline.clear();
       }
       await api(`/control/start?slot=${slot}`, { method: "POST" });
       await refreshState();

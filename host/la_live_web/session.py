@@ -33,8 +33,9 @@ class LiveSessionController:
                  slot_configs: dict[int, bytes], stream_config: bytes, *,
                  count: int | None = None, timeout_s: float | None = None,
                  event_format: int = 0, stop_bytes: bytes | None = None,
-                 prepare: Callable[[], None] | None = None,
-                 stop_on_overrun: bool = False) -> None:
+                  prepare: Callable[[], None] | None = None,
+                  stop_on_overrun: bool = False,
+                  on_waveform=None) -> None:
         self.client = client
         self.hub = hub
         self.slot_configs = {int(slot): bytes(config)
@@ -46,6 +47,7 @@ class LiveSessionController:
         self.stop_bytes = stop_bytes
         self.prepare = prepare
         self.stop_on_overrun = stop_on_overrun
+        self.on_waveform = on_waveform
         self.sessions = 0
         self.error: str | None = None
         self.enabled: set[int] = set()
@@ -199,6 +201,7 @@ class LiveSessionController:
             self._publish_slots()
             if self.prepare is not None:
                 self.prepare()
+            extra = {"on_waveform": self.on_waveform} if self.on_waveform is not None else {}
             self.client.live(
                 configs,
                 config=self.stream_config,
@@ -211,6 +214,7 @@ class LiveSessionController:
                 on_event=self._publish,
                 stop_event=self._stop,
                 command_queue=self._commands,
+                **extra,
             )
         except Exception as exc:  # noqa: BLE001 - reported to the page
             self.error = str(exc)

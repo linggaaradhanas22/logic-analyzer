@@ -13,7 +13,7 @@
   const RULER = 26;
   const LABEL = 86;
   const ANN_ROW = 22;
-  const DETAIL_SPAN = 8192;
+  const DETAIL_SPAN = 65536;
   const ANN_DRAW_CAP = 1500;
 
   const ANN_COLORS = {
@@ -33,7 +33,7 @@
         name: "CH" + index,
         color: DEFAULT_COLORS[index],
         visible: true,
-        height: 34,
+        height: 48,
       });
     }
     return channels;
@@ -155,6 +155,44 @@
       const total = this.meta ? Math.max(1, this.meta.total_samples) : 1;
       this.view = { start: 0, span: total };
       this.detail = null;
+      this._maybeRequestDetail();
+      this.render();
+    }
+
+    async focusActivity() {
+      if (!this.meta || !this.meta.has_signal || !this.onSamplesNeeded) return;
+      const meta = this.meta;
+      const visible = this.channels.filter(channel => channel.visible);
+      let first = null;
+      if (this.envelope) {
+        for (let bucket = 0; bucket < this.envelope.buckets; bucket++) {
+          if (visible.some(channel => {
+            const lo = this.envelope.min[channel.index];
+            const hi = this.envelope.max[channel.index];
+            return lo[bucket] !== hi[bucket] || (bucket > 0 &&
+              (lo[bucket] !== lo[bucket - 1] || hi[bucket] !== hi[bucket - 1]));
+          })) { first = this._bucketStart(bucket); break; }
+        }
+      }
+      if (first === null) return;
+      const start = Math.max(0, first - 512);
+      const samples = await this.onSamplesNeeded(start,
+        Math.min(DETAIL_SPAN, meta.total_samples - start));
+      if (this.meta !== meta || !samples) return;
+      const mask = visible.reduce((bits, channel) => bits | (1 << channel.index), 0);
+      const edges = [];
+      for (let i = 1; i < samples.length; i++) {
+        if ((samples[i] & mask) !== (samples[i - 1] & mask)) edges.push(start + i);
+        if (edges.length >= 160) break;
+      }
+      if (edges.length < 2) return;
+      const runs = edges.slice(1).map((edge, i) => edge - edges[i]).sort((a, b) => a - b);
+      const bit = runs[Math.floor(runs.length * 0.2)];
+      const span = Math.min(meta.total_samples, DETAIL_SPAN - 2, Math.max(128, bit * 60));
+      this.view = { start: Math.max(0, Math.min(meta.total_samples - span,
+                                               edges[0] - span * 0.08)), span };
+      this.detail = { start, samples };
+      this._maybeRequestDetail();
       this.render();
     }
 
@@ -344,20 +382,30 @@
       const min = envelope.min[index];
       const max = envelope.max[index];
       ctx.beginPath();
-      let lastBucket = -1;
-      const steps = Math.max(1, Math.floor(this.plotW));
-      for (let pixel = 0; pixel <= steps; pixel++) {
-        const time = this.view.start + (pixel / steps) * this.view.span;
-        if (time < 0 || time >= envelope.total) continue;
-        const bucket = Math.min(envelope.buckets - 1,
-          Math.floor((time / envelope.total) * envelope.buckets));
-        if (bucket === lastBucket) continue;
-        lastBucket = bucket;
-        const x = this.plotX + (pixel / steps) * this.plotW;
-        const high = max[bucket] ? levelHigh : levelLow;
-        const low = min[bucket] ? levelHigh : levelLow;
-        ctx.moveTo(x, Math.min(high, low));
-        ctx.lineTo(x, Math.max(high, low) + 0.01);
+      const first = Math.max(0, Math.floor(this.view.start / envelope.total * envelope.buckets));
+      const last = Math.min(envelope.buckets - 1,
+        Math.ceil((this.view.start + this.view.span) / envelope.total * envelope.buckets));
+      let previous = null;
+      for (let bucket = first; bucket <= last; bucket++) {
+        const x = this.timeToX(bucket * envelope.total / envelope.buckets);
+        const right = this.timeToX((bucket + 1) * envelope.total / envelope.buckets);
+        if (min[bucket] !== max[bucket]) {
+          // A min/max bucket proves activity, not the order of its edges.
+          ctx.save();
+          ctx.globalAlpha = 0.2;
+          ctx.fillStyle = ctx.strokeStyle;
+          ctx.fillRect(x, levelHigh, Math.max(1, right - x), levelLow - levelHigh);
+          ctx.restore();
+          ctx.moveTo(x, levelHigh); ctx.lineTo(right, levelHigh);
+          ctx.moveTo(x, levelLow); ctx.lineTo(right, levelLow);
+          previous = null;
+        } else {
+          const level = min[bucket] ? levelHigh : levelLow;
+          if (previous !== null) { ctx.moveTo(x, previous); ctx.lineTo(x, level); }
+          else ctx.moveTo(x, level);
+          ctx.lineTo(right, level);
+          previous = level;
+        }
       }
       ctx.stroke();
     }
@@ -384,10 +432,14 @@
         // Logic signals are orthogonal: run horizontally at the old level,
         // then take the vertical edge at the sample boundary. Connecting
         // samples diagonally turns a fast square wave into a sawtooth.
-        ctx.lineTo(x, previous);
-        ctx.lineTo(x, level);
+        if (level !== previous) {
+          ctx.lineTo(x, previous);
+          ctx.lineTo(x, level);
+        }
         previous = level;
       }
+      if (started) ctx.lineTo(this.timeToX(Math.min(this.view.start + this.view.span,
+        this.detail.start + samples.length)), previous);
       ctx.stroke();
     }
 
@@ -408,6 +460,7 @@
       ctx.clip();
       const end = this.view.start + this.view.span;
       let drawn = 0;
+      let labelRight = this.plotX;
       for (const event of events) {
         if (event.t_sample < this.view.start) continue;
         if (event.t_sample > end) break;
@@ -419,10 +472,18 @@
         ctx.moveTo(x, y + 1);
         ctx.lineTo(x, y + row.h - 1);
         ctx.stroke();
-        const label = event.name + (event.data ? " " + event.data : "");
+        const label = event.kind === 1 && event.data ? "0x" + event.data
+          : event.name + (event.data ? " " + event.data : "");
         ctx.fillStyle = color;
-        ctx.font = "9px Consolas, monospace";
-        ctx.fillText(label, x + 2, y + 10);
+        ctx.font = "11px Consolas, monospace";
+        if (x >= labelRight) {
+          const width = label.length * 7 + 10;
+          ctx.globalAlpha = 0.15;
+          ctx.fillRect(x, y + 2, width, row.h - 4);
+          ctx.globalAlpha = 1;
+          ctx.fillText(label, x + 4, y + 14);
+          labelRight = x + width + 4;
+        }
         drawn++;
       }
       ctx.restore();
