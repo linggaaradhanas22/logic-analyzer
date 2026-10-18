@@ -28,7 +28,7 @@ def main():
     deck = Presentation()
     deck.slide_width = 12192000
     deck.slide_height = 6858000
-    deck.core_properties.title = 'RTOS Logic Analyzer: Final Project Design'
+    deck.core_properties.title = 'Logic Analyzer with Live Protocol Decoding'
     deck.core_properties.subject = 'ESP32-free direct-Zynq-USB architecture and verified results'
     deck.core_properties.author = os.environ.get('DECK_AUTHORS', 'Lingga Aradhana Sahadewa')
     deck.core_properties.keywords = 'Zynq,FPGA,FreeRTOS,USB,logic analyzer'

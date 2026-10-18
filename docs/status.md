@@ -55,6 +55,58 @@ commit, and the worktree is clean.
 
 ## Snapshot
 
+### Presentation title, outline, and closing revision (2026-10-18, verified and delivered; publication in progress)
+
+User requests the report's project name on the cover, removal of the cover
+subtitle and board name, an `Outline` slide with `Overview` and `Results`
+labels, and a final slide containing only `Thank you`. Report title confirmed:
+`Logic Analyzer with Live Protocol Decoding`. Scope: presentation layout,
+section labels, PPTX metadata, README, both generated author variants, and the
+existing class-folder PPTX/PDF copies. Acceptance: regenerate both variants,
+run the existing delivery/layout checks, inspect native slides 1, 2, and 38,
+and hash-verify delivered copies. Initial worktree clean and synchronized at
+3883112; `git fetch origin` PASS. No commit/push requested; tracked edits remain
+explicit WIP. Next: edit sources and rebuild both variants.
+
+Source/Embedded phase PASS: updated `docs/presentation/{create_deck.py,
+class_sections.py,export_pptx.py,README.md}`. Removed the cover description,
+diagram slogan and cover board name; synchronized running headers/metadata to
+the report title; changed outline/tabs to Overview/Results; closing text is
+only Thank you. Embedded commands: `.venv\Scripts\python.exe -X utf8
+docs/presentation/create_deck.py`, `node docs/presentation/render_deck.mjs`,
+`... export_pptx.py`, `& docs/presentation/render_powerpoint.ps1`, and
+`... check_delivery.py --check-only`, with README environment variables.
+PASS: 38 slides, both native custom shows, zero geometry/browser errors, zero
+HTML/PPTX check failures. Native slides 1/2/38 visually inspected. Independent
+bounded review found no wording/layout defects; its one footer-numbering
+suggestion is not adopted because the existing intentionally unnumbered cover
+and body-page numbering are documented and this request changes text only.
+Next: archive/deliver Embedded and rebuild/check/deliver FPGA.
+
+Final verification/delivery PASS for both variants using the same five build/
+check commands above with each `DECK_AUTHORS` value. FPGA title native render
+also visually inspected; all three authors fit. Both builds retain 38 slides,
+23/26-slide custom shows, editable text, notes, photo and video links; zero
+geometry issues/check failures. `.venv\Scripts\python.exe -X utf8
+build/reports/publish_title_revision.py embedded` and `... fpga` assert the
+requested visible text and replace/hash-verify the existing PPTX/PDF files in
+both class `Final Project Deliverables` folders. Internal parent `deliverables/`
+PPTX/PDF/notes match Embedded. Evidence:
+`build/reports/presentation-title-delivery-{embedded,fpga}.json` and
+`build/presentation/variants/{embedded,fpga}/{title,outline,thank-you}.png`.
+Embedded PPTX SHA-256:
+`ca3cdc7d4c66a6aefb8f6c822859f77700c9853b46b4dbbace2d6d46a6310773`;
+FPGA PPTX: `c9b12597087a70a3cb8d38bb5467b214ba4c2ad13a578a98caece74744a20648`.
+`git diff --check` PASS. No delivery blockers. Source remains explicit WIP;
+no commit/push requested. Next: user review of the revised presentations.
+
+Publication authorized by the user's subsequent `commit and push` request.
+Reviewed the full diff, status, last ten commits and expected GitHub origin;
+the intended commit contains only the four presentation source/README files
+above and this ledger. Prior build, delivery and visual checks remain valid;
+no presentation source changed after verification. Next: whitespace/staging
+checks, commit, push to origin/main, then verify remote equality and clean status.
+
 ### Project completion and source publication (2026-10-18, Complete)
 
 **Project status: COMPLETE.** The delivered USB-first instrument and both

@@ -21,12 +21,12 @@ def build(d, original):
     # Shared introduction: no class depends on the other's detailed section.
     reuse(0,None)
     d.SLIDES[-1]['body']=d.SLIDES[-1]['body'].replace('FINAL PROJECT DESIGN','FPGA SYSTEM + EMBEDDED SYSTEM')
-    add('Choose the subsystem after the shared overview',
+    add('Outline',
         table(['Section','What it covers','PowerPoint slides'],[
-            ['Shared overview','The problem, device, signal path and hardware–software boundary','1–6'],
+            ['Overview','The problem, device, signal path and hardware–software boundary','1–6'],
             ['FPGA system','Capture RTL, AXI interfaces, hardware integration and FPGA tests','7–18'],
             ['Embedded system','FreeRTOS, DMA driver, buffers, decoders, USB and firmware tests','19–33'],
-            ['Shared results','The user interface, decoded UART frame, limits and conclusion','34–38'],
+            ['Results','The user interface, decoded UART frame, limits and conclusion','34–38'],
         ],[25,56,19]),1,'Classroom presentation routes',
         'For the FPGA system route, present slides 1–18, then 34–38. For the Embedded system route, present slides 1–6, then 19–38. The numbers here are actual PowerPoint slide numbers, not printed body-page numbers. Named custom slide shows skip the other detailed section automatically. Click the FPGA system or Embedded system row to jump to its opening boundary diagram.')
     reuse(2,1)
@@ -383,7 +383,7 @@ def build(d, original):
     embedded=list(range(19,34)); close=list(range(34,39))
     d.ROUTES={'FPGA system':overview+fpga+close,
               'Embedded system':overview+embedded+close}
-    d.SLIDES[1]['jumps']={'FPGA system':7,'Embedded system':19,'Shared results':34}
+    d.SLIDES[1]['jumps']={'FPGA system':7,'Embedded system':19,'Results':34}
     d.SLIDES[17]['jumps']={'Continue to shared results → slide 34':34}
     for slide in d.SLIDES:
         slide['notes']=slide['notes'].replace('FPGA class','FPGA system').replace('FPGA-class','FPGA-system').replace('Embedded-class','Embedded-system').replace('embedded-specific','embedded-system').replace('class route','system route')

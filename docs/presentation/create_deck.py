@@ -68,9 +68,9 @@ def add(title, body, category, source, notes, part="b09"):
 
 
 def base_content():
-    add("A Zynq-based logic analyzer makes digital timing visible",
-        '<div class="cover-copy"><p class="eyebrow">FINAL PROJECT DESIGN</p><div class="cover-title">RTOS Logic<br>Analyzer</div><p class="cover-desc">The FPGA captures digital signals.<br>FreeRTOS manages capture and decoding.<br>USB connects the device to the PC viewer.</p><p class="cover-author' + (' long' if len(AUTHORS) > 40 else '') + '">' + html.escape(AUTHORS) + '</p><p class="cover-meta">Zybo Z7-10 · October 2026</p></div>' +
-        '<div class="cover-art">' + svg(text(35,65,"DIGITAL SIGNAL → EXPLAINABLE BEHAVIOR",21,weight=700) +
+    add("Logic Analyzer with Live Protocol Decoding",
+        '<div class="cover-copy"><p class="eyebrow">FINAL PROJECT DESIGN</p><div class="cover-title">Logic Analyzer<br>with Live Protocol<br>Decoding</div><p class="cover-author' + (' long' if len(AUTHORS) > 40 else '') + '">' + html.escape(AUTHORS) + '</p><p class="cover-meta">October 2026</p></div>' +
+        '<div class="cover-art">' + svg(
         '<path d="M35 170 H105 V105 H175 V170 H245 V105 H315 V170 H385 V105 H455 V170 H525 V105 H595 V170 H690" fill="none" stroke="#173A56" stroke-width="5"/>' +
         box(35,245,195,105,"FPGA",["Capture timing"],NAVY) + arrow(230,295,285,295) + box(285,245,195,105,"Firmware",["Decode meaning"]) + arrow(480,295,535,295) + box(535,245,205,105,"PC",["Inspect results"],WHITE) + text(35,420,"8 channels   /   100 MS/s   /   USB-first",24,weight=700),"FPGA to firmware to PC") + '</div>',
         None,"README.md; docs/plan.md, V00 scope freeze",
@@ -333,7 +333,7 @@ def base_content():
         4,"README.md; docs/status.md; build/reports/usb-u06-performance.md; sd-boot-verification.md",
         "Close the technical argument: a logic analyzer has to both observe fast physical timing and provide understandable results. The FPGA handles the first requirement. FreeRTOS firmware makes memory ownership, decoding and transport explicit. The PC supplies the workspace and offline tools. The result is a functioning direct-USB instrument within the stated MVP limits. The main engineering lesson is that data integrity depends on correct boundaries and ownership as much as on the maximum clock rate. For a short delivery, keep the slides through this conclusion and use the detailed architecture pages to answer questions.")
 
-    add("RTOS Logic Analyzer",'<div class="back"><div class="back-title">RTOS Logic Analyzer</div><p>Zybo Z7-10 · Direct Zynq USB · Windows host</p><p>Final project design presentation</p></div>',None,"", "Invite questions about the FPGA/firmware boundary, descriptor lifetime, why acquisition and USB have different rates, and which results are bench-qualified.","b10")
+    add("Thank you",'<div class="back"><div class="back-title">Thank you</div></div>',None,"", "Thank the audience and invite questions.","b10")
 
 
 def table_svg_live():
@@ -390,7 +390,7 @@ CSS = """
 .s.cover{background:#F4F7FA;display:block;padding:0}
 .s .cover-copy{position:absolute;left:64px;top:74px;width:520px}
 .s .eyebrow{font-size:14px;letter-spacing:.12em;font-weight:700;margin:0 0 22px}
-.s .cover-title{font:700 65px/1.05 Arial,sans-serif;letter-spacing:-2px}
+.s .cover-title{font:700 60px/1.05 Arial,sans-serif;letter-spacing:-2px}
 .s .cover-desc{font:400 24px/1.55 Arial,sans-serif;margin:30px 0;color:#233B4C}
 .s .cover-author{font:700 22px/1.3 Arial,sans-serif;margin:18px 0 0;color:#173A56}
 .s .cover-author.long{font:700 17px/1.35 Arial,sans-serif}
@@ -421,7 +421,7 @@ def main():
     from class_sections import build
     build(sys.modules[__name__],list(SLIDES))
     foundation = OUT / "foundation.html"
-    subprocess.run([sys.executable,"-X","utf8",str(args.skill_root/"scripts/new_deck.py"),"--parts",','.join(s['part'] for s in SLIDES),"--title","RTOS Logic Analyzer","-o",str(foundation)],check=True)
+    subprocess.run([sys.executable,"-X","utf8",str(args.skill_root/"scripts/new_deck.py"),"--parts",','.join(s['part'] for s in SLIDES),"--title","Logic Analyzer with Live Protocol Decoding","-o",str(foundation)],check=True)
     doc = foundation.read_text(encoding="utf-8")
     shells = re.findall(r'<section class="(?:s|slide)[^"]*">.*?</section>',doc,re.S)
     page = 0
@@ -430,8 +430,8 @@ def main():
         cover = s['part'] in ('b01','b10')
         if not cover:
             page += 1
-        topics = ''.join(f'<span class="topic{" active" if s["category"]==i else ""}">{t}</span>' for i,t in enumerate(["Shared overview","FPGA system","Embedded system","Shared results"],1)) if s['category'] else ''
-        header = '' if cover else f'<div class="bar"><div class="logo">RTOS LOGIC ANALYZER</div><div class="topics">{topics}</div></div><h1>{s["title"]}</h1>'
+        topics = ''.join(f'<span class="topic{" active" if s["category"]==i else ""}">{t}</span>' for i,t in enumerate(["Overview","FPGA system","Embedded system","Results"],1)) if s['category'] else ''
+        header = '' if cover else f'<div class="bar"><div class="logo">LOGIC ANALYZER WITH LIVE PROTOCOL DECODING</div><div class="topics">{topics}</div></div><h1>{s["title"]}</h1>'
         inside = s['body'] if cover else f'<div class="c">{s["body"]}</div><div class="foot"><span>{page}</span></div>'
         # The generator-selected shell identifies the applicable archetype.
         authored.append(f'<section class="s{" cover" if cover else ""}" data-part="{s["part"]}" data-slide="{len(authored)+1}" aria-label="{html.escape(s["title"])}">{header}{inside}</section>')

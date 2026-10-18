@@ -1,5 +1,9 @@
 # Final project design presentation
 
+The cover uses the report title, **Logic Analyzer with Live Protocol Decoding**,
+with authors and date. The outline and section tabs use **Overview** and
+**Results**. The closing slide contains only **Thank you**.
+
 > **Handover status (18 October 2026):** the deck was rebuilt with the real
 > UART demo capture on slide 34 and its decoding close-up on slide 35.
 > Slide 4 includes the hardware photograph, and slide 35 links to the video
@@ -72,10 +76,10 @@ usual project-root output rule.
 
 | Section | Actual PowerPoint slide numbers |
 |---|---|
-| Shared overview | 1–6 |
+| Overview | 1–6 |
 | FPGA system | 7–18 |
 | Embedded system | 19–33 |
-| Shared results and conclusion | 34–38 |
+| Results | 34–38 |
 
 - FPGA system route: **1–18, then 34–38**; 23 slides.
 - Embedded system route: **1–6, then 19–38**; 26 slides.
