@@ -55,7 +55,7 @@ commit, and the worktree is clean.
 
 ## Snapshot
 
-### Presentation title, outline, and closing revision (2026-10-18, verified and delivered; publication in progress)
+### Presentation title, outline, and closing revision (2026-10-18, Complete)
 
 User requests the report's project name on the cover, removal of the cover
 subtitle and board name, an `Outline` slide with `Overview` and `Results`
@@ -106,6 +106,15 @@ the intended commit contains only the four presentation source/README files
 above and this ledger. Prior build, delivery and visual checks remain valid;
 no presentation source changed after verification. Next: whitespace/staging
 checks, commit, push to origin/main, then verify remote equality and clean status.
+
+Publication PASS: commit `3c3e2f4` (`docs: revise presentation title, outline
+and closing slide`) pushed to the expected origin/main. `git status --short
+--branch` was clean/synchronized; decorated log showed HEAD and origin/main
+at that commit. `git ls-remote origin refs/heads/main` and `git rev-parse HEAD`
+both returned `3c3e2f4097615026666cd97894725b76e61bd3c6`. This status-only
+follow-up records the successful publication; its push and final clean-worktree/
+remote-equality checks follow the same sequence. No blockers or pending source
+changes remain. Next: user review of the delivered presentations.
 
 ### Project completion and source publication (2026-10-18, Complete)
 
